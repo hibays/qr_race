@@ -1,0 +1,9 @@
+[package]
+name = "qr_race_capture_desktop"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+nokhwa = { version = "0.10", features = ["input-native"] }
+qr_race_capture.workspace = true

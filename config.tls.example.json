@@ -1,0 +1,21 @@
+{
+  "listen": "0.0.0.0:8443",
+  "database": "qr_race.db",
+  "tls": {
+    "cert": "cert.pem",
+    "key": "key.pem",
+    "hosts": [
+      "localhost",
+      "127.0.0.1",
+      "192.168.1.10"
+    ]
+  },
+  "accounts": [
+    {
+      "user_id": "replace-me",
+      "token": "replace-with-qr-race_server-provision-output",
+      "totp_secret": "REPLACEWITHBASE32SECRET",
+      "admin": false
+    }
+  ]
+}

@@ -1,0 +1,262 @@
+//! Wire types. Bytes travel as base64; room addresses travel as their canonical
+//! string plus the structured form, so a client never has to reimplement either.
+
+use data_encoding::BASE64;
+use qr_race_core::{
+    Capability, Compression, HookPoint, ModuleManifest, PayloadKind, RelayEntry, RelayId, Room,
+    RoomAddress, RoomRole, UserId,
+};
+use qr_race_hub::{MemberView, RoomEvent, RoomView};
+use serde::{Deserialize, Serialize};
+
+pub const fn default_compression() -> Compression {
+    Compression::None
+}
+
+#[derive(Debug, Deserialize)]
+pub struct AuthRequest {
+    pub token: String,
+    pub code: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct AuthResponse {
+    pub session_id: String,
+    pub user_id: UserId,
+    pub expires_at_ms: u64,
+    /// Admins see the module upload action in the client.
+    pub admin: bool,
+}
+
+#[derive(Debug, Serialize)]
+pub struct WsTicketResponse {
+    pub ticket: String,
+    pub expires_at_ms: u64,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct CreateRoomRequest {
+    pub address: String,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct TargetRequest {
+    pub target: UserId,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct ModulesRequest {
+    pub modules: Vec<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct RelayBody {
+    pub kind: PayloadKind,
+    #[serde(default = "default_compression")]
+    pub compression: Compression,
+    pub payload_b64: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RelayDto {
+    pub id: RelayId,
+    pub room: RoomAddress,
+    pub publisher: UserId,
+    pub kind: PayloadKind,
+    pub compression: Compression,
+    pub created_at_ms: u64,
+    pub payload_b64: String,
+}
+
+impl From<&RelayEntry> for RelayDto {
+    fn from(entry: &RelayEntry) -> Self {
+        Self {
+            id: entry.id.clone(),
+            room: entry.room.clone(),
+            publisher: entry.publisher.clone(),
+            kind: entry.kind,
+            compression: entry.compression,
+            created_at_ms: entry.created_at_ms,
+            payload_b64: BASE64.encode(&entry.payload),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct MemberViewDto {
+    pub user: UserId,
+    pub role: RoomRole,
+    pub last_relay: Option<RelayId>,
+}
+
+impl From<&MemberView> for MemberViewDto {
+    fn from(member: &MemberView) -> Self {
+        Self {
+            user: member.user.clone(),
+            role: member.role,
+            last_relay: member.last_relay.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct RoomViewDto {
+    pub address: RoomAddress,
+    pub label: String,
+    pub lit: bool,
+    pub host: UserId,
+    pub modules: Vec<String>,
+    pub members: Vec<MemberViewDto>,
+    pub relays: Vec<RelayDto>,
+}
+
+impl From<&RoomView> for RoomViewDto {
+    fn from(view: &RoomView) -> Self {
+        Self {
+            address: view.address.clone(),
+            label: view.address.to_string(),
+            lit: view.lit,
+            host: view.host.clone(),
+            modules: view.modules.clone(),
+            members: view.members.iter().map(MemberViewDto::from).collect(),
+            relays: view.relays.iter().map(RelayDto::from).collect(),
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct UploadModuleRequest {
+    pub id: String,
+    pub version: String,
+    pub entry: String,
+    pub hooks: Vec<HookPoint>,
+    pub capabilities: Vec<Capability>,
+    pub source: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModuleManifestDto {
+    pub id: String,
+    pub version: String,
+    pub entry: String,
+    pub hooks: Vec<HookPoint>,
+    pub capabilities: Vec<Capability>,
+}
+
+impl From<&ModuleManifest> for ModuleManifestDto {
+    fn from(manifest: &ModuleManifest) -> Self {
+        Self {
+            id: manifest.id.clone(),
+            version: manifest.version.clone(),
+            entry: manifest.entry.clone(),
+            hooks: manifest.hooks.clone(),
+            capabilities: manifest.capabilities.clone(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModuleListDto {
+    pub modules: Vec<ModuleManifestDto>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct ModuleSourceDto {
+    pub manifest: ModuleManifestDto,
+    pub source: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct LobbyRoomDto {
+    pub address: RoomAddress,
+    pub label: String,
+    pub host: UserId,
+    pub member_count: usize,
+    pub module_count: usize,
+}
+
+impl From<&Room> for LobbyRoomDto {
+    fn from(room: &Room) -> Self {
+        Self {
+            address: room.address.clone(),
+            label: room.address.to_string(),
+            host: room.host.clone(),
+            member_count: 1 + room.co_hosts.len() + room.members.len(),
+            module_count: room.modules.len(),
+        }
+    }
+}
+
+#[derive(Debug, Serialize)]
+pub struct LobbyDto {
+    pub rooms: Vec<LobbyRoomDto>,
+}
+
+#[derive(Debug, Serialize)]
+#[serde(tag = "type", rename_all = "snake_case")]
+pub enum EventDto {
+    RoomCreated {
+        address: RoomAddress,
+        host: UserId,
+    },
+    RoomLit {
+        address: RoomAddress,
+    },
+    MemberJoined {
+        address: RoomAddress,
+        user: UserId,
+        role: RoomRole,
+    },
+    MemberLeft {
+        address: RoomAddress,
+        user: UserId,
+    },
+    RoleChanged {
+        address: RoomAddress,
+        user: UserId,
+        role: RoomRole,
+    },
+    ModulesChanged {
+        address: RoomAddress,
+        modules: Vec<String>,
+    },
+    RelayPublished {
+        address: RoomAddress,
+        relay: RelayDto,
+    },
+}
+
+impl From<RoomEvent> for EventDto {
+    fn from(event: RoomEvent) -> Self {
+        match event {
+            RoomEvent::RoomCreated { address, host } => EventDto::RoomCreated { address, host },
+            RoomEvent::RoomLit { address } => EventDto::RoomLit { address },
+            RoomEvent::MemberJoined {
+                address,
+                user,
+                role,
+            } => EventDto::MemberJoined {
+                address,
+                user,
+                role,
+            },
+            RoomEvent::MemberLeft { address, user } => EventDto::MemberLeft { address, user },
+            RoomEvent::RoleChanged {
+                address,
+                user,
+                role,
+            } => EventDto::RoleChanged {
+                address,
+                user,
+                role,
+            },
+            RoomEvent::ModulesChanged { address, modules } => {
+                EventDto::ModulesChanged { address, modules }
+            }
+            RoomEvent::RelayPublished { address, relay } => EventDto::RelayPublished {
+                address,
+                relay: RelayDto::from(&relay),
+            },
+        }
+    }
+}

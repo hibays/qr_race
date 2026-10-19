@@ -1,0 +1,11 @@
+[package]
+name = "qr_race_store"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+qr_race_core.workspace = true
+rusqlite = { version = "0.40", features = ["bundled"] }
+serde_json.workspace = true
+thiserror.workspace = true

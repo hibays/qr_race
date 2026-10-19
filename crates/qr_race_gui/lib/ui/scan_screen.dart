@@ -1,0 +1,390 @@
+import 'package:flutter/material.dart';
+
+import '../native/scanner_backend.dart';
+import '../state/app_state.dart';
+import '../state/scan_controller.dart';
+import 'theme.dart';
+
+class ScanScreen extends StatefulWidget {
+  const ScanScreen({
+    super.key,
+    required this.state,
+    required this.address,
+    this.backend,
+  });
+
+  final AppState state;
+  final String address;
+
+  /// Tests inject a fake; the app opens the native session.
+  final ScannerBackend? backend;
+
+  @override
+  State<ScanScreen> createState() => _ScanScreenState();
+}
+
+class _ScanScreenState extends State<ScanScreen> {
+  ScanController? _controller;
+  String? _initError;
+
+  @override
+  void initState() {
+    super.initState();
+    try {
+      final controller = ScanController(
+        backend: widget.backend ?? createScannerBackend(),
+      );
+      _controller = controller;
+      controller.start();
+    } catch (error) {
+      _initError = error.toString();
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller?.dispose();
+    super.dispose();
+  }
+
+  Future<void> _publish(ScanHit hit) async {
+    final controller = _controller;
+    final api = widget.state.api;
+    if (controller == null || api == null) return;
+
+    final id = await controller.publish(api, widget.address, hit);
+    if (!mounted) return;
+    final message = id != null
+        ? '已发布接力 $id'
+        : (controller.publishError ?? '发布失败');
+    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
+    if (id != null) widget.state.refreshRoom();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final controller = _controller;
+    return Scaffold(
+      appBar: AppBar(
+        title: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Text('扫码发布', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            Text(widget.address, style: const TextStyle(fontSize: 12, color: muted)),
+          ],
+        ),
+      ),
+      body: controller == null
+          ? _InitError(message: _initError ?? '原生扫描器不可用')
+          : ListenableBuilder(
+              listenable: controller,
+              builder: (context, _) {
+                if (controller.snapshot == null &&
+                    controller.fatalError != null) {
+                  return _InitError(message: controller.fatalError!);
+                }
+                return _Body(
+                  controller: controller,
+                  canPublish: widget.state.api != null,
+                  onPublish: _publish,
+                );
+              },
+            ),
+    );
+  }
+}
+
+class _Body extends StatelessWidget {
+  const _Body({
+    required this.controller,
+    required this.canPublish,
+    required this.onPublish,
+  });
+
+  final ScanController controller;
+  final bool canPublish;
+  final Future<void> Function(ScanHit hit) onPublish;
+
+  @override
+  Widget build(BuildContext context) {
+    final snapshot = controller.snapshot;
+    final preview = snapshot?.preview;
+
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        // Keep the preview large but never let it starve the result list.
+        final byWidth = constraints.maxWidth * 9 / 16;
+        final previewHeight =
+            (constraints.maxHeight * 0.45).clamp(140.0, 420.0);
+        final height = previewHeight < byWidth ? previewHeight : byWidth;
+
+        return Column(
+          children: [
+            SizedBox(
+              height: height,
+              width: double.infinity,
+              child: Container(
+                color: Colors.black,
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (preview != null)
+                      Image.memory(
+                        preview,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                      )
+                    else
+                      const Center(
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(Icons.videocam_off_outlined,
+                                color: muted, size: 34),
+                            SizedBox(height: 8),
+                            Text(
+                              '等待相机预览…',
+                              style: TextStyle(color: muted, fontSize: 12.5),
+                            ),
+                          ],
+                        ),
+                      ),
+                    Positioned(
+                      left: 12,
+                      bottom: 12,
+                      child: _StatusChip(snapshot: snapshot),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            if (controller.fatalError != null)
+              _Banner(message: controller.fatalError!, color: danger),
+            if (snapshot?.error != null)
+              _Banner(message: snapshot!.error!, color: danger),
+            if (controller.publishError != null)
+              _Banner(message: controller.publishError!, color: warn),
+            const Padding(
+              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
+              child: Row(
+                children: [
+                  Text(
+                    '识别结果',
+                    style: TextStyle(
+                      fontSize: 12,
+                      letterSpacing: 1.2,
+                      color: muted,
+                    ),
+                  ),
+                  SizedBox(width: 8),
+                  Expanded(child: Divider(color: line)),
+                ],
+              ),
+            ),
+            Expanded(
+              child: snapshot == null || snapshot.hits.isEmpty
+                  ? const _NoHits()
+                  : ListView.separated(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                      itemCount: snapshot.hits.length,
+                      separatorBuilder: (_, _) => const SizedBox(height: 8),
+                      itemBuilder: (context, index) {
+                        final hit = snapshot.hits[index];
+                        return _HitTile(
+                          hit: hit,
+                          published: controller.isPublished(hit),
+                          enabled: canPublish,
+                          onPublish: () => onPublish(hit),
+                        );
+                      },
+                    ),
+            ),
+          ],
+        );
+      },
+    );
+  }
+}
+
+class _StatusChip extends StatelessWidget {
+  const _StatusChip({required this.snapshot});
+
+  final ScannerSnapshot? snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = snapshot == null
+        ? '启动中…'
+        : '${snapshot!.width}×${snapshot!.height} · 帧 ${snapshot!.frames}'
+            ' · ${snapshot!.scanMs.toStringAsFixed(1)}ms';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.62),
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Text(
+        text,
+        style: const TextStyle(color: ink, fontSize: 11.5, height: 1.2),
+      ),
+    );
+  }
+}
+
+class _HitTile extends StatelessWidget {
+  const _HitTile({
+    required this.hit,
+    required this.published,
+    required this.enabled,
+    required this.onPublish,
+  });
+
+  final ScanHit hit;
+  final bool published;
+  final bool enabled;
+  final VoidCallback onPublish;
+
+  @override
+  Widget build(BuildContext context) {
+    final label = hit.text.isEmpty ? '（二进制内容）' : hit.text;
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: surface,
+        border: Border.all(color: published ? accent : line),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: const TextStyle(fontSize: 13, height: 1.35),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  '${hit.raw.length} 字节 · ${_timeLabel(hit.atMs)}',
+                  style: const TextStyle(fontSize: 11.5, color: muted),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(width: 12),
+          OutlinedButton(
+            onPressed: published || !enabled ? null : onPublish,
+            style: OutlinedButton.styleFrom(
+              minimumSize: const Size(84, 38),
+              foregroundColor: published ? accent : ink,
+              side: BorderSide(color: published ? accent : line),
+            ),
+            child: Text(published ? '已发布' : '发布'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  static String _timeLabel(int atMs) {
+    if (atMs == 0) return '刚刚';
+    final time = DateTime.fromMillisecondsSinceEpoch(atMs).toLocal();
+    return '${time.hour.toString().padLeft(2, '0')}:'
+        '${time.minute.toString().padLeft(2, '0')}';
+  }
+}
+
+class _NoHits extends StatelessWidget {
+  const _NoHits();
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: ConstrainedBox(
+          constraints: BoxConstraints(
+            minHeight: (constraints.maxHeight - 48).clamp(0.0, 1e6),
+          ),
+          child: const Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(Icons.qr_code_2, color: muted, size: 40),
+                SizedBox(height: 12),
+                Text(
+                  '把二维码对准摄像头',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                SizedBox(height: 6),
+                Text(
+                  '识别到的内容会出现在这里，点“发布”后全房间都能接力。',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(color: muted, height: 1.5, fontSize: 12.5),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _Banner extends StatelessWidget {
+  const _Banner({required this.message, required this.color});
+
+  final String message;
+  final Color color;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: color.withValues(alpha: 0.12),
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+      child: Text(
+        message,
+        style: TextStyle(color: color, fontSize: 12.5, height: 1.4),
+      ),
+    );
+  }
+}
+
+class _InitError extends StatelessWidget {
+  const _InitError({required this.message});
+
+  final String message;
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.memory, color: muted, size: 40),
+              const SizedBox(height: 14),
+              const Text(
+                '原生扫描器没有加载',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: muted, height: 1.5),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

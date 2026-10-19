@@ -1,0 +1,20 @@
+[package]
+name = "qr_race_ffi"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+data-encoding.workspace = true
+image = { version = "0.25", default-features = false, features = ["jpeg"] }
+qr_race_capture.workspace = true
+qr_race_capture_desktop.workspace = true
+qr_race_scan.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+
+[dev-dependencies]
+qrcode = "0.14"

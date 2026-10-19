@@ -1,6 +1,71 @@
-[package]
-name = "qr_race_server"
+[workspace]
+members = [
+    "crates/qr_race_core",
+    "crates/qr_race_scan",
+    "crates/qr_race_scan_wasm",
+    "crates/qr_race_capture",
+    "crates/qr_race_capture_desktop",
+    "crates/qr_race_ffi",
+    "crates/qr_race_hub",
+    "crates/qr_race_store",
+    "crates/qr_race_tls",
+    "crates/qr_race_api",
+    "crates/qr_race_cli",
+    "crates/qr_race_bench",
+]
+resolver = "3"
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
+license = "Apache-2.0"
+rust-version = "1.85"
+
+[workspace.dependencies]
+qr_race_core = { path = "crates/qr_race_core" }
+qr_race_scan = { path = "crates/qr_race_scan" }
+qr_race_capture = { path = "crates/qr_race_capture" }
+qr_race_capture_desktop = { path = "crates/qr_race_capture_desktop" }
+qr_race_ffi = { path = "crates/qr_race_ffi" }
+qr_race_hub = { path = "crates/qr_race_hub" }
+qr_race_store = { path = "crates/qr_race_store" }
+qr_race_tls = { path = "crates/qr_race_tls" }
+qr_race_api = { path = "crates/qr_race_api" }
+qr_race_cli = { path = "crates/qr_race_cli" }
+clap = { version = "4", features = ["derive"] }
+data-encoding = "2"
+hmac = "0.12"
+percent-encoding = "2"
+rand = "0.9"
+reqwest = { version = "0.12", default-features = false, features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha1 = "0.10"
+sha2 = "0.10"
+subtle = "2"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
+
+[package]
+name = "qr_race_server"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
 
 [dependencies]
+clap.workspace = true
+qr_race_api.workspace = true
+qr_race_core.workspace = true
+qr_race_hub.workspace = true
+qr_race_store.workspace = true
+qr_race_tls.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tokio.workspace = true
+
+[profile.dev]
+overflow-checks = true
+
+[profile.release]
+lto = true
+codegen-units = 1

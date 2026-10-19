@@ -1,0 +1,12 @@
+{
+  "listen": "127.0.0.1:8080",
+  "database": "qr_race.db",
+  "accounts": [
+    {
+      "user_id": "replace-me",
+      "token": "replace-with-qr-race_server-provision-output",
+      "totp_secret": "REPLACEWITHBASE32SECRET",
+      "admin": false
+    }
+  ]
+}

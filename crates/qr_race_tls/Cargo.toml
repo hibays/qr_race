@@ -1,0 +1,25 @@
+[package]
+name = "qr_race_tls"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+axum = "0.8"
+hyper-util = { version = "0.1", features = [
+    "server",
+    "server-auto",
+    "service",
+    "tokio",
+] }
+rcgen = "0.13"
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+rustls-pemfile = "2"
+sha2.workspace = true
+thiserror.workspace = true
+tokio = { workspace = true, features = ["rt"] }
+tokio-rustls = "0.26"
+tower = { version = "0.5", features = ["util"] }
+
+[dev-dependencies]
+reqwest = { workspace = true, features = ["rustls-tls"] }
