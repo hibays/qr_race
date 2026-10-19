@@ -10,12 +10,24 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **120 passed** |
+| Rust tests | `cargo test --workspace` | **125 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
 | Flutter tests | `flutter test` | **23 passed** |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `pwsh -File scripts/build-wasm.ps1` then `flutter build web --release` | built |
 | Android build | `flutter build apk --debug` | built (151 MB debug APK) |
+
+### QR generation
+
+- rxing encodes room/relay codes as 2048×2048 **lossless WebP** (error
+  correction M, quality 90 / method 4, L8), the same parameters as rcrm's
+  bridge. `qr_race_qr` tests decode the WebP back and scan it with the pipeline.
+- Native FFI: `dart run tool/qr_probe.dart` against the release DLL produced a
+  2452-byte RIFF/VP8L file that Pillow reads as 2048×2048.
+- Web: the wasm export `qr_webp` produced the same 2048×2048 WebP in Node; the
+  Flutter web build uses it through `camera_scan.js`.
+- The Flutter UI renders these bytes with `Image.memory` and
+  `FilterQuality.none`; `qr_flutter` was removed.
 
 ## Feature evidence
 

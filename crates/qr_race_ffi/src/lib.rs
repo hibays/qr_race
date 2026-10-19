@@ -166,6 +166,35 @@ pub unsafe extern "C" fn qr_scanner_preview(out: *mut u8, capacity: usize) -> i3
     write_out(&preview, out, capacity)
 }
 
+/// Renders a 2048×2048 lossless WebP QR with rxing. Returns the WebP length
+/// written to `out`, a negative needed length when the buffer is too small, or
+/// -1 on bad input.
+///
+/// # Safety
+/// `text` must point to `text_len` readable bytes; `out` must point to
+/// `capacity` writable bytes (null is allowed only when `capacity` is zero).
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qr_qr_webp(
+    text: *const u8,
+    text_len: usize,
+    out: *mut u8,
+    capacity: usize,
+) -> i32 {
+    if text.is_null() || text_len == 0 {
+        return -1;
+    }
+    // SAFETY: the caller passes `text_len` readable bytes at `text`.
+    let bytes = unsafe { std::slice::from_raw_parts(text, text_len) };
+    let Ok(text) = std::str::from_utf8(bytes) else {
+        return -1;
+    };
+    let webp = match qr_race_qr::qr_webp(text) {
+        Ok(webp) => webp,
+        Err(_) => return -1,
+    };
+    write_out(&webp, out, capacity)
+}
+
 /// ABI version; bump when the contract changes.
 #[unsafe(no_mangle)]
 pub extern "C" fn qr_race_ffi_version() -> u32 {

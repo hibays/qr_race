@@ -89,7 +89,8 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 - 2026-10-20 实机采集（Windows x64、集成摄像头、release）：相机权限开放后，真实纹理帧 1080p 全帧扫描平均 6.01ms（86 帧输入/60 扫描，3.586s），1280×720 平均 2.89ms（111 帧输入/60 扫描，3.915s）；两次都没有二维码入镜。更早相机返回 Windows 隐私占位帧时的 4.23ms（1080p）/1.95ms（720p）只是无特征帧的地板。录制帧率约 24–28fps，30fps 仍需更强的采集源。注意：42ms/19.5ms 来自 debug 构建，已作废。详见 `docs/PERF.md`。
 - 2026-10-20 粗到精扫描（release，1280×720 场景）：整帧解码 p50 4.629ms；金字塔检测 2.331ms（解码降到 0.127ms）；金字塔 + 按需双线性超分 4.037ms（超分 1.319ms）。检测/超分是 trait 实现，CNN 模型到位后可替换。
 - 2026-10-20 wasm 与浏览器：wasm 扫描内核在 Node 中 1280×720 约 18–22ms；Edge headless + 假摄像头（Y4M）跑通 `getUserMedia → canvas → wasm`，640×480 命中，扫描约 1.8ms。物理相机实拍仍未验证。
-- 2026-10-20 构建与测试：Rust 120 个测试、Flutter 23 个测试；Windows release、Web release、Android debug APK 均构建成功。Android APK 不含原生相机与 Rust 扫描库。
+- 2026-10-20 二维码生成：rxing 编码 2048×2048 无损 WebP（纠错 M、quality 90 / method 4），与 rcrm bridge 参数一致；桌面 FFI（Dart → DLL，2452 字节，PIL 读为 2048²）与 wasm（Node 同尺寸）各验证一次。Flutter 用 `Image.memory` 显示，已移除 `qr_flutter`。
+- 2026-10-20 构建与测试：Rust 125 个测试、Flutter 23 个测试；Windows release、Web release、Android debug APK 均构建成功。Android APK 不含原生相机与 Rust 扫描库。
 - 2026-10-20 运维能力：SQLite 重启恢复、内置自签名 HTTPS（证书指纹固定）、登录失败 5 次锁定 60 秒、模组上传/分发/持久化均有过真实进程冒烟。
 - 没有真实活动数据、用户研究、性能实测数字、证言、客户案例或视觉资产。未来页面与文档不得编造这些。
 

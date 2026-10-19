@@ -1,9 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 import 'package:qr_race_gui/api/api_client.dart';
 import 'package:qr_race_gui/state/app_state.dart';
 import 'package:qr_race_gui/ui/lobby_screen.dart';
+import 'package:qr_race_gui/ui/qr_image.dart';
 import 'package:qr_race_gui/ui/room_screen.dart';
 import 'package:qr_race_gui/ui/theme.dart';
 
@@ -30,7 +30,7 @@ void main() {
     );
 
     expect(find.text('东京A区1B级103房'), findsOneWidget);
-    expect(find.byType(QrImageView), findsNWidgets(2));
+    expect(find.byType(QrImage), findsNWidgets(2));
     expect(find.text('mika'), findsOneWidget);
     expect(find.text('房间成员'), findsOneWidget);
     expect(tester.takeException(), isNull);
@@ -60,7 +60,7 @@ void main() {
       RoomScreen(state: state, address: '东京A区1B级103房'),
     );
 
-    expect(find.byType(QrImageView), findsNWidgets(2));
+    expect(find.byType(QrImage), findsNWidgets(2));
     expect(find.text('mika'), findsOneWidget);
     // The wide panel heading is absent; the bottom rail replaces it.
     expect(find.text('房间成员'), findsNothing);
@@ -84,7 +84,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(RoomScreen), findsOneWidget);
-    expect(find.byType(QrImageView), findsNWidgets(2));
+    expect(find.byType(QrImage), findsNWidgets(2));
     expect(tester.takeException(), isNull);
   });
 

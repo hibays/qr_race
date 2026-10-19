@@ -3,7 +3,7 @@
 //
 // The wasm module is generated next to this file by scripts/build-wasm.ps1.
 
-import init, { scan_gray } from './qr_race_scan_wasm.js';
+import init, { qr_webp, scan_gray } from './qr_race_scan_wasm.js';
 
 let ready = null;
 let session = null;
@@ -88,3 +88,8 @@ export function stop() {
 window.qrRaceStartCameraScan = start;
 window.qrRaceStopCameraScan = stop;
 window.qrRaceScanReady = ensureReady();
+// Same 2048×2048 lossless WebP parameters as the desktop FFI and rcrm.
+window.qrRaceQrWebp = async (text) => {
+  await ensureReady();
+  return qr_webp(text);
+};

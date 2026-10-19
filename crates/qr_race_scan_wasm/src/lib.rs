@@ -81,6 +81,13 @@ pub fn version() -> u32 {
     1
 }
 
+/// Renders a 2048×2048 lossless WebP QR with rxing (same parameters as the
+/// desktop FFI and rcrm's bridge).
+#[wasm_bindgen]
+pub fn qr_webp(text: &str) -> Vec<u8> {
+    qr_race_qr::qr_webp(text).unwrap_or_default()
+}
+
 /// Allocates `len` bytes inside wasm memory for the caller to fill.
 #[unsafe(no_mangle)]
 pub extern "C" fn qr_wasm_alloc(len: usize) -> *mut u8 {

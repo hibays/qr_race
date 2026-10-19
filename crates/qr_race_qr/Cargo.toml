@@ -1,0 +1,17 @@
+[package]
+name = "qr_race_qr"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dependencies]
+rxing = { version = "0.9.3", default-features = false, features = [
+    "qrcode",
+    "encoders",
+    "encoding_rs",
+] }
+thiserror.workspace = true
+zenwebp = { version = "0.4", default-features = false, features = ["std"] }
+
+[dev-dependencies]
+qr_race_scan.workspace = true

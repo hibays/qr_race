@@ -4,15 +4,16 @@
 
 产品事实记录在 [PRODUCT.md](PRODUCT.md)；原始需求见 [PROMPT.md](PROMPT.md)。
 
-## 现在有什么（M0–M22）
+## 现在有什么（M0–M24）
 
-工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/模组面板/管理员上传）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建、可运行的 wasm 扫描内核与 Web 相机接入、内置自签名 HTTPS、浏览器相机→wasm 扫码端到端验证、模组上传/分发、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android debug APK 构建都已落地并通过测试；模组执行、移动/Apple 原生采集、CNN 检测器与物理相机实拍尚未完成。
+工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/模组面板/管理员上传）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建、可运行的 wasm 扫描内核与 Web 相机接入、内置自签名 HTTPS、浏览器相机→wasm 扫码端到端验证、模组上传/分发、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android debug APK 构建、rxing 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）都已落地并通过测试；模组执行、移动/Apple 原生采集、CNN 检测器与真实二维码入镜尚未完成。
 
 ```
 crates/
 ├── qr_race_core/              领域：房间地址、角色权限、接力条目、模组清单
 ├── qr_race_scan/              检测 →（按需）超分 → 解码；解码是 rxing，CNN 阶段是 trait
-├── qr_race_scan_wasm/         wasm32 扫描内核（C ABI：alloc / scan_gray / result）
+├── qr_race_qr/                rxing 生成二维码：2048²、纠错 M、无损 WebP（q90/m4），对齐 rcrm
+├── qr_race_scan_wasm/         wasm32 扫描内核 + qr_webp（C ABI：alloc / scan_gray / result）
 ├── qr_race_capture/           采集核心：RGBA/BGRA→灰度、stride、30fps 定速与丢帧统计
 ├── qr_race_capture_desktop/   桌面相机后端（nokhwa：MF / V4L2 / AVFoundation）
 ├── qr_race_ffi/               原生扫描会话 C ABI：相机与扫描在 Rust 线程，Dart 只取命中与 JPEG 预览
@@ -213,6 +214,7 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M21 登录防爆破：连续 5 次失败锁定账户 60 秒（429），成功即清零
 - [x] M22 Flutter Android debug APK 构建通过（原生采集/Rust 扫描库尚未打包）
 - [x] M23 真实相机帧验证：1080p 6.01ms / 720p 2.89ms，采集约 24–28fps（无码入镜）
+- [x] M24 二维码生成改用 rxing：2048² 无损 WebP（q90/m4），FFI 与 wasm 两路，移除 qr_flutter
 - [ ] 模组执行（RustPython 阻塞，见 docs/MODULES.md）
 - [ ] 物理相机实拍；Web 预览流
 - [ ] 移动 / Apple 采集后端

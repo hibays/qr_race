@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
-import 'package:qr_flutter/qr_flutter.dart';
 
 import '../api/api_client.dart';
 import '../state/app_state.dart';
+import 'qr_image.dart';
 import 'scan_screen.dart';
 import 'theme.dart';
 
@@ -273,20 +273,7 @@ class _RelayCard extends StatelessWidget {
                   builder: (context, constraints) {
                     final side = constraints.biggest.shortestSide;
                     return Center(
-                      child: QrImageView(
-                        data: relay.text,
-                        size: side,
-                        padding: EdgeInsets.zero,
-                        backgroundColor: Colors.white,
-                        eyeStyle: const QrEyeStyle(
-                          eyeShape: QrEyeShape.square,
-                          color: Colors.black,
-                        ),
-                        dataModuleStyle: const QrDataModuleStyle(
-                          dataModuleShape: QrDataModuleShape.square,
-                          color: Colors.black,
-                        ),
-                      ),
+                      child: QrImage(text: relay.text, size: side),
                     );
                   },
                 ),
@@ -328,17 +315,10 @@ class _RelayCard extends StatelessWidget {
                   padding: const EdgeInsets.all(16),
                   child: AspectRatio(
                     aspectRatio: 1,
-                    child: QrImageView(
-                      data: relay.text,
-                      padding: EdgeInsets.zero,
-                      backgroundColor: Colors.white,
-                      eyeStyle: const QrEyeStyle(
-                        eyeShape: QrEyeShape.square,
-                        color: Colors.black,
-                      ),
-                      dataModuleStyle: const QrDataModuleStyle(
-                        dataModuleShape: QrDataModuleShape.square,
-                        color: Colors.black,
+                    child: LayoutBuilder(
+                      builder: (context, constraints) => QrImage(
+                        text: relay.text,
+                        size: constraints.biggest.shortestSide,
                       ),
                     ),
                   ),
@@ -543,20 +523,7 @@ class _MemberTile extends StatelessWidget {
               Container(
                 color: Colors.white,
                 padding: const EdgeInsets.all(14),
-                child: QrImageView(
-                  data: relay!.text,
-                  size: 260,
-                  padding: EdgeInsets.zero,
-                  backgroundColor: Colors.white,
-                  eyeStyle: const QrEyeStyle(
-                    eyeShape: QrEyeShape.square,
-                    color: Colors.black,
-                  ),
-                  dataModuleStyle: const QrDataModuleStyle(
-                    dataModuleShape: QrDataModuleShape.square,
-                    color: Colors.black,
-                  ),
-                ),
+                child: QrImage(text: relay!.text, size: 260),
               ),
               const SizedBox(height: 12),
               SelectableText(
