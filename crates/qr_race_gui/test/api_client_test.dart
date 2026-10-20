@@ -40,7 +40,7 @@ void main() {
     final api = ApiClient(baseUrl: ' 127.0.0.1:8080/ ', httpClient: client);
     expect(api.baseUrl, 'http://127.0.0.1:8080');
 
-    final session = await api.authenticate(token: ' token ', code: '123456');
+    final session = await api.authenticate(token: ' token ');
     expect(session.userId, 'host-a');
     expect(session.admin, isTrue);
     expect(requests.first.headers['content-type'], contains('application/json'));
@@ -129,7 +129,7 @@ void main() {
     final api = ApiClient(baseUrl: 'http://example.test', httpClient: client);
 
     await expectLater(
-      api.authenticate(token: 't', code: '000000'),
+      api.authenticate(token: 't'),
       throwsA(
         isA<ApiException>()
             .having((error) => error.status, 'status', 401)
@@ -201,7 +201,7 @@ void main() {
     expect(room.relays.single.payloadBytes, utf8.encode('hello relay'));
   });
 
-  testWidgets('the connect screen asks for server, token and code', (tester) async {
+  testWidgets('the connect screen asks for server and token', (tester) async {
     final state = AppState();
     await tester.pumpWidget(
       MaterialApp(theme: buildTheme(), home: ConnectScreen(state: state)),
@@ -209,14 +209,14 @@ void main() {
 
     expect(find.text('qr_race'), findsOneWidget);
     expect(find.text('连接'), findsOneWidget);
-    expect(find.byType(TextFormField), findsNWidgets(4));
+    expect(find.byType(TextFormField), findsNWidgets(3));
     expect(find.text('证书指纹（可选）'), findsOneWidget);
     expect(find.text('自部署服务器（本机）'), findsOneWidget);
 
     await tester.tap(find.text('连接'));
     await tester.pump();
     expect(find.text('请输入 token'), findsOneWidget);
-    expect(find.text('请输入 6 位验证码'), findsOneWidget);
+    expect(find.text('TOTP 验证码'), findsNothing);
   });
 }
 

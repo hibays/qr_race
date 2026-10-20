@@ -14,11 +14,37 @@ ServerLauncher createServerLauncher() => Platform.isAndroid
     ? EmbeddedServerLauncher()
     : ProcessServerLauncher();
 
-/// Starts `qr_race_server` with a freshly generated config, then reads the
-/// printed certificate fingerprint. The server process stays alive until
-/// [stop] is called.
+/// Desktop: the bridge owns the server process in a Windows job object, so
+/// closing the GUI kills it and frees the port. Config/accounts/DB live in a
+/// stable directory and are reused on the next start.
 class ProcessServerLauncher implements ServerLauncher {
-  Process? _process;
+  DynamicLibrary? _library;
+  int Function(Pointer<Uint8>, int, Pointer<Uint8>, int)? _start;
+  void Function()? _stop;
+  int Function()? _status;
+  int Function(Pointer<Uint8>, int, Pointer<Uint8>, int)? _fingerprint;
+
+  void _load() {
+    if (_library != null) return;
+    final library = openQrRaceFfi();
+    _library = library;
+    _start = library.lookupFunction<
+        Int32 Function(Pointer<Uint8>, IntPtr, Pointer<Uint8>, IntPtr),
+        int Function(Pointer<Uint8>, int, Pointer<Uint8>, int)>(
+      'qr_desktop_server_start',
+    );
+    _stop = library.lookupFunction<Void Function(), void Function()>(
+      'qr_desktop_server_stop',
+    );
+    _status = library.lookupFunction<Int32 Function(), int Function()>(
+      'qr_desktop_server_status',
+    );
+    _fingerprint = library.lookupFunction<
+        Int32 Function(Pointer<Uint8>, IntPtr, Pointer<Uint8>, IntPtr),
+        int Function(Pointer<Uint8>, int, Pointer<Uint8>, int)>(
+      'qr_cert_fingerprint',
+    );
+  }
 
   @override
   Future<SelfHostInfo> start({
@@ -26,29 +52,44 @@ class ProcessServerLauncher implements ServerLauncher {
     TlsOptions tls = const TlsOptions.selfSigned(),
   }) async {
     await stop();
+    _load();
     final binary = _findServerBinary();
-    final stamp = DateTime.now().millisecondsSinceEpoch;
     final dataDirectory = Directory(
-      '${_dataRoot()}${Platform.pathSeparator}selfhost-$stamp',
+      '${_dataRoot()}${Platform.pathSeparator}desktop',
     );
     await dataDirectory.create(recursive: true);
+    final configFile =
+        File('${dataDirectory.path}${Platform.pathSeparator}config.json');
 
-    final host = await _provision(binary, 'host');
+    Map<String, Object>? host;
+    if (await configFile.exists()) {
+      try {
+        final existing =
+            jsonDecode(await configFile.readAsString()) as Map<String, dynamic>;
+        final accounts = existing['accounts'] as List<dynamic>? ?? const [];
+        if (accounts.isNotEmpty) {
+          host = (accounts.first as Map<String, dynamic>)
+              .map((key, value) => MapEntry(key, value as Object));
+        }
+      } catch (_) {
+        // Corrupt config: mint a fresh identity below.
+      }
+    }
+    host ??= (await _provision(binary, 'host')).account;
+
     final lan = await _lanAddress();
-    final hosts = <String>[
-      'localhost',
-      '127.0.0.1',
-      ?lan,
-    ];
+    final hosts = <String>['localhost', '127.0.0.1', ?lan];
     final useTls = tls.mode != SelfHostTls.none;
+    String? certPath;
     final config = <String, Object>{
       'listen': '0.0.0.0:$port',
       'database': '${dataDirectory.path}${Platform.pathSeparator}qr_race.db',
-      'accounts': [host.account],
+      'accounts': [host],
     };
     if (tls.mode == SelfHostTls.selfSigned) {
+      certPath = '${dataDirectory.path}${Platform.pathSeparator}cert.pem';
       config['tls'] = {
-        'cert': '${dataDirectory.path}${Platform.pathSeparator}cert.pem',
+        'cert': certPath,
         'key': '${dataDirectory.path}${Platform.pathSeparator}key.pem',
         'hosts': hosts,
       };
@@ -58,68 +99,48 @@ class ProcessServerLauncher implements ServerLauncher {
       if (cert == null || key == null) {
         throw StateError('certificate and key paths are required');
       }
+      certPath = File(cert).absolute.path;
       config['tls'] = {
-        'cert': File(cert).absolute.path,
+        'cert': certPath,
         'key': File(key).absolute.path,
         'hosts': hosts,
       };
     }
-    final configFile =
-        File('${dataDirectory.path}${Platform.pathSeparator}config.json');
     await configFile.writeAsString(
       const JsonEncoder.withIndent('  ').convert(config),
     );
 
-    final process = await Process.start(
-      binary,
-      ['serve', '--config', configFile.path],
-      workingDirectory: dataDirectory.path,
-    );
-    _process = process;
-
-    // null means HTTP is listening; a string is the TLS fingerprint.
-    final ready = Completer<String?>();
-    final stderr = StringBuffer();
-    process.stdout
-        .transform(utf8.decoder)
-        .transform(const LineSplitter())
-        .listen((line) {
-      final marker = 'certificate SHA-256:';
-      if (line.contains(marker) && !ready.isCompleted) {
-        ready.complete(
-          line.substring(line.indexOf(marker) + marker.length).trim(),
-        );
-      } else if (!useTls &&
-          line.contains('listening on http') &&
-          !ready.isCompleted) {
-        ready.complete(null);
-      }
-    });
-    process.stderr.transform(utf8.decoder).listen(stderr.write);
-    unawaited(process.exitCode.then((code) {
-      if (!ready.isCompleted) {
-        ready.completeError(
-          StateError('server exited with $code before becoming ready\n$stderr'),
-        );
-      }
-    }));
-
-    final fingerprint = await ready.future.timeout(
-      const Duration(seconds: 25),
-      onTimeout: () {
-        process.kill();
-        throw StateError('server did not become ready in time\n$stderr');
-      },
-    );
+    final binaryPtr = binary.toNativeUtf8();
+    final configPtr = configFile.absolute.path.toNativeUtf8();
+    int code;
+    try {
+      code = _start!(
+        binaryPtr.cast<Uint8>(),
+        utf8.encode(binary).length,
+        configPtr.cast<Uint8>(),
+        utf8.encode(configFile.absolute.path).length,
+      );
+    } finally {
+      malloc.free(binaryPtr);
+      malloc.free(configPtr);
+    }
+    if (code != 0) {
+      throw StateError('bridge could not start the desktop server');
+    }
 
     final address = lan ?? '127.0.0.1';
+    await _waitListening(address, port);
+    String fingerprint = '';
+    if (useTls && certPath != null) {
+      fingerprint = await _waitFingerprint(File(certPath));
+    }
     final scheme = useTls ? 'https' : 'http';
     return SelfHostInfo(
       url: '$scheme://$address:$port',
-      fingerprint: fingerprint ?? '',
+      fingerprint: fingerprint,
       dataDirectory: dataDirectory.path,
-      hostToken: host.token,
-      hostSecret: host.totpSecret,
+      hostToken: host['token'] as String,
+      hostSecret: (host['totp_secret'] as String?) ?? '',
       memberToken: '',
       memberSecret: '',
     );
@@ -127,14 +148,60 @@ class ProcessServerLauncher implements ServerLauncher {
 
   @override
   Future<void> stop() async {
-    final process = _process;
-    _process = null;
-    if (process != null) {
-      process.kill();
-      await process.exitCode.timeout(
-        const Duration(seconds: 3),
-        onTimeout: () => -1,
+    _load();
+    _stop?.call();
+  }
+
+  Future<void> _waitListening(String host, int port) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 25));
+    while (DateTime.now().isBefore(deadline)) {
+      try {
+        final socket = await Socket.connect(
+          host,
+          port,
+          timeout: const Duration(milliseconds: 400),
+        );
+        socket.destroy();
+        return;
+      } catch (_) {
+        if (_status?.call() == 0) {
+          throw StateError('desktop server exited before listening');
+        }
+        await Future<void>.delayed(const Duration(milliseconds: 200));
+      }
+    }
+    await stop();
+    throw StateError('desktop server did not listen on $host:$port');
+  }
+
+  Future<String> _waitFingerprint(File cert) async {
+    final deadline = DateTime.now().add(const Duration(seconds: 10));
+    while (DateTime.now().isBefore(deadline)) {
+      if (await cert.exists()) {
+        final fingerprint = _readFingerprint(cert.absolute.path);
+        if (fingerprint.isNotEmpty) return fingerprint;
+      }
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+    }
+    await stop();
+    throw StateError('desktop server did not generate a certificate');
+  }
+
+  String _readFingerprint(String path) {
+    final pathPtr = path.toNativeUtf8();
+    final buffer = malloc<Uint8>(128);
+    try {
+      final length = _fingerprint!(
+        pathPtr.cast<Uint8>(),
+        utf8.encode(path).length,
+        buffer,
+        128,
       );
+      if (length <= 0) return '';
+      return utf8.decode(buffer.asTypedList(length));
+    } finally {
+      malloc.free(pathPtr);
+      malloc.free(buffer);
     }
   }
 
@@ -360,4 +427,5 @@ class EmbeddedServerLauncher implements ServerLauncher {
     _stop?.call();
   }
 }
+
 

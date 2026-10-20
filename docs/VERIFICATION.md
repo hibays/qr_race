@@ -10,7 +10,7 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **130 passed** |
+| Rust tests | `cargo test --workspace` | **131 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
 | Flutter tests | `flutter test` | **28 passed** |
 | Windows build | `flutter build windows --release` | built |
@@ -54,33 +54,35 @@ finished product.
 
 ### Self-host and Android device
 
-- Desktop self-host (`SelfHostScreen` + `ProcessServerLauncher`) provisions two
-  accounts, writes TLS/SQLite config, starts the real `qr_race_server`, reads the
-  printed certificate fingerprint, and authenticates with a computed TOTP.
-  `dart run tool/selfhost_probe.dart` completed this against the release binary:
-  `https://<lan>:18470`, certificate fingerprint `b258ac…580f`, authenticated as
-  `host`, empty lobby, then stopped the server.
+- Desktop self-host now goes through the Rust bridge. The bridge spawns
+  `qr_race_server` inside a Windows Job Object with `KILL_ON_JOB_CLOSE`;
+  `dart run tool/selfhost_probe.dart` authenticated token-only, and a probe that
+  exited without calling `stop` left **no** `qr_race_server` process and port
+  18473 closed. Config/accounts/SQLite are reused from
+  `%APPDATA%\qr_race\selfhost\desktop`.
+- Desktop font fallback follows rcrm: `Microsoft YaHei / PingFang SC / SimHei /
+  Noto Sans CJK SC` are applied to the text theme on desktop.
 - Real Android device (OnePlus PLF110, `3B163Q00LSK00000`): debug APK installed
   via adb. With `adb reverse tcp:18471 tcp:18471`, the app connected to a server
-  started by `scripts/deploy-server.ps1` using
-  `https://127.0.0.1:18471`, the printed certificate fingerprint, a host token,
-  and a TOTP code; the lobby rendered as `host`.
+  started by `scripts/deploy-server.ps1` using `https://127.0.0.1:18471`, the
+  certificate fingerprint and a host token; the lobby rendered as `host`.
 - Android self-host: `qr_race_embedded` is compiled into
   `libqr_race_ffi.so`. Starting from the UI on port 18443 generated a
   self-signed certificate, reported `https://127.0.0.1:18443` plus fingerprint,
-  and “用此账号连接” authenticated over pinned TLS into the lobby. 8443 was
+  and “用此账号连接” authenticated with the token into the lobby. 8443 was
   already in use on this device, which is why the UI exposes the port.
 - Per-room dynamic member: the host-only `POST /v1/room/guest?address=...`
-  endpoint minted `guest-156ec94150ec` with a fresh token/secret; that guest
+  endpoint minted `guest-156ec94150ec` with a fresh token; that guest
   authenticated and joined the room, whose member list then showed
   `host` as host and the guest as member. No pre-provisioned member account was
-  needed; invitations carry the guest credentials and a room address, and the
-  connect screen computes TOTP automatically.
+  needed; invitations carry the guest token and a room address.
 - Android camera: Camera2 YUV frames are pushed through JNI into Rust; the
   preview is rotated at the small preview size (not per full frame), scan time
   was 2–3 ms at 640×480, 7.8 ms at 960×720, and 6–16 ms at 1280×720 on device.
-  A live QR (`https://example.test/camera-hit`) was decoded from the screen;
-  the preview keeps the previous frame between updates, removing black flicker.
+  Final live test: QR centered on the PC screen decoded
+  `https://example.test/relay/东京` at 1280×720 / 13.5 ms and appeared exactly
+  once. The preview keeps the previous frame between updates, removing black
+  flicker.
 - Duplicate hits are removed by decoded text as well as raw bytes (Rust), and
   auto-publish keeps a published-text set, so identical results are sent once.
 - The FFI scan crate is built without `image-io` (no PNG/BMP decoders on the
@@ -115,9 +117,9 @@ finished product.
 
 ### Auth and rooms
 
-- TOTP against RFC 6238 vectors; replay of the same step refused.
-- Lockout: five bad codes → `429`; verified by hub/API tests and a live process
-  (five `401`s then a valid code returned `429`).
+- Token login; five bad tokens → `429`; verified by hub/API tests and a live
+  process. TOTP is no longer requested by the UI; the legacy verifier remains
+  only for callers that explicitly send a code.
 - Room permissions: dark-room entry, host-only light/promote/demote/modules,
   host/co-host-only publish — unit tests plus an HTTP end-to-end test.
 - WebSocket: real socket test with a single-use ticket.
@@ -200,3 +202,5 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
+

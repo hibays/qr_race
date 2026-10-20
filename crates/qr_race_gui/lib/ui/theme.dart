@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 /// A venue console, not a social app: near-black ground, one signal green, and
@@ -28,8 +29,20 @@ ThemeData buildTheme() {
     ),
   );
 
+  final desktop = defaultTargetPlatform == TargetPlatform.windows ||
+      defaultTargetPlatform == TargetPlatform.macOS ||
+      defaultTargetPlatform == TargetPlatform.linux;
+
   return base.copyWith(
-    textTheme: base.textTheme.apply(bodyColor: ink, displayColor: ink),
+    textTheme: base.textTheme.apply(
+      bodyColor: ink,
+      displayColor: ink,
+      // Desktop default fonts do not cover CJK glyphs; without an explicit
+      // fallback Flutter can render tofu/blurred text. Mirrors rcrm.
+      fontFamilyFallback: desktop
+          ? const ['Microsoft YaHei', 'PingFang SC', 'SimHei', 'Noto Sans CJK SC']
+          : null,
+    ),
     appBarTheme: const AppBarTheme(
       backgroundColor: ground,
       surfaceTintColor: Colors.transparent,

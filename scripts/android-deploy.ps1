@@ -82,7 +82,7 @@ Write-Host ""
 Write-Host "installed and launched." -ForegroundColor Green
 Write-Host "In the app connect screen use:"
 Write-Host "  server:    https://127.0.0.1:$Port"
-Write-Host "  fingerprint / tokens / TOTP: see the desktop self-host screen or deploy-server output"
+Write-Host "  fingerprint / token: see the desktop self-host screen or deploy-server output"
 Write-Host ""
 Write-Host "Android can self-host: 连接页 -> 自部署服务器（本机），默认端口 18443。"
 Write-Host "Or connect to a desktop/server URL and scan/publish automatically."

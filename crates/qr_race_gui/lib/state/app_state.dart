@@ -76,7 +76,6 @@ class AppState extends ChangeNotifier {
   Future<bool> connect({
     required String server,
     required String token,
-    required String code,
     String? fingerprint,
   }) async {
     busy = true;
@@ -84,7 +83,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       final client = ApiClient(baseUrl: server, fingerprint: fingerprint);
-      final auth = await client.authenticate(token: token, code: code);
+      final auth = await client.authenticate(token: token);
       api = client;
       session = auth;
       await refreshLobby();
@@ -296,7 +295,7 @@ class AppState extends ChangeNotifier {
 
   String _describe(Object error) {
     if (error is ApiException) {
-      if (error.status == 401) return '认证失败：token 或 TOTP 验证码不对（验证码 30 秒过期）';
+      if (error.status == 401) return '认证失败：token 不对或已失效';
       if (error.status == 429) return '尝试失败次数过多，账户已锁定 60 秒，请稍后再试';
       return error.message;
     }

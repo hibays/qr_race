@@ -36,7 +36,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 
 ## Operating Context
 
-- 用户从运营方获得 server URL 与 auth token，在客户端输入连接；server 端做 TOTP 2FA，鉴权成功后才可用。部署两者都要：可自签名 HTTPS，也可纯 HTTP；客户端只认一个 URL。
+- 用户从运营方获得 server URL 与 auth token，在客户端输入连接；server 端只校验 token，鉴权成功后才可用。部署两者都要：可自签名 HTTPS，也可纯 HTTP；客户端只认一个 URL。
 - 房主建立房间或点亮未激活房间；可设加入密码并随时撤销，可指定多个副房主。副房主拥有模组设置权。
 - 扫码只发生在房主/副房主这一端（单端扫码）：端侧解码后压缩上传到 server，server 广播到房间内其他用户。
 - 成员点击"已扫码"的房主/副房主头像进行接力；未扫码的普通用户头像不可点。接力完成后可以退出房间。
@@ -91,12 +91,12 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 - 2026-10-20 wasm 与浏览器：wasm 扫描内核在 Node 中 1280×720 约 18–22ms；Edge headless + 假摄像头（Y4M）跑通 `getUserMedia → canvas → wasm`，640×480 命中，扫描约 1.8ms。物理相机实拍仍未验证。
 - 2026-10-20 二维码生成：rxing 编码 2048×2048 无损 WebP（纠错 M、quality 90 / method 4），与 rcrm bridge 参数一致；桌面 FFI（Dart → DLL，2452 字节，PIL 读为 2048²）与 wasm（Node 同尺寸）各验证一次。Flutter 用 `Image.memory` 显示，已移除 `qr_flutter`。
 - 2026-10-20 CNN 权重转换：自行解析 WeChat Caffe 权重并写 ONNX。SR 输入 1×1×224²、输出 1×1×447²，与独立 NumPy 前向最大误差 5.5e-06；检测器输入 1×1×384²，输出 mbox_loc/conf/priorbox（6912 priors），DetectionOutput 无 ONNX 等价物，decode/NMS 待实现。推理后端尚未接入扫描管线。
-- 2026-10-20 构建与测试：Rust 130 个测试、Flutter 28 个测试；Windows release、Web release、Android debug APK 均构建成功。
-- 2026-10-20 Android 自启动与扫码：`qr_race_embedded` 编进 `libqr_race_ffi.so`，App 内可选自签名/已有证书/HTTP，默认端口 18443；真机启动后显示 URL、证书指纹与两个账号，并通过指纹固定登录。Camera2 的 Y 平面经 JNI 直接进 Rust（720×1280、旋转正确、约 6.2ms/帧），实拍 `https://example.test/camera-hit` 命中；预览保留上一帧，不再黑屏闪烁。
+- 2026-10-20 构建与测试：Rust 131 个测试、Flutter 28 个测试；Windows release、Web release、Android debug APK 均构建成功。
+- 2026-10-20 Android 自启动与扫码：`qr_race_embedded` 编进 `libqr_race_ffi.so`，App 内可选自签名/已有证书/HTTP，默认端口 18443；真机启动后显示 URL、证书指纹与服务器账号，并通过指纹固定 + token 登录。Camera2 的 Y 平面经 JNI 直接进 Rust（旋转元数据、预览小图旋转；640×480 约 2–3ms、960×720 约 7.8ms、1280×720 约 6–16ms），实拍 `https://example.test/camera-hit` 命中；预览保留上一帧，不再黑屏闪烁。
 - 2026-10-20 自动发布与动态码：扫码命中即自动发布，无需手动按钮；同一前缀（`A:`、`cam1|`）的新内容替换房间槽位，不同前缀可同时存在，房间按前缀显示最新一条。连接页支持 `qrrace://connect?...` 深链/粘贴链接预填服务器、指纹和 token；扫码/房间结果可一键跳微信、企业微信、浏览器或其他已安装 App，失败自动复制链接。
-- 2026-10-20 每房间动态成员：服务端新增 host-only `/v1/room/guest`，房主进房后现场生成临时成员 token/secret；邀请链接带房间地址，guest 自动 TOTP 登录并直接进房。实测 guest 以 member 身份加入，host 列表正确；不再依赖预置“成员账号”。
-- 2026-10-20 客户端自部署：桌面连接页一键 provision 房主/成员账号、写 TLS+SQLite 配置、启动 `qr_race_server`、读取证书指纹并显示 URL/token/secret，可直接用主机账号登录。`tool/selfhost_probe.dart` 对真实 release 服务端完成启动→指纹固定认证→停止全流程；也可以在无 GUI 的机器上用 `scripts/deploy-server.ps1`。
-- 2026-10-20 Android 真机：OnePlus PLF110（`3B163Q00LSK00000`）安装 debug APK；`adb reverse` + 自签名 HTTPS + 证书指纹 + TOTP 登录成功进入大厅；房间里的接力二维码由 rxing WebP 正常显示。扫码页会弹出系统相机权限；拒绝后提供“重新申请/打开系统设置”，`MainActivity` 把不可再询问的拒绝映射为 permanentlyDenied 并跳转应用设置。相机采集已接入：Camera2 Y 平面经 JNI 进 Rust，640×480 约 2–3ms、960×720 约 7.8ms、1280×720 约 6–16ms；实拍二维码命中，重复结果按文本/字节去重。
+- 2026-10-20 每房间动态成员：服务端新增 host-only `/v1/room/guest`，房主进房后现场生成临时成员 token；邀请链接带房间地址，guest 直接登录并进房。实测 guest 以 member 身份加入，host 列表正确；不再依赖预置“成员账号”。
+- 2026-10-20 桌面自部署进 bridge：Rust bridge 在 Windows Job Object 中启动 `qr_race_server`，GUI 关闭/崩溃会杀掉子进程并释放端口；配置/账号/SQLite 复用 `%APPDATA%\qr_race\selfhost\desktop`。桌面字体按 rcrm 加 `Microsoft YaHei/PingFang SC/SimHei/Noto Sans CJK SC` 回退。TOTP 2FA 已从 PRODUCT/PROMPT/UI/API 流程移除（只保留 legacy 校验代码）。
+- 2026-10-20 Android 真机：OnePlus PLF110（`3B163Q00LSK00000`）安装 debug APK；`adb reverse` + 自签名 HTTPS + 证书指纹 + token 登录成功进入大厅；房间里的接力二维码由 rxing WebP 正常显示。扫码页会弹出系统相机权限；拒绝后提供“重新申请/打开系统设置”，`MainActivity` 把不可再询问的拒绝映射为 permanentlyDenied 并跳转应用设置。相机采集已接入：Camera2 Y 平面经 JNI 进 Rust，640×480 约 2–3ms、960×720 约 7.8ms、1280×720 约 6–16ms；实拍二维码命中，重复结果按文本/字节去重。
 - 2026-10-20 运维能力：SQLite 重启恢复、内置自签名 HTTPS（证书指纹固定）、登录失败 5 次锁定 60 秒、模组上传/分发/持久化均有过真实进程冒烟。
 - 没有真实活动数据、用户研究、性能实测数字、证言、客户案例或视觉资产。未来页面与文档不得编造这些。
 
@@ -107,3 +107,5 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 3. **房间是真实地点。** 京、区、级、房对应现实场地，房间码是鉴权路径的一部分；成员可以在别处，接力让这种分离成立。
 4. **原生深度，薄接缝。** 帧与推理留在原生层，Flutter 只负责界面；模块在 server 与 client 两端都可拔插，接口要窄、可替换。
 5. **生产即标准。** TDD、可复现的基准、明确的许可与安全边界；不拿演示级实现充数。
+
+

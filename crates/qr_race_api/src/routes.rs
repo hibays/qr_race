@@ -42,7 +42,15 @@ pub async fn auth(
 ) -> Result<Json<AuthResponse>, ApiError> {
     let session = {
         let mut auth = state.auth.lock().expect("auth lock");
-        auth.authenticate(&body.token, &body.code)?
+        match body
+            .code
+            .as_deref()
+            .map(str::trim)
+            .filter(|code| !code.is_empty())
+        {
+            Some(code) => auth.authenticate(&body.token, code)?,
+            None => auth.authenticate_token(&body.token)?,
+        }
     };
     state
         .sessions
@@ -132,7 +140,6 @@ pub async fn join(
 pub struct GuestResponse {
     user_id: String,
     token: String,
-    totp_secret: String,
 }
 
 /// Mints a fresh member identity for one room. The caller must be that room's
@@ -159,7 +166,6 @@ pub async fn guest(
     Ok(Json(GuestResponse {
         user_id: guest.0,
         token,
-        totp_secret: secret,
     }))
 }
 

@@ -16,7 +16,8 @@ pub const fn default_compression() -> Compression {
 #[derive(Debug, Deserialize)]
 pub struct AuthRequest {
     pub token: String,
-    pub code: String,
+    #[serde(default)]
+    pub code: Option<String>,
 }
 
 #[derive(Debug, Serialize)]

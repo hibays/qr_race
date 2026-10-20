@@ -39,14 +39,11 @@ class ApiClient {
         if (sessionId != null) 'authorization': 'Bearer $sessionId',
       };
 
-  Future<AuthSession> authenticate({
-    required String token,
-    required String code,
-  }) async {
+  Future<AuthSession> authenticate({required String token}) async {
     final response = await _http.post(
       Uri.parse('$baseUrl/v1/auth'),
       headers: {'content-type': 'application/json'},
-      body: jsonEncode({'token': token.trim(), 'code': code.trim()}),
+      body: jsonEncode({'token': token.trim()}),
     );
     final body = _decode(response);
     final session = AuthSession(
@@ -110,7 +107,7 @@ class ApiClient {
   }
 
   /// Host-only: mints a fresh member identity for this room. The guest is a
-  /// real server account, but its token/secret are only shared in the invite.
+  /// real server account, but its token is only shared in the invite.
   Future<GuestAccount> createGuest(String address) async {
     final body = await _post(
       '/v1/room/guest',
@@ -119,7 +116,6 @@ class ApiClient {
     return GuestAccount(
       userId: body['user_id'] as String,
       token: body['token'] as String,
-      totpSecret: body['totp_secret'] as String,
     );
   }
 
@@ -244,12 +240,10 @@ class GuestAccount {
   const GuestAccount({
     required this.userId,
     required this.token,
-    required this.totpSecret,
   });
 
   final String userId;
   final String token;
-  final String totpSecret;
 }
 
 class AuthSession {

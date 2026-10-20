@@ -30,23 +30,13 @@ enum Command {
         #[arg(long, default_value = "config.json")]
         config: PathBuf,
     },
-    /// Mint a bearer token and TOTP secret for one user.
+    /// Mint a bearer token for one user.
     Provision {
         #[arg(long)]
         user: String,
         /// Mark the account as an admin (can upload modules).
         #[arg(long)]
         admin: bool,
-    },
-    /// Print the current TOTP code for a base32 secret (for manual testing).
-    Totp {
-        #[arg(long)]
-        secret: String,
-        /// Unix time in seconds to use instead of now.
-        #[arg(long)]
-        at: Option<u64>,
-        #[arg(long, default_value_t = qr_race_hub::DEFAULT_DIGITS)]
-        digits: u32,
     },
 }
 
@@ -87,6 +77,8 @@ fn default_key_path() -> String {
 struct AccountConfig {
     user_id: String,
     token: String,
+    /// Legacy field; clients no longer ask for TOTP. Empty is fine.
+    #[serde(default)]
     totp_secret: String,
     /// Admins may upload modules; ordinary accounts cannot.
     #[serde(default)]
@@ -103,26 +95,6 @@ async fn main() -> ExitCode {
             print_provision(&user, admin);
             ExitCode::SUCCESS
         }
-        Command::Totp { secret, at, digits } => {
-            let now_ms = at
-                .map(|seconds| seconds.saturating_mul(1000))
-                .unwrap_or_else(|| {
-                    std::time::SystemTime::now()
-                        .duration_since(std::time::UNIX_EPOCH)
-                        .map(|elapsed| elapsed.as_millis() as u64)
-                        .unwrap_or(0)
-                });
-            match qr_race_hub::totp::current_code(&secret, now_ms, digits) {
-                Some(code) => {
-                    println!("{code}");
-                    ExitCode::SUCCESS
-                }
-                None => {
-                    eprintln!("qr_race_server: invalid base32 secret or digits");
-                    ExitCode::FAILURE
-                }
-            }
-        }
         Command::Serve { config } => match serve(&config).await {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {
@@ -135,16 +107,12 @@ async fn main() -> ExitCode {
 
 fn print_provision(user: &str, admin: bool) {
     let token = generate_token();
-    let secret = generate_totp_secret_base32();
     let account = serde_json::json!({
         "user_id": user,
         "token": token,
-        "totp_secret": secret,
         "admin": admin,
     });
     println!("{account}");
-    // The URL an authenticator app understands; the server never needs it.
-    println!("otpauth://totp/qr_race:{user}?secret={secret}&issuer=qr_race");
 }
 
 async fn serve(config_path: &Path) -> Result<(), String> {
@@ -165,11 +133,16 @@ async fn serve(config_path: &Path) -> Result<(), String> {
         None => AppState::new(clock),
     };
     for account in &config.accounts {
+        let secret = if account.totp_secret.is_empty() {
+            generate_totp_secret_base32()
+        } else {
+            account.totp_secret.clone()
+        };
         state
             .provision_as(
                 UserId(account.user_id.clone()),
                 &account.token,
-                &account.totp_secret,
+                &secret,
                 account.admin,
             )
             .map_err(|error| format!("account {}: {error}", account.user_id))?;

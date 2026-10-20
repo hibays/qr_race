@@ -8,7 +8,6 @@
 
 import 'package:qr_race_gui/api/api_client.dart';
 import 'package:qr_race_gui/selfhost/self_host_launcher_native.dart';
-import 'package:qr_race_gui/selfhost/self_host_types.dart';
 
 Future<void> main() async {
   final launcher = ProcessServerLauncher();
@@ -19,10 +18,7 @@ Future<void> main() async {
     print('data: ${info.dataDirectory}');
 
     final api = ApiClient(baseUrl: info.url, fingerprint: info.fingerprint);
-    final session = await api.authenticate(
-      token: info.hostToken,
-      code: totpCode(info.hostSecret),
-    );
+    final session = await api.authenticate(token: info.hostToken);
     print('authenticated as ${session.userId} (admin: ${session.admin})');
     final rooms = await api.lobby();
     print('lobby rooms: ${rooms.length}');
@@ -31,3 +27,4 @@ Future<void> main() async {
     print('server stopped');
   }
 }
+

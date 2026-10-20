@@ -70,18 +70,32 @@ symbol in view produces one hit.
 The desktop build keeps using the separate `qr_race_server` process (and SQLite),
 selected by platform in `ServerLauncher`.
 
+## Desktop bridge and lifecycle
+
+The desktop GUI does not spawn a server in Dart. `ProcessServerLauncher` asks the
+Rust bridge to start `qr_race_server`; on Windows the bridge puts the child in a
+Job Object with `KILL_ON_JOB_CLOSE`. If the GUI crashes or is closed, the job
+handle closes and the child is killed, so port 8443 can never be orphaned.
+
+Config/accounts/SQLite live in `%APPDATA%\qr_race\selfhost\desktop` and are
+reused on the next start, so tokens and rooms survive GUI restarts. The Android
+build uses the in-process `qr_race_embedded` path instead.
+
+Desktop text theme supplies `Microsoft YaHei / PingFang SC / SimHei / Noto Sans
+CJK SC` as `fontFamilyFallback` (the rcrm approach), fixing CJK tofu on Windows.
+
 ## Identity, rooms and invitations
 
-- A **server account** is an identity (token + TOTP secret). It is not a room
+- A **server account** is an identity (token). It is not a room
   role.
 - Creating a room makes that account the room's **host**; joining makes it a
   **member/co-host**. The same identity can be host in one room and member in
   another.
 - The host can call `POST /v1/room/guest?address=...`; the server provisions a
-  fresh identity and returns its token/TOTP secret. That guest is scoped by the
+  fresh identity and returns its token. That guest is scoped by the
   invite link to one room and joins as a member.
 - Invite links use `qrrace://connect?...&room=...`; the app fills the form,
-  computes TOTP from the link secret, logs in, joins the room and opens it.
+  logs in with the token, joins the room and opens it.
 
 ## Dynamic relays
 
@@ -116,3 +130,4 @@ super-resolution network. `models/detect.onnx` and `models/sr.onnx` are converte
 weights only; the project has no ONNX Runtime dependency and never loads them.
 Running the WeChat algorithm would require an inference backend (ONNX Runtime
 Mobile), detector prior decode/NMS, and crop-based SR. See `docs/MODELS.md`.
+

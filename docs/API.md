@@ -7,12 +7,14 @@ bodies are JSON, all payload bytes are base64 in JSON.
 
 ```
 POST /v1/auth
-{ "token": "<bearer token>", "code": "123456" }
+{ "token": "<bearer token>" }
 ```
 
 - `200` → `{ "session_id": "s-…", "user_id": "…", "expires_at_ms": 123, "admin": false }`
-- `401` on unknown token, wrong/expired code, or a code whose step was already
-  used.
+- `401` on an unknown token.
+
+A legacy `code` field is still accepted and verified if explicitly provided, but
+the product flow no longer asks for TOTP.
 
 `admin` tells the client whether to show the module-upload action; the server
 still enforces it on `/v1/admin/modules`.
@@ -139,14 +141,14 @@ a gap.
 | Status | Meaning |
 |---|---|
 | `400` | malformed address, bad base64, empty/oversized relay, bad module list |
-| `401` | missing/invalid/expired session; failed or replayed TOTP |
+| `401` | missing/invalid/expired session; unknown token |
 | `403` | authenticated but not allowed (member publishing, non-participant view, non-host control) |
 | `404` | unknown room |
 | `409` | room exists, room not lit, already lit, host trying to leave, duplicate co-host |
-| `429` | too many failed login codes; the account is locked for a minute |
+| `429` | too many failed token attempts; the account is locked for a minute |
 
-Five wrong codes lock an account for 60 seconds (the JSON body carries the
-retry delay); a successful login clears the counter.
+A wrong token counts toward the 5-attempt/60-second lock; a successful login
+clears the counter.
 
 ## Config
 
@@ -157,7 +159,7 @@ The server reads a config file:
   "listen": "127.0.0.1:8080",
   "database": "qr_race.db",
   "accounts": [
-    { "user_id": "host-a", "token": "…", "totp_secret": "…", "admin": false }
+    { "user_id": "host-a", "token": "…", "admin": false }
   ]
 }
 ```
@@ -165,7 +167,8 @@ The server reads a config file:
 `database` is optional: omit it for an in-memory server (tests, demos). When set,
 rooms and relays survive a restart. Accounts always come from this file, and
 sessions are in-memory either way — after a restart the client authenticates
-again with a fresh TOTP code.
+again with the same token. The optional `totp_secret` field is legacy only; the
+UI never asks for a code.
 
 `tls` is optional. When present the server speaks HTTPS; if `cert` and `key` both
 do not exist it generates a self-signed pair (valid for `hosts`, defaulting to

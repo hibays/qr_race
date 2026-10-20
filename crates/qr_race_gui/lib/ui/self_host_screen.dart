@@ -138,11 +138,9 @@ class _SelfHostScreenState extends State<SelfHostScreen>
   Future<void> _connectAsHost() async {
     final info = _info;
     if (info == null) return;
-    final code = totpCode(info.hostSecret);
     final ok = await widget.state.connect(
       server: info.url,
       token: info.hostToken,
-      code: code,
       fingerprint: info.fingerprint.isEmpty ? null : info.fingerprint,
     );
     if (!mounted) return;
@@ -192,7 +190,7 @@ class _SelfHostScreenState extends State<SelfHostScreen>
         const Text(
           '1. 打开同目录的桌面版 qr_race（Windows）。\n'
           '2. 连接页点“自部署服务器”，启动后页面会给出 URL、证书指纹和账号。\n'
-          '3. 手机连接页填入该 URL 与指纹，再用房主 token + 验证码连接。\n\n'
+          '3. 手机连接页填入该 URL 与指纹，再用房主 token 连接。\n\n'
           '也可以手动运行：\n'
           '  cargo build --release -p qr_race_server\n'
           '  target\\release\\qr_race_server.exe serve --config config.json\n'
@@ -352,13 +350,11 @@ class _SelfHostScreenState extends State<SelfHostScreen>
         _AccountCard(
           title: '服务器账号',
           token: info.hostToken,
-          secret: info.hostSecret,
           onConnect: _connectAsHost,
           link: buildConnectLink(
             server: info.url,
             fingerprint: info.fingerprint,
             token: info.hostToken,
-            secret: info.hostSecret,
           ),
         ),
         const SizedBox(height: 16),
@@ -462,14 +458,12 @@ class _AccountCard extends StatelessWidget {
   const _AccountCard({
     required this.title,
     required this.token,
-    required this.secret,
     this.onConnect,
     this.link,
   });
 
   final String title;
   final String token;
-  final String secret;
   final Future<void> Function()? onConnect;
   final String? link;
 
@@ -498,7 +492,6 @@ class _AccountCard extends StatelessWidget {
             ],
           ),
           _CopyRow(label: 'token', value: token),
-          _CopyRow(label: 'TOTP secret', value: secret),
           if (link != null)
             Align(
               alignment: Alignment.centerLeft,

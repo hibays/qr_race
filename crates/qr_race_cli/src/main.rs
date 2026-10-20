@@ -39,10 +39,6 @@ struct Cli {
     #[arg(long)]
     token: Option<String>,
 
-    /// Current TOTP code from the authenticator app.
-    #[arg(long)]
-    code: Option<String>,
-
     /// Room address, e.g. 东京A区1B级103房
     #[arg(long)]
     room: Option<String>,
@@ -142,7 +138,6 @@ async fn run(cli: Cli) -> Result<(), String> {
 
     let server = required(cli.server, "--server")?;
     let token = required(cli.token, "--token")?;
-    let code = required(cli.code, "--code")?;
     let room = required(cli.room, "--room")?;
 
     let selected: Vec<&ScanHit> = if cli.all {
@@ -156,7 +151,7 @@ async fn run(cli: Cli) -> Result<(), String> {
 
     let base = server.trim_end_matches('/').to_string();
     let http = build_http_client(cli.cacert.as_deref(), cli.insecure)?;
-    let session = authenticate(&http, &base, &token, &code).await?;
+    let session = authenticate(&http, &base, &token).await?;
     let address = utf8_percent_encode(&room, NON_ALPHANUMERIC).to_string();
 
     for hit in selected {
@@ -253,15 +248,10 @@ fn scan_camera(
     Ok(hits)
 }
 
-async fn authenticate(
-    http: &reqwest::Client,
-    base: &str,
-    token: &str,
-    code: &str,
-) -> Result<String, String> {
+async fn authenticate(http: &reqwest::Client, base: &str, token: &str) -> Result<String, String> {
     let response = http
         .post(format!("{base}/v1/auth"))
-        .json(&json!({ "token": token, "code": code }))
+        .json(&json!({ "token": token }))
         .send()
         .await
         .map_err(|error| format!("auth request failed: {error}"))?;

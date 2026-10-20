@@ -17,14 +17,14 @@ crates/
 ├── qr_race_capture/           采集核心：RGBA/BGRA→灰度、stride、30fps 定速与丢帧统计
 ├── qr_race_capture_desktop/   桌面相机后端（nokhwa：MF / V4L2 / AVFoundation）
 ├── qr_race_ffi/               原生扫描会话 C ABI：相机与扫描在 Rust 线程，Dart 只取命中与 JPEG 预览
-├── qr_race_hub/               token+TOTP 鉴权（防重放）、房间/接力服务、房间事件
+├── qr_race_hub/               token 鉴权、房间/接力服务、房间事件
 ├── qr_race_store/             SQLite 持久化：房间、成员/角色、模组选择、接力
 ├── qr_race_tls/               自签名证书生成/复用 + hyper-util TLS 服务循环
 ├── qr_race_api/               HTTP + WebSocket 传输：会话、房间 API、事件广播
 ├── qr_race_cli/               扫描客户端（bin: qr_scan）：图片或相机 → 登录 → 发布接力
 ├── qr_race_gui/               Flutter 客户端：连接、大厅、房间接力墙、扫码页（手机/桌面同套界面）
 └── qr_race_bench/             基准 CLI：生成 fixture、跑耗时分布、输出 JSON
-src/                           唯一的 server 二进制：serve / provision / totp
+src/                           唯一的 server 二进制：serve / provision
 DEPLOY.md                      部署与真机测试：一键自部署、USB/Wi-Fi、权限、排错
 docs/API.md                    客户端契约（端点、状态码、事件、WS ticket）
 docs/PERF.md                   实测与解读（含相机采集数据）
@@ -40,9 +40,8 @@ tools/qr_bench.html            手工双码测试台（浏览器打开，用手�
 
 ## 鉴权与房间
 
-- 用户由运营方 provision 出 bearer token 与 base32 TOTP secret；连接时 token 定位账户、TOTP 证明持有，session 默认 12 小时。
-- 连续 5 次错误验证码会把账户锁定 60 秒（返回 `429`），成功登录后计数清零；重放同一时间步同样计为失败。
-- 同一个 TOTP step 只能成功一次（skew 窗口内也拒绝重放）；`totp.rs` 用 RFC 6238 官方向量做过测试。
+- 用户由运营方 provision 出 bearer token；连接只校验 token，session 默认 12 小时。TOTP 已从产品流程移除。
+- 连续 5 次错误 token 会把账户锁定 60 秒（返回 `429`），成功登录后计数清零。
 - 房间状态机在 `qr_race_hub`：建暗房 → 点亮 → 加入 → 房主设副房主/模组 → 房主或副房主发布接力；每次变更返回 `RoomEvent` 供传输层广播。
 - 只有房主与副房主能发布接力；成员能看房间快照（谁在、什么身份、谁刚扫过），但发布会被拒绝。
 - 暗房只有房主能进；成员必须等房间点亮。
@@ -90,7 +89,7 @@ Android 构建需要接受 SDK licenses（`flutter doctor --android-licenses`）
 ## 持久化
 
 - `database` 配置指向 SQLite 文件；房间（成员、角色、模组选择、加入密码哈希）与接力写穿到库，重启后原样恢复，接力 id 继续增长（不会重号）。
-- 账号仍由运营方的 config 文件提供（token 与 TOTP secret 不落库）；session 与 WS 订阅是进程内状态，重启后重新登录即可。
+- 账号仍由运营方的 config 文件提供（token 不落库）；session 与 WS 订阅是进程内状态，重启后重新登录即可。
 - 冒烟验证（真实进程）：建房 → 点亮 → 发布接力 → 停服 → 重启 → `GET /v1/room` 返回 `lit=true` 且接力字节逐字节一致。
 
 ## HTTPS（自签名）
@@ -115,7 +114,7 @@ cargo test --workspace
 cargo clippy --workspace --all-targets -- -D warnings
 cargo fmt --all -- --check
 
-# 给用户签 token + TOTP secret（把输出的 JSON 行贴进 config.json 的 accounts）
+# 给用户签 token（把输出的 JSON 行贴进 config.json 的 accounts）
 cargo run -q -p qr_race_server -- provision --user host-a
 
 # 管理端账号：可上传/分发模组
@@ -126,7 +125,7 @@ cargo run -q -p qr_race_server -- serve --config config.json
 
 # 扫描一张图并把结果发布成接力（Flutter 客户端要走的同一条路径）
 cargo run -q -p qr_race_cli -- --server http://127.0.0.1:8080 `
-  --token <token> --code 123456 --room 东京A区1B级103房 `
+  --token <token> --room 东京A区1B级103房 `
   --image .refs/demo.png --kind url
 
 # 自签名 HTTPS：信任服务端证书（或 --insecure 仅限本地调试）
@@ -208,7 +207,7 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 ## 路线
 
 - [x] M0 工作区 / 领域模型 / 扫码流水线 / 基准
-- [x] M1 token+TOTP 鉴权 / 房间与接力服务 / 事件
+- [x] M1 token 鉴权 / 房间与接力服务 / 事件
 - [x] M2 HTTP/WS 传输：会话、房间 API、事件广播、管理端 provision
 - [x] M3 WebSocket 真实 socket E2E（一次性 ticket）+ 采集核心
 - [x] M4 参考客户端 `qr_scan`：扫码 → 发布 → 成员收到，端到端测试
@@ -238,9 +237,11 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M28 Android 真机：arm64 Rust 库打包（rxing 二维码显示）、相机权限弹窗 + 拒绝后“去设置”引导、adb reverse 下 TLS 指纹登录成功
 - [x] M29 Android 内置服务端：`qr_race_embedded` 编译进 `libqr_race_ffi.so`，UI 可选自签名/已有证书/HTTP，默认 18443；真机 TLS 指纹登录成功
 - [x] M30 Android Camera2 → JNI → Rust 扫描：720×1280 预览、约 6ms/帧，实拍二维码命中；自动发布、前缀动态槽位、外部 App scheme 跳转、连接链接预填
-- [x] M31 每房间动态成员：房主专用 `/v1/room/guest` 生成临时身份，邀请链接自动带 TOTP 并直接进房；服务端不再要求预置“成员账号”
-- [ ] CNN 推理接入：ONNX Runtime 后端 + 检测器后处理 + 按需 SR
+- [x] M31 每房间动态成员：房主专用 `/v1/room/guest` 生成临时身份，邀请链接直接进房；服务端不再要求预置“成员账号”
+- [x] M32 桌面自部署进 bridge：Rust 通过 Windows Job Object 持有 server 子进程，关闭 GUI 自动清理；配置/SQLite 复用；桌面 CJK 字体回退对齐 rcrm；TOTP 2FA 从产品与初版需求移除
+- [ ] WeChat CNN 推理：ONNX Runtime Mobile + prior decode/NMS + 按需 SR
 - [ ] 模组执行（RustPython 阻塞，见 docs/MODULES.md）
 - [ ] Web 预览流；Apple 采集
 - [ ] 模组层：RustPython 0.6 在 Windows 初始化失败，暂缓（见 [docs/MODULES.md](docs/MODULES.md)）
 - [ ] Web/wasm 实时采集扫码
+

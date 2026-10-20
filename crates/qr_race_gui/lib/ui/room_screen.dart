@@ -144,7 +144,6 @@ class _RoomScreenState extends State<RoomScreen> {
         server: api.baseUrl,
         fingerprint: api.fingerprint,
         token: guest.token,
-        secret: guest.totpSecret,
         room: room.label,
       );
       await showDialog<void>(
@@ -163,7 +162,7 @@ class _RoomScreenState extends State<RoomScreen> {
               SelectableText(link, style: const TextStyle(fontSize: 12)),
               const SizedBox(height: 10),
               const Text(
-                '链接含 token 和 TOTP secret，等同密码，只发给该成员。',
+                '链接含该房间的临时 token，等同密码，只发给该成员。',
                 style: TextStyle(fontSize: 11.5, color: muted),
               ),
             ],

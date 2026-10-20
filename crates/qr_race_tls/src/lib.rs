@@ -147,6 +147,20 @@ impl TlsMaterial {
     }
 }
 
+/// SHA-256 fingerprint of the first certificate in a PEM file.
+pub fn fingerprint_pem_file(path: &Path) -> Option<String> {
+    let pem = std::fs::read_to_string(path).ok()?;
+    let der = rustls_pemfile::certs(&mut pem.as_bytes()).next()?.ok()?;
+    use sha2::{Digest, Sha256};
+    let digest = Sha256::digest(der.as_ref());
+    let mut hex = String::with_capacity(64);
+    for byte in digest {
+        use std::fmt::Write;
+        let _ = write!(hex, "{byte:02x}");
+    }
+    Some(hex)
+}
+
 /// Installs the ring crypto provider once. rustls 0.23 requires this explicitly
 /// when the dependency graph does not pin a provider; it is safe to call often.
 pub fn install_crypto_provider() {

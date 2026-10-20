@@ -11,6 +11,8 @@ mod camera;
 mod camera_mobile;
 #[cfg(all(not(feature = "desktop-camera"), not(target_os = "android")))]
 mod camera_stub;
+#[cfg(not(target_os = "android"))]
+mod desktop_server;
 #[cfg(feature = "desktop-camera")]
 mod scanner;
 
@@ -25,6 +27,76 @@ use std::path::PathBuf;
 use std::sync::Mutex;
 
 use qr_race_embedded::TlsMode;
+
+#[cfg(not(target_os = "android"))]
+/// Starts the desktop server through the bridge with Windows job-object
+/// ownership. Returns 0 on success.
+///
+/// # Safety
+/// `binary`/`config` must point to their stated readable UTF-8 byte lengths.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qr_desktop_server_start(
+    binary: *const u8,
+    binary_len: usize,
+    config: *const u8,
+    config_len: usize,
+) -> i32 {
+    let Some(binary) = (unsafe { read_utf8(binary, binary_len) }) else {
+        return -1;
+    };
+    let Some(config) = (unsafe { read_utf8(config, config_len) }) else {
+        return -1;
+    };
+    match desktop_server::start(std::path::Path::new(binary), std::path::Path::new(config)) {
+        Ok(()) => 0,
+        Err(error) => {
+            eprintln!("qr_desktop_server_start: {error}");
+            -1
+        }
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn qr_desktop_server_stop() {
+    desktop_server::stop();
+}
+
+#[cfg(not(target_os = "android"))]
+#[unsafe(no_mangle)]
+pub extern "C" fn qr_desktop_server_status() -> i32 {
+    desktop_server::status()
+}
+
+#[cfg(not(target_os = "android"))]
+/// Writes the SHA-256 fingerprint of a PEM certificate to `out`.
+///
+/// # Safety
+/// `path` must point to `path_len` readable bytes; `out` to `capacity` writable.
+#[unsafe(no_mangle)]
+pub unsafe extern "C" fn qr_cert_fingerprint(
+    path: *const u8,
+    path_len: usize,
+    out: *mut u8,
+    capacity: usize,
+) -> i32 {
+    let Some(path) = (unsafe { read_utf8(path, path_len) }) else {
+        return -1;
+    };
+    match qr_race_tls::fingerprint_pem_file(std::path::Path::new(path)) {
+        Some(fingerprint) => write_out(fingerprint.as_bytes(), out, capacity),
+        None => -1,
+    }
+}
+
+#[cfg(not(target_os = "android"))]
+unsafe fn read_utf8<'a>(pointer: *const u8, length: usize) -> Option<&'a str> {
+    if pointer.is_null() || length == 0 {
+        return None;
+    }
+    let bytes = unsafe { std::slice::from_raw_parts(pointer, length) };
+    std::str::from_utf8(bytes).ok()
+}
 
 static EMBEDDED_SERVER: Mutex<Option<qr_race_embedded::EmbeddedServer>> = Mutex::new(None);
 static LAST_SERVER_ERROR: Mutex<Option<String>> = Mutex::new(None);

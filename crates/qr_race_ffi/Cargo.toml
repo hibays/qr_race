@@ -23,11 +23,19 @@ qr_race_qr.workspace = true
 # Scanning uses only GrayFrame/ScanEngine here; file decoders (and their PNG/BMP
 # image-rs features) are not part of the scanner or the mobile bridge.
 qr_race_scan = { workspace = true, default-features = false, features = ["timing"] }
+qr_race_tls.workspace = true
 serde.workspace = true
 serde_json.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = [
+    "Win32_Foundation",
+    "Win32_System_JobObjects",
+    "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 qrcode = "0.14"

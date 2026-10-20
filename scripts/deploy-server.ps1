@@ -45,7 +45,7 @@ try {
                 hosts = $hosts
             }
             accounts = @(
-                [ordered]@{ user_id = "host"; token = $hostJson.token; totp_secret = $hostJson.totp_secret; admin = $false }
+                [ordered]@{ user_id = "host"; token = $hostJson.token; admin = $false }
             )
         }
         [System.IO.File]::WriteAllText($Config, ($configObject | ConvertTo-Json -Depth 8))
@@ -55,12 +55,8 @@ try {
         Write-Host "wrote $Config" -ForegroundColor Green
         Write-Host "server URL: https://${urlHost}:$Port"
         Write-Host "host token:   $($hostJson.token)"
-        Write-Host "host secret:  $($hostJson.totp_secret)"
         Write-Host ""
         Write-Host "Members are created per room by the host's 邀请成员 button."
-        Write-Host ""
-        Write-Host "TOTP code:"
-        Write-Host "  $server totp --secret $($hostJson.totp_secret)"
         Write-Host ""
         if ($ip) {
             Write-Host "If Windows Firewall blocks the LAN URL, run as admin:"

@@ -139,7 +139,6 @@ async fn the_cli_trusts_the_built_in_self_signed_certificate() {
         .unwrap();
 
     clock.advance(30_000);
-    let code = totp::current_code(SCANNER_SECRET, clock.now_ms(), 6).unwrap();
 
     let image = dir.join("code.png");
     write_qr(&image, PAYLOAD);
@@ -152,8 +151,6 @@ async fn the_cli_trusts_the_built_in_self_signed_certificate() {
         settings.cert.to_string_lossy().into_owned(),
         "--token".into(),
         SCANNER_TOKEN.into(),
-        "--code".into(),
-        code,
         "--room".into(),
         ADDRESS.into(),
         "--image".into(),
@@ -243,7 +240,6 @@ async fn the_cli_publishes_a_scanned_code() {
     // Move to a fresh TOTP step: the scanner already spent the previous one
     // joining, and a replayed step is refused by design.
     clock.advance(30_000);
-    let code = totp::current_code(SCANNER_SECRET, clock.now_ms(), 6).unwrap();
 
     let dir = std::env::temp_dir().join(format!("qr-scan-cli-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();
@@ -256,8 +252,6 @@ async fn the_cli_publishes_a_scanned_code() {
         base.clone(),
         "--token".into(),
         SCANNER_TOKEN.into(),
-        "--code".into(),
-        code,
         "--room".into(),
         ADDRESS.into(),
         "--image".into(),

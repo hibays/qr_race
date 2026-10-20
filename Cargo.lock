@@ -2382,9 +2382,11 @@ dependencies = [
  "qr_race_embedded",
  "qr_race_qr",
  "qr_race_scan",
+ "qr_race_tls",
  "qrcode",
  "serde",
  "serde_json",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -164,6 +164,36 @@ impl AuthService {
             .any(|account| account.user_id == *user_id && account.admin)
     }
 
+    /// Token-only login. TOTP remains available through [`authenticate`] for
+    /// old clients, but the product no longer asks users for a second factor.
+    pub fn authenticate_token(&mut self, token: &str) -> Result<Session, AuthError> {
+        let token_hash = hash_token(token);
+        let index = self
+            .accounts
+            .iter()
+            .position(|account| bool::from(account.token_hash.ct_eq(&token_hash)))
+            .ok_or(AuthError::UnknownToken)?;
+        let now = self.clock.now_ms();
+        let account = &mut self.accounts[index];
+        if account.locked_until_ms != 0 && now >= account.locked_until_ms {
+            account.locked_until_ms = 0;
+            account.failed_attempts = 0;
+        }
+        if account.locked_until_ms > now {
+            return Err(AuthError::Locked {
+                retry_after_ms: account.locked_until_ms - now,
+            });
+        }
+        account.failed_attempts = 0;
+        account.locked_until_ms = 0;
+        Ok(Session {
+            id: format!("s-{}", hex(&random_bytes::<32>())),
+            user_id: account.user_id.clone(),
+            created_at_ms: now,
+            expires_at_ms: now + self.session_ttl_ms,
+        })
+    }
+
     /// Verifies token and code, then issues a session.
     pub fn authenticate(&mut self, token: &str, code: &str) -> Result<Session, AuthError> {
         let token_hash = hash_token(token);
@@ -289,6 +319,15 @@ mod tests {
 
     fn code_at(now_ms: u64) -> String {
         totp::current_code(SECRET, now_ms, totp::DEFAULT_DIGITS).unwrap()
+    }
+
+    #[test]
+    fn token_only_login_issues_a_session_without_a_code() {
+        let clock = ManualClock::new(1_700_000_000_000);
+        let mut service = service(&clock);
+        let session = service.authenticate_token(TOKEN).unwrap();
+        assert_eq!(session.user_id, UserId("u-host".into()));
+        assert!(session.expires_at_ms > clock.now_ms());
     }
 
     #[test]
