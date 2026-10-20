@@ -5,6 +5,9 @@
 # Run from the repo root:
 #
 #   pwsh -File scripts/browser-scan-probe.ps1
+#   pwsh -File scripts/browser-scan-probe.ps1 -RealCamera
+
+param([switch]$RealCamera)
 
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
@@ -19,32 +22,46 @@ if (-not (Test-Path $edge)) { throw "Edge not found at $edge" }
 $stamp = Get-Date -Format 'yyyyMMddHHmmss'
 
 # 1. A QR page image and a looping Y4M the fake camera can play.
-cargo run --release -q -p qr_race_bench -- --generate "$probe/qr.png" --text "https://example.test/relay"
-python -c @"
+if (-not $RealCamera) {
+  cargo run --release -q -p qr_race_bench -- --generate "$probe/qr.png" --text "https://example.test/relay"
+  python -c @"
 from PIL import Image
 qr = Image.open(r'$probe/qr.png').convert('L').resize((360, 360), Image.NEAREST)
 canvas = Image.new('L', (640, 480), 255)
 canvas.paste(qr, (140, 60))
 canvas.convert('RGB').save(r'$probe/frame.png')
 "@
-ffmpeg -y -loglevel error -loop 1 -i "$probe/frame.png" -t 2 -r 15 -pix_fmt yuv420p -f yuv4mpegpipe "$probe/probe.y4m"
+  ffmpeg -y -loglevel error -loop 1 -i "$probe/frame.png" -t 2 -r 15 -pix_fmt yuv420p -f yuv4mpegpipe "$probe/probe.y4m"
+}
 
 # 2. Serve the web directory (localhost is a secure context for getUserMedia).
 $server = Start-Process -FilePath python -ArgumentList '-m','http.server',"$httpPort",'--bind','127.0.0.1' -WorkingDirectory $web -PassThru -WindowStyle Hidden
 Start-Sleep -Seconds 1
 
-# 3. Headless Edge with the fake camera, then drive it over CDP.
+# 3. Edge: fake camera for the deterministic QR test, real camera for -RealCamera.
 $profile = Join-Path $probe "edge-profile-$stamp"
-$edgeArgs = @(
-  '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
-  "--remote-debugging-port=$debugPort",
-  "--user-data-dir=$profile",
-  '--use-fake-ui-for-media-stream',
-  '--use-fake-device-for-media-stream',
-  "--use-file-for-fake-video-capture=$probe/probe.y4m",
-  '--autoplay-policy=no-user-gesture-required',
-  'about:blank'
-)
+if ($RealCamera) {
+  $edgeArgs = @(
+    '--no-first-run', '--no-default-browser-check',
+    "--remote-debugging-port=$debugPort",
+    "--user-data-dir=$profile",
+    '--use-fake-ui-for-media-stream',
+    '--autoplay-policy=no-user-gesture-required',
+    '--window-size=900,700',
+    'about:blank'
+  )
+} else {
+  $edgeArgs = @(
+    '--headless=new', '--disable-gpu', '--no-first-run', '--no-default-browser-check',
+    "--remote-debugging-port=$debugPort",
+    "--user-data-dir=$profile",
+    '--use-fake-ui-for-media-stream',
+    '--use-fake-device-for-media-stream',
+    "--use-file-for-fake-video-capture=$probe/probe.y4m",
+    '--autoplay-policy=no-user-gesture-required',
+    'about:blank'
+  )
+}
 $edgeProcess = Start-Process -FilePath $edge -PassThru -ArgumentList $edgeArgs
 
 $ready = $false
@@ -63,6 +80,7 @@ $code = 2
 try {
   $env:EDGE_DEBUG_PORT = "$debugPort"
   $env:PROBE_URL = "http://127.0.0.1:$httpPort/scan_probe.html"
+  if ($RealCamera) { $env:PROBE_ALLOW_WAIT = "1" } else { Remove-Item Env:\PROBE_ALLOW_WAIT -ErrorAction SilentlyContinue }
   python (Join-Path $root 'tools/browser_scan_probe.py')
   $code = $LASTEXITCODE
 } finally {

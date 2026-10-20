@@ -64,6 +64,7 @@ expression = (
 )
 
 request_id = 1
+last = None
 for _ in range(80):
     time.sleep(0.5)
     try:
@@ -76,6 +77,7 @@ for _ in range(80):
     if not value:
         continue
     snapshot = json.loads(value)
+    last = snapshot
     print(snapshot)
     title = snapshot["title"] or ""
     if title.startswith("HIT:"):
@@ -84,7 +86,13 @@ for _ in range(80):
     if title.startswith("ERROR:"):
         connection.close()
         sys.exit(1)
+    if os.environ.get("PROBE_ALLOW_WAIT") == "1":
+        state = snapshot.get("state") or {}
+        if state.get("frames", 0) > 0 and state.get("error") is None:
+            print("camera path alive; no QR in view")
+            connection.close()
+            sys.exit(0)
 
-print("timed out waiting for a hit")
+print("timed out waiting for a hit" if last is None else "timed out; last state above")
 connection.close()
 sys.exit(2)

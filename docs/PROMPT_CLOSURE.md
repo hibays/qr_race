@@ -16,7 +16,7 @@ status document, not a claim that every requirement is complete.
 | 7 | CNN backend speed selection | Done (tested: ORT/tract) | ORT 6–48 ms beats tract; st-zrt wraps ORT, lele N/A, Candle untested |
 | 8 | Camera capture: Android | Done | Camera2 Y plane → JNI → Rust; no frames in Dart |
 | 9 | Camera capture: desktop | Done | nokhwa backend |
-| 10 | Camera capture: Web | Partial | wasm + getUserMedia; browser matrix not exhaustive |
+| 10 | Camera capture: Web | Partial | wasm + getUserMedia; real camera 1280×720/~3 ms acquired, physical QR hit pending |
 | 11 | Camera capture: Apple | Not done | no iOS/macOS host on this machine |
 | 12 | Server: rooms, roles, relays, lobby | Done | hub/API tests |
 | 13 | Auth | Done (token-only) | TOTP removed from product flow; legacy optional code |
@@ -71,6 +71,7 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
+
 
 
 

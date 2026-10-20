@@ -2,7 +2,9 @@
 
 Status: works end to end. The wasm scan core is verified in Node, and the full
 `getUserMedia → canvas → wasm` path is verified in Edge headless with a fake
-camera. A physical-camera run is still pending.
+camera and with a real camera. The real-camera run acquires 1280×720 frames and
+scans at ~3 ms, but no QR was in view, so a physical-camera *hit* remains a
+manual check.
 
 ## Pieces
 
@@ -80,3 +82,4 @@ hit and writes it into the page title. `scripts/browser-scan-probe.ps1` serves
 the web directory on localhost, builds a Y4M from a generated QR image, starts
 Edge headless with `--use-fake-device-for-media-stream` and the file, and drives
 the page over CDP with `tools/browser_scan_probe.py`.
+
