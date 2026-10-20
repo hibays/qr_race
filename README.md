@@ -87,7 +87,7 @@ vendored 来源见 [docs/VENDORED.md](docs/VENDORED.md)。
 | 目标 | 状态 | 命令 |
 |---|---|---|
 | Windows 桌面 | 可用（含原生相机 + FFI 扫码） | `flutter build windows --release` |
-| Web | 构建可用；Rust wasm 扫码在 zxing-cpp 迁移后暂移除（需 Emscripten） | `flutter build web --release` |
+| Web | 构建可用；扫码与二维码 wasm 在 zxing-cpp 迁移后暂移除（需 Emscripten/zxing-wasm） | `flutter build web --release` |
 | Android | **debug APK 可构建**；内置服务端（TLS/HTTP）、Camera2→Rust 扫码、自动发布、二维码显示、权限引导 | `pwsh -File scripts/android-deploy.ps1` |
 | iOS / macOS | 未验证（需要 macOS 与 Xcode） | — |
 
@@ -239,6 +239,7 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [ ] Apple 采集（AVFoundation）
 - [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
 - [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+
 
 
 

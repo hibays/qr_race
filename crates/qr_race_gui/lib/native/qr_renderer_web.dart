@@ -1,12 +1,8 @@
-import 'dart:js_interop';
 import 'dart:typed_data';
 
-@JS('qrRaceQrWebp')
-external JSPromise<JSAny?> _qrWebp(JSString text);
-
-/// Encodes in wasm (2048×2048 lossless WebP) and returns the bytes.
+/// Web QR rendering used the removed Rust wasm module. Native Android/desktop
+/// still render through the FFI; this stub keeps the web build honest until a
+/// browser QR encoder is added.
 Future<Uint8List> renderQrWebp(String text) async {
-  final result = await _qrWebp(text.toJS).toDart;
-  return (result as JSUint8Array).toDart;
+  throw UnsupportedError('Web 二维码生成暂不可用');
 }
-
