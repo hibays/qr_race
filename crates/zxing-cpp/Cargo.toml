@@ -49,14 +49,6 @@ image = ["dep:image"]
 name = "zxingcpp"
 path = "src/lib.rs"
 
-[[example]]
-name = "demo_reader"
-path = "examples/demo_reader.rs"
-
-[[example]]
-name = "demo_writer"
-path = "examples/demo_writer.rs"
-
 [dependencies.image]
 version = ">=0.24"
 optional = true
@@ -82,3 +74,4 @@ version = "0.1.50"
 [build-dependencies.miette]
 version = "5.10.0"
 features = ["fancy"]
+

@@ -63,6 +63,3 @@ fn main() -> miette::Result<()> {
 	// perl -0777 -i -pe 's/(pub const (?:ZXing_(?:Barcode|Image)Format_\w+: ZXing_(?:Barcode|Image)Format) = )(\d+);/$1 . sprintf("0x%04X;", $2)/ge' src/bindings.rs
 	Ok(())
 }
-
-
-

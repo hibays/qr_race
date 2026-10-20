@@ -528,4 +528,3 @@ mod tests {
         assert_eq!(&black[..3], &[16, 16, 16]);
     }
 }
-
