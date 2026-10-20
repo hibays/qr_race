@@ -12,9 +12,12 @@ class ScannerSnapshot {
     required this.frames,
     required this.scanMs,
     required this.hits,
+    this.latestHits = const [],
+    this.latestSeq = 0,
     required this.previewSeq,
     required this.preview,
     required this.source,
+    this.detections = const [],
     this.wechatRuns = 0,
     this.wechatMs = 0,
     this.lastTier,
@@ -31,6 +34,9 @@ class ScannerSnapshot {
     final hits = (json['hits'] as List<dynamic>? ?? const [])
         .map((hit) => ScanHit.fromJson(hit as Map<String, dynamic>))
         .toList();
+    final latestHits = (json['latest'] as List<dynamic>? ?? const [])
+        .map((hit) => ScanHit.fromJson(hit as Map<String, dynamic>))
+        .toList(growable: false);
     return ScannerSnapshot(
       running: json['running'] as bool? ?? false,
       error: json['error'] as String?,
@@ -40,9 +46,15 @@ class ScannerSnapshot {
       frames: stats['frames'] as int? ?? 0,
       scanMs: (stats['scan_ms_last'] as num?)?.toDouble() ?? 0,
       hits: hits,
+      latestHits: latestHits,
+      latestSeq: json['latest_seq'] as int? ?? 0,
       previewSeq: json['preview_seq'] as int? ?? 0,
       preview: preview,
       source: json['source'] as String?,
+      detections: (json['detections'] as List<dynamic>? ?? const [])
+          .map((box) => _decodePoints(box))
+          .where((box) => box.length >= 4)
+          .toList(growable: false),
       wechatRuns: stats['wechat_runs'] as int? ?? 0,
       wechatMs: (stats['wechat_ms_last'] as num?)?.toDouble() ?? 0,
       lastTier: stats['last_tier'] as String?,
@@ -62,9 +74,16 @@ class ScannerSnapshot {
   final int frames;
   final double scanMs;
   final List<ScanHit> hits;
+
+  /// Hits from the newest frame, including repeated content whose corners
+  /// moved. The overlay uses these; [hits] remains the deduplicated list.
+  final List<ScanHit> latestHits;
+  final int latestSeq;
   final int previewSeq;
   final Uint8List? preview;
   final String? source;
+  /// Latest WeChat detector candidate boxes (four corners).
+  final List<List<(double, double)>> detections;
   final int wechatRuns;
   final double wechatMs;
   final String? lastTier;
@@ -110,6 +129,10 @@ abstract class ScannerBackend {
   });
 
   void stop();
+
+  /// Android camera preview texture id; null when the platform uses JPEG
+  /// previews or has no texture preview.
+  int? get previewTextureId => null;
 
   ScannerSnapshot poll();
 

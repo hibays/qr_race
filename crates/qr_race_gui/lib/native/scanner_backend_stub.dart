@@ -12,6 +12,9 @@ class UnsupportedScannerBackend implements ScannerBackend {
   final String reason;
 
   @override
+  int? get previewTextureId => null;
+
+  @override
   void start({
     required int camera,
     required int width,

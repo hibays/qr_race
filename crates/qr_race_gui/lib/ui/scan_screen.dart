@@ -301,13 +301,29 @@ class _Body extends StatelessWidget {
         Positioned.fill(
           child: Container(
             color: Colors.black,
-            child: snapshot?.preview != null
-                ? Image.memory(
-                    snapshot!.preview!,
-                    fit: BoxFit.cover,
-                    gaplessPlayback: true,
+            child: controller.previewTextureId != null
+                ? ClipRect(
+                    child: FittedBox(
+                      fit: BoxFit.cover,
+                      child: RotatedBox(
+                        quarterTurns: 0,
+                        child: SizedBox(
+                          width: (snapshot?.height ?? 1440).toDouble(),
+                          height: (snapshot?.width ?? 1920).toDouble(),
+                          child: Texture(
+                            textureId: controller.previewTextureId!,
+                          ),
+                        ),
+                      ),
+                    ),
                   )
-                : const _CameraPlaceholder(),
+                : snapshot?.preview != null
+                    ? Image.memory(
+                        snapshot!.preview!,
+                        fit: BoxFit.cover,
+                        gaplessPlayback: true,
+                      )
+                    : const _CameraPlaceholder(),
           ),
         ),
         Positioned.fill(
@@ -329,7 +345,11 @@ class _Body extends StatelessWidget {
           ),
         ),
         Positioned.fill(
-          child: _HitOverlay(controller: controller, snapshot: snapshot),
+          child: _HitOverlay(
+            controller: controller,
+            snapshot: snapshot,
+            rotation: controller.previewTextureId != null ? 90 : (snapshot?.rotation ?? 0),
+          ),
         ),
         Positioned(
           left: 12,
@@ -445,32 +465,55 @@ class _Results extends StatelessWidget {
   }
 }
 
-/// Draws the latest hit next to its QR corners. The preview is already rotated
-/// upright by Rust, and the points are in the unrotated sensor frame.
+/// Draws the latest hit next to its QR corners. The Android SurfaceTexture is
+/// already upright but its buffer is portrait (height×width of the sensor), so
+/// the texture uses swapped dimensions and the points map with a 90° rotation.
 class _HitOverlay extends StatelessWidget {
-  const _HitOverlay({required this.controller, required this.snapshot});
+  const _HitOverlay({
+    required this.controller,
+    required this.snapshot,
+    required this.rotation,
+  });
 
   final ScanController controller;
   final ScannerSnapshot? snapshot;
+  final int rotation;
 
   @override
   Widget build(BuildContext context) {
-    final hits = snapshot?.hits ?? const <ScanHit>[];
+    final live = (snapshot?.latestSeq ?? 0) > 0;
+    final hits = live
+        ? (snapshot?.latestHits ?? const <ScanHit>[])
+        : (snapshot?.hits ?? const <ScanHit>[]);
     if (hits.isEmpty) return const SizedBox.shrink();
     final latest = hits.first;
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
-        final source = _SourceSize.of(snapshot);
-        final point = _mapToView(latest.points, snapshot, source, size);
+        final source = _SourceSize.of(snapshot, rotation);
+        final point = _mapToView(latest.points, snapshot, source, size, rotation);
         final left = point == null
             ? 16.0
             : (point.dx - 130).clamp(8.0, size.width - 268.0);
         final top = point == null
             ? 96.0
-            : (point.dy - 54).clamp(78.0, size.height - 160.0);
+            : (point.dy - 92).clamp(78.0, size.height - 190.0);
         return Stack(
           children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: _DetectionBoxPainter(
+                    hits: hits,
+                    detections: snapshot?.detections ?? const [],
+                    snapshot: snapshot,
+                    source: source,
+                    view: size,
+                    rotation: rotation,
+                  ),
+                ),
+              ),
+            ),
             Positioned(
               left: left,
               top: top,
@@ -492,12 +535,12 @@ class _SourceSize {
   final double width;
   final double height;
 
-  static _SourceSize of(ScannerSnapshot? snapshot) {
+  static _SourceSize of(ScannerSnapshot? snapshot, int rotation) {
     if (snapshot == null || snapshot.width == 0 || snapshot.height == 0) {
       return const _SourceSize(1, 1);
     }
-    final rotation = ((snapshot.rotation % 360) + 360) % 360;
-    return rotation == 90 || rotation == 270
+    final degrees = ((rotation % 360) + 360) % 360;
+    return degrees == 90 || degrees == 270
         ? _SourceSize(snapshot.height.toDouble(), snapshot.width.toDouble())
         : _SourceSize(snapshot.width.toDouble(), snapshot.height.toDouble());
   }
@@ -508,18 +551,25 @@ Offset? _mapToView(
   ScannerSnapshot? snapshot,
   _SourceSize source,
   Size view,
+  int rotation,
 ) {
-  if (points.isEmpty || snapshot == null) return null;
-  final rotation = ((snapshot.rotation % 360) + 360) % 360;
-  final raw = points.first;
+  final mapped = _mapPoints(points, snapshot, source, view, rotation);
+  if (mapped.isEmpty) return null;
+  final sum = mapped.fold(Offset.zero, (a, b) => a + b);
+  return sum / mapped.length.toDouble();
+}
+
+List<Offset> _mapPoints(
+  List<(double, double)> points,
+  ScannerSnapshot? snapshot,
+  _SourceSize source,
+  Size view,
+  int rotation,
+) {
+  if (points.isEmpty || snapshot == null) return const [];
+  final degrees = ((rotation % 360) + 360) % 360;
   final w = snapshot.width.toDouble();
   final h = snapshot.height.toDouble();
-  final rotated = switch (rotation) {
-    90 => Offset(h - 1 - raw.$2, raw.$1),
-    180 => Offset(w - 1 - raw.$1, h - 1 - raw.$2),
-    270 => Offset(raw.$2, w - 1 - raw.$1),
-    _ => Offset(raw.$1, raw.$2),
-  };
   final scale = (view.width / source.width) > (view.height / source.height)
       ? view.width / source.width
       : view.height / source.height;
@@ -528,7 +578,76 @@ Offset? _mapToView(
     (view.width - drawn.width) / 2,
     (view.height - drawn.height) / 2,
   );
-  return offset + Offset(rotated.dx * scale, rotated.dy * scale);
+  return [
+    for (final raw in points)
+      () {
+        final rotated = switch (degrees) {
+          90 => Offset(h - 1 - raw.$2, raw.$1),
+          180 => Offset(w - 1 - raw.$1, h - 1 - raw.$2),
+          270 => Offset(raw.$2, w - 1 - raw.$1),
+          _ => Offset(raw.$1, raw.$2),
+        };
+        return offset + Offset(rotated.dx * scale, rotated.dy * scale);
+      }(),
+  ];
+}
+
+class _DetectionBoxPainter extends CustomPainter {
+  _DetectionBoxPainter({
+    required this.hits,
+    required this.detections,
+    required this.snapshot,
+    required this.source,
+    required this.view,
+    required this.rotation,
+  });
+
+  final List<ScanHit> hits;
+  final List<List<(double, double)>> detections;
+  final ScannerSnapshot? snapshot;
+  final _SourceSize source;
+  final Size view;
+  final int rotation;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    for (final box in detections) {
+      final quad = _mapPoints(box, snapshot, source, size, rotation);
+      if (quad.length < 4) continue;
+      final path = Path()..moveTo(quad[0].dx, quad[0].dy);
+      for (final point in quad.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      path.close();
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = const Color(0xFF6FE7FF),
+      );
+    }
+    for (var i = 0; i < hits.length; i++) {
+      final quad = _mapPoints(hits[i].points, snapshot, source, size, rotation);
+      if (quad.length < 4) continue;
+      final path = Path()..moveTo(quad[0].dx, quad[0].dy);
+      for (final point in quad.skip(1)) {
+        path.lineTo(point.dx, point.dy);
+      }
+      path.close();
+      final paint = Paint()
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = i == 0 ? 3 : 2
+        ..color = i == 0 ? accent : Colors.white70;
+      canvas.drawPath(path, paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _DetectionBoxPainter old) =>
+      old.hits != hits ||
+      old.detections != detections ||
+      old.snapshot != snapshot;
 }
 
 class _HitBubble extends StatelessWidget {
@@ -809,8 +928,3 @@ class _InitError extends StatelessWidget {
     );
   }
 }
-
-
-
-
-

@@ -22,7 +22,7 @@ Android Camera2 (Kotlin)            Desktop / Web
 ```
 
 No camera frame enters Dart. Dart polls a small JSON state (hits, stats, error,
-preview sequence) plus a low-rate JPEG preview.
+preview sequence). Android preview is a zero-copy Flutter Texture; desktop keeps the JPEG preview.
 
 ## Android camera path (fast path)
 
@@ -34,12 +34,13 @@ preview sequence) plus a low-rate JPEG preview.
    converts YUV to tightly packed RGB, keeps luma, and queues both in a bounded
    `sync_channel(2)`. If the worker is behind, the frame is dropped instead of
    queued.
-4. The Rust worker first decodes RGB with zxing-cpp. On a miss it runs
+4. The Rust worker converts YUV to RGB with the SIMD `yuv` crate and first decodes RGB with zxing-cpp. On a miss it runs
    `ScanEngine` (pyramid detector + zxing-cpp on luma), then the CNN tiers.
    Frames are **not rotated** here; QR detection is rotation-independent.
-   Sensor rotation is metadata used only when encoding the preview.
-5. The preview is downscaled to at most 1280 px, rotated at that small size, and
-   JPEG-encoded every 60 ms. Scanning never waits for the preview.
+   Sensor rotation is metadata only; the Android SurfaceTexture is a 1440×1920 portrait buffer and is already upright, so the texture child uses the swapped dimensions and `BoxFit.cover`.
+5. Android preview is rendered straight from the Camera2 SurfaceTexture registered
+   with Flutter, so no JPEG, no rotation copy, and no full-frame preview upload.
+   Desktop still uses the 1280 px JPEG preview.
 6. `addImageAvailableListener` uses `acquireLatestImage()` and a busy flag, so
    the camera stays live and the UI never builds an unbounded backlog.
 
@@ -50,13 +51,14 @@ symbol in view produces one hit.
 
 - The scan path is raw `GrayFrame` data; no compression, PNG or JPEG is involved
   in decoding.
-- The only image encoding in the FFI is the **preview JPEG** (`image` with the
-  `jpeg` feature). Compression ratio is irrelevant there; it exists only because
-  Flutter's `Image.memory` needs an encoded image.
+- Android has **no preview encoding**: Camera2 also renders into a
+  `SurfaceTexture` registered with Flutter, so the preview is a GPU texture.
+- Desktop still has the **preview JPEG** (`image` with the `jpeg` feature) for
+  `Image.memory`.
 - `qr_race_ffi` now builds `qr_race_scan` with `default-features = false`, so
   the scan crate's own PNG/BMP file decoders are gone.
-- zxing-cpp is C++ and pulls no Rust `png`/`imageproc` path; the only Rust
-  image dependency is the preview JPEG encoder.
+- zxing-cpp is C++ and pulls no Rust `png`/`imageproc` path; the desktop-only
+  preview JPEG encoder is the only FFI image encoding.
 
 ## Embedded server (Android self-host)
 
@@ -163,19 +165,9 @@ measured runs. 640×480 is available with
 
 `models/detect.onnx` and `models/sr.onnx` are loaded from `include_bytes!` by
 `qr_race_wechat`. The pipeline is real: prior decode/NMS, full-resolution crop,
-zxing-cpp decode, and on-demand SR run on device. It is **not** ONNX Runtime Mobile;
-the current backend is tract, which is why the 384 detector costs ~23–34 ms and
-the 768 pass ~90 ms. The fast zxing-cpp path remains the 30 fps target; color/Android timing is being re-measured.
+zxing-cpp decode, and on-demand SR run on device. Android uses the ORT session
+against `libonnxruntime.so` (measured CNN 6–14 ms on the OnePlus); desktop keeps
+tract as the fallback. The fast zxing-cpp path remains the 30 fps target; the
+real 1920×1440 device run measured fast p50 8.3 ms / p95 21.1 ms.
 
-The next backend step is to replace `src/backend.rs` with an ORT session using
-the Android `libonnxruntime.so`, and to compare 384/768 schedules against the
-current tract implementation. TFLite/FFI upstream crates are vendored but not
-built. See `docs/MODELS.md` and `docs/VENDORED.md`.
-
-
-
-
-
-
-
-
+TFLite/FFI upstream crates are not built. See `docs/MODELS.md` and `docs/VENDORED.md`.

@@ -20,7 +20,6 @@ resolver = "3"
 # Vendored reference crates are path dependencies of qr_race_wechat, not part
 # of our test/lint gate (they carry their own upstream tests).
 exclude = [
-    "crates/zxing-cpp",
 ]
 
 [workspace.package]
@@ -44,7 +43,7 @@ qr_race_tls = { path = "crates/qr_race_tls" }
 qr_race_api = { path = "crates/qr_race_api" }
 qr_race_embedded = { path = "crates/qr_race_embedded" }
 qr_race_cli = { path = "crates/qr_race_cli" }
-zxing-cpp = { path = "crates/zxing-cpp", features = ["bundled"] }
+yuv = "0.8"
 clap = { version = "4", features = ["derive"] }
 data-encoding = "2"
 hmac = "0.12"
@@ -82,8 +81,3 @@ overflow-checks = true
 [profile.release]
 lto = true
 codegen-units = 1
-
-
-
-
-

@@ -65,6 +65,9 @@ class WebScannerBackend implements ScannerBackend {
   }
 
   @override
+  int? get previewTextureId => null;
+
+  @override
   void stop() {
     _stopCamera();
     _running = false;
@@ -90,5 +93,3 @@ class WebScannerBackend implements ScannerBackend {
 }
 
 ScannerBackend createScannerBackend() => WebScannerBackend();
-
-

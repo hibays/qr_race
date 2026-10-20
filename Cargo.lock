@@ -2387,6 +2387,7 @@ dependencies = [
  "serde",
  "serde_json",
  "windows-sys 0.61.2",
+ "yuv",
 ]
 
 [[package]]
@@ -4297,6 +4298,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "yuv"
+version = "0.8.19"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a295923535c00a4e72a50a0a1130097f93160b39892dd4d2d006b1e2b90d6bf9"
+dependencies = [
+ "num-traits",
+]
+
+[[package]]
 name = "zenpixels"
 version = "0.2.16"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4450,6 +4460,8 @@ dependencies = [
 [[package]]
 name = "zxing-cpp"
 version = "0.5.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a60abe279615a2f29efb0f28c7750f871424f2d70662409951a34479daae7a6b"
 dependencies = [
  "cmake",
  "miette",

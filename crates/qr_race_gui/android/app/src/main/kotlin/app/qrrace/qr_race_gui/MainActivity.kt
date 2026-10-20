@@ -10,9 +10,11 @@ import android.os.Build
 import android.os.Environment
 import android.provider.OpenableColumns
 import android.provider.Settings
+import android.view.Surface
 import io.flutter.embedding.android.FlutterActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
+import io.flutter.view.TextureRegistry
 import java.io.File
 
 class MainActivity : FlutterActivity() {
@@ -26,6 +28,10 @@ class MainActivity : FlutterActivity() {
     private var pendingLink: String? = null
     private var linkChannel: MethodChannel? = null
     private var capture: CameraCapture? = null
+    private var captureWidth = 1280
+    private var captureHeight = 720
+    private var captureActive = false
+    private var previewTexture: TextureRegistry.SurfaceTextureEntry? = null
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -57,16 +63,30 @@ class MainActivity : FlutterActivity() {
                         openAppSettings()
                         result.success(null)
                     }
+                    "createPreviewTexture" -> {
+                        result.success(ensurePreviewTexture().id())
+                    }
                     "startCapture" -> {
                         val width = call.argument<Int>("width") ?: 1280
                         val height = call.argument<Int>("height") ?: 720
+                        captureWidth = width
+                        captureHeight = height
+                        captureActive = true
                         capture?.stop()
-                        capture = CameraCapture(this).also { it.start(width, height) }
-                        result.success(null)
+                        val texture = ensurePreviewTexture()
+                        texture.surfaceTexture().setDefaultBufferSize(width, height)
+                        capture = CameraCapture(
+                            this,
+                            Surface(texture.surfaceTexture()),
+                        ).also { it.start(width, height) }
+                        result.success(texture.id())
                     }
                     "stopCapture" -> {
+                        captureActive = false
                         capture?.stop()
                         capture = null
+                        previewTexture?.release()
+                        previewTexture = null
                         result.success(null)
                     }
                     else -> result.notImplemented()
@@ -105,9 +125,40 @@ class MainActivity : FlutterActivity() {
         linkChannel?.invokeMethod("link", link)
     }
 
+    override fun onPause() {
+        // Camera2 sessions are invalidated when another app (WeChat/browser)
+        // comes forward. Stop here and reopen in onResume so returning to the
+        // scanner does not leave a dead session.
+        if (captureActive) {
+            capture?.stop()
+            capture = null
+        }
+        super.onPause()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        if (captureActive && capture == null && isGranted()) {
+            val texture = ensurePreviewTexture()
+            texture.surfaceTexture().setDefaultBufferSize(captureWidth, captureHeight)
+            capture = CameraCapture(
+                this,
+                Surface(texture.surfaceTexture()),
+            ).also { it.start(captureWidth, captureHeight) }
+        }
+    }
+
+    private fun ensurePreviewTexture(): TextureRegistry.SurfaceTextureEntry {
+        previewTexture?.let { return it }
+        return flutterEngine!!.renderer.createSurfaceTexture().also { previewTexture = it }
+    }
+
     override fun onDestroy() {
+        captureActive = false
         capture?.stop()
         capture = null
+        previewTexture?.release()
+        previewTexture = null
         super.onDestroy()
     }
 

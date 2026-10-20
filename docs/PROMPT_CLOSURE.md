@@ -12,7 +12,7 @@ status document, not a claim that every requirement is complete.
 | 3 | 30 fps fast scan path | Done for clear codes | device 2.7–9 ms at 1280×720 |
 | 4 | Multi-code / parallel crop decode | Partial | desktop `thread::scope`; mobile serial |
 | 5 | WeChat detector + SR + decode | Done (own pipeline) | `qr_race_wechat`, ORT Android / tract desktop |
-| 6 | Far/small-code scan-rate gain | Done (sample) | far QR decoded on pre-swap rxing build; zxing-cpp+color re-run pending |
+| 6 | Far/small-code scan-rate gain | Done (sample) | far QR decoded; zxing-cpp + color device run: fast p50 8.3 ms / p95 21.1 ms at 1920×1440 |
 | 7 | CNN backend speed selection | Done (tested: ORT/tract) | ORT 6–48 ms beats tract; st-zrt wraps ORT, lele N/A, Candle untested |
 | 8 | Camera capture: Android | Done | 2K request (2560×1440, fallback), Y/U/V color planes → JNI → Rust; full-screen UI |
 | 9 | Camera capture: desktop | Done | nokhwa backend |
@@ -31,7 +31,7 @@ status document, not a claim that every requirement is complete.
 | 22 | QR generation via qrcode / zxing-wasm WebP | Done | native qrcode VP8L + Web zxing-wasm writer to WebP |
 | 23 | Test infrastructure | Done | 134 Rust / 29 Flutter at last count; fuzz/smoke suites |
 | 24 | Deployment docs | Done | Ubuntu/Windows/Android, self-host, TLS |
-| 25 | WeChat CNN budget | Done (60 ms) | pre-swap rxing p95: fast 6.9 ms, CNN 6.9 ms, tiled far 21.8 ms; zxing-cpp re-test pending |
+| 25 | WeChat CNN budget | Done (60 ms) | real device: fast p50 8.3 ms / p95 21.1 ms; CNN 6.1 ms at 1920×1440 |
 
 ## Test gates
 
@@ -71,20 +71,3 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

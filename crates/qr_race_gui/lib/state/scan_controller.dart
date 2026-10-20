@@ -44,6 +44,8 @@ class ScanController extends ChangeNotifier {
 
   bool get autoPublishEnabled => _api != null;
 
+  int? get previewTextureId => backend.previewTextureId;
+
   /// Publishes new/changed prefixed payloads automatically. Scanning a code
   /// whose prefix was seen before with different bytes updates that slot.
   void enableAutoPublish(ApiClient api, String address) {
@@ -175,6 +177,9 @@ class FakeScannerBackend implements ScannerBackend {
   bool disposed = false;
 
   @override
+  int? get previewTextureId => null;
+
+  @override
   void start({
     required int camera,
     required int width,
@@ -238,5 +243,3 @@ ScannerSnapshot fakeSnapshot({
     source: 'fake camera',
   );
 }
-
-

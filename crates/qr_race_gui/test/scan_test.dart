@@ -194,6 +194,9 @@ class FailingBackend implements ScannerBackend {
   }
 
   @override
+  int? get previewTextureId => null;
+
+  @override
   void stop() {}
 
   @override
@@ -239,6 +242,9 @@ class RecordingBackend implements ScannerBackend {
   }
 
   @override
+  int? get previewTextureId => null;
+
+  @override
   void stop() {}
 
   @override
@@ -247,4 +253,3 @@ class RecordingBackend implements ScannerBackend {
   @override
   void dispose() {}
 }
-

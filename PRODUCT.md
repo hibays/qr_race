@@ -57,7 +57,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 
 - 自实现 WeChat 式三段流水线：CNN 检测、按需超分、解码。`tools/qr_bench.html` 要分别给出"只检测+解码"与"检测+超分+解码"的耗时分布。
 - 超分按需触发：例如检测框面积低于阈值才启用，禁止每帧无条件跑。
-- 快路径与 WeChat crop 解码统一用 zxing-cpp Rust binding（vendored 0.5.3，Apache-2.0，bundled C++）；Android 使用预编译 `libZXing.so`，桌面用 bundled C++。二维码生成用纯 Rust `qrcode` crate。不使用 rxing/wxing。
+- 快路径与 WeChat crop 解码统一用 zxing-cpp Rust binding（crates.io 0.5.3，Apache-2.0）；Android 链接预编译 `libZXing.so`，桌面用 crates.io 的 bundled C++。二维码生成用纯 Rust `qrcode` crate。不使用 rxing/wxing。
 - 推理后端已由实测决定：Android 用 `ort` + ONNX Runtime 1.31（真机 CNN 6–48ms），桌面用 tract 兜底。`st-zrt` 只是 ORT 封装（同内核，未单独重复测速）；`lele` 无 ONNX 前端，不适用；Candle 未实测——ORT 已在 60ms 预算内，先不引入第二套运行时。
 - 参考权重是 WeChat 开源的 Caffe 格式（`detect` 检测、`sr` 超分，见 `WeChatCV/opencv_3rdparty`）。Apache-2.0，含 zxing 的 Apache-2.0 归属，商用可用，需保留许可证与归属声明；走 ONNX 后端时要处理 Caffe → ONNX 的转换，或自带解析。
 
@@ -88,14 +88,14 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 - 2026-10-20 wasm 与浏览器：wasm 扫描内核在 Node 中 1280×720 约 18–22ms；Edge headless + 假摄像头（Y4M）跑通 `getUserMedia → canvas → wasm`，640×480 命中，扫描约 1.8ms。物理相机实拍仍未验证。
 - 2026-10-20 二维码生成：纯 Rust `qrcode` 编码 2048×2048 无损 WebP（纠错 M、quality 90 / method 4），与 rcrm bridge 参数一致；桌面 FFI 与单测验证 2048² 与回读解码。Web 走 vendored zxing-wasm（reader/writer），扫码与 2048² WebP 均已验证。Flutter 用 `Image.memory` 显示，已移除 `qr_flutter`。
 - 2026-10-20 CNN 权重转换：自行解析 WeChat Caffe 权重并写 ONNX。SR 输入 1×1×224²、输出 1×1×447²，与独立 NumPy 前向最大误差 5.5e-06；检测器输入 1×1×384²，输出 mbox_loc/conf/priorbox（6912 priors），DetectionOutput 无 ONNX 等价物，decode/NMS 已在 `qr_race_wechat` 实现；Android ORT 已接入扫描管线。
-- 2026-10-20 构建与测试：Rust 134 个测试、Flutter 27 个测试；Windows release、Web release、Android debug APK 均构建成功。
-- 2026-10-20 Android 自启动与扫码：`qr_race_embedded` 编进 `libqr_race_ffi.so`，App 内可选自签名/已有证书/HTTP，默认端口 18443；真机启动后显示 URL、证书指纹与服务器账号，并通过指纹固定 + token 登录。Camera2 的 Y 平面经 JNI 直接进 Rust（旋转元数据、预览小图旋转；640×480 约 2–3ms、960×720 约 7.8ms、1280×720 约 6–16ms），实拍 `https://example.test/camera-hit` 命中；预览保留上一帧，不再黑屏闪烁。
+- 2026-10-20 构建与测试：Rust 134 个测试、Flutter 29 个测试；Windows release、Web release、Android debug APK 均构建成功。
+- 2026-10-20 Android 自启动与扫码：`qr_race_embedded` 编进 `libqr_race_ffi.so`，App 内可选自签名/已有证书/HTTP，默认端口 18443；真机启动后显示 URL、证书指纹与服务器账号，并通过指纹固定 + token 登录。Camera2 的 Y/U/V 三平面经 JNI 直接进 Rust（Android 预览为 Flutter Texture；640×480 约 2–3ms、960×720 约 7.8ms、1280×720 约 6–16ms），实拍 `https://example.test/camera-hit` 命中；预览保留上一帧，不再黑屏闪烁。
 - 2026-10-20 自动发布与动态码：扫码命中即自动发布，无需手动按钮；同一前缀（`A:`、`cam1|`）的新内容替换房间槽位，不同前缀可同时存在，房间按前缀显示最新一条。连接页支持 `qrrace://connect?...` 深链/粘贴链接预填服务器、指纹和 token；扫码/房间结果可一键跳微信、企业微信、浏览器或其他已安装 App，失败自动复制链接。
 - 2026-10-20 每房间动态成员：服务端新增 host-only `/v1/room/guest`，房主进房后现场生成临时成员 token；邀请链接带房间地址，guest 直接登录并进房。实测 guest 以 member 身份加入，host 列表正确；不再依赖预置“成员账号”。
 - 2026-10-20 桌面自部署进 bridge：Rust bridge 在 Windows Job Object 中启动 `qr_race_server`，GUI 关闭/崩溃会杀掉子进程并释放端口；配置/账号/SQLite 复用 `%APPDATA%\qr_race\selfhost\desktop`。桌面字体按 rcrm 加 `Microsoft YaHei/PingFang SC/SimHei/Noto Sans CJK SC` 回退。TOTP 2FA 已从 PRODUCT/PROMPT/UI/API 流程移除（只保留 legacy 校验代码）。
-- 2026-10-20 自实现微信 CNN 分层流水线：`qr_race_wechat` 不再依赖 registry `wxscan`，算法模块与 ONNX 后端在本仓库（Android ORT / 桌面 tract）；zxing-cpp 全帧 fast path（彩色 RGB 优先，miss 先 try_harder 彩色重试），仍 miss 后 CNN 384 → 全分辨率 crop（zxing-cpp）→ 小码 SR → 每第 4 次 CNN 做 2×2 重叠分块检测。旧 rxing 真机数据：p95 fast 17.4ms、CNN 59.1ms；切到 zxing-cpp + YUV 彩色后待真机重测。`crates/cvlite` 仍 vendored 供 WeChat 缩放；wxscan/wxing 已删除。
+- 2026-10-20 自实现微信 CNN 分层流水线：`qr_race_wechat` 不再依赖 registry `wxscan`，算法模块与 ONNX 后端在本仓库（Android ORT / 桌面 tract）；zxing-cpp 全帧 fast path（彩色 RGB 优先，miss 先 try_harder 彩色重试），仍 miss 后 CNN 384 → 全分辨率 crop（zxing-cpp）→ 小码 SR → 每第 4 次 CNN 做 2×2 重叠分块检测。旧 rxing 真机数据：p95 fast 17.4ms、CNN 59.1ms；切到 zxing-cpp + YUV 彩色后真机复测 1920×1440 fast p50 8.3ms、p95 21.1ms、CNN 6.1ms。`crates/cvlite` 仍 vendored 供 WeChat 缩放；wxscan/wxing 已删除。
 - 2026-10-20 Ubuntu 中心服务器：新增 `scripts/deploy-server-linux.sh`、`qr_race_server fingerprint --cert`，systemd/前台两种模式；WSL Linux 实测自签名 HTTPS 启动、指纹与日志/CLI 一致、token-only 认证 200。自签名连接链接构造时必须带 64-hex 指纹。
-- 2026-10-20 Android 真机：OnePlus PLF110（`3B163Q00LSK00000`）安装 debug APK；`adb reverse` + 自签名 HTTPS + 证书指纹 + token 登录成功进入大厅；房间里的接力二维码由 zxing-cpp WebP 正常显示。扫码页会弹出系统相机权限；拒绝后提供“重新申请/打开系统设置”，`MainActivity` 把不可再询问的拒绝映射为 permanentlyDenied 并跳转应用设置。相机采集已接入彩色与移动端 2K 请求（2560×1440，按设备能力回退）：Camera2 Y/U/V 三平面经 JNI 进 Rust，Rust 转 RGB 供 zxing-cpp（同时保留 luma 给 CNN/预览）；预览 1280px JPEG，扫码页全屏取景，识别气泡按四角坐标显示内容与广播状态。扫码后端可在混合/仅 zxing-cpp/微信 CNN 间切换。
+- 2026-10-20 Android 真机：OnePlus PLF110（`3B163Q00LSK00000`）安装 debug APK；`adb reverse` + 自签名 HTTPS + 证书指纹 + token 登录成功进入大厅；房间里的接力二维码由 zxing-cpp WebP 正常显示。扫码页会弹出系统相机权限；拒绝后提供“重新申请/打开系统设置”，`MainActivity` 把不可再询问的拒绝映射为 permanentlyDenied 并跳转应用设置。相机采集已接入彩色与移动端 2K 请求（2560×1440，按设备能力回退）：Camera2 Y/U/V 三平面经 JNI 进 Rust，Rust 用 `yuv` SIMD 转 RGB 供 zxing-cpp（同时保留 luma 给 CNN）；扫码页全屏取景，Android 预览直接走 Flutter Texture、不经过 JPEG，识别气泡按四角坐标显示内容与广播状态。扫码后端可在混合/仅 zxing-cpp/微信 CNN 间切换。
 - 2026-10-20 运维能力：SQLite 重启恢复、内置自签名 HTTPS（证书指纹固定）、登录失败 5 次锁定 60 秒、房间/角色/接力持久化均有过真实进程冒烟。
 - 没有真实活动数据、用户研究、性能实测数字、证言、客户案例或视觉资产。未来页面与文档不得编造这些。
 
@@ -106,24 +106,3 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 3. **房间是真实地点。** 京、区、级、房对应现实场地，房间码是鉴权路径的一部分；成员可以在别处，接力让这种分离成立。
 4. **原生深度，薄接缝。** 帧与推理留在原生层，Flutter 只负责界面；模块在 server 与 client 两端都可拔插，接口要窄、可替换。
 5. **生产即标准。** TDD、可复现的基准、明确的许可与安全边界；不拿演示级实现充数。
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

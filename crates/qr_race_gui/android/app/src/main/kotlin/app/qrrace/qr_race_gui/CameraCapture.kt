@@ -20,7 +20,10 @@ import kotlin.math.abs
  * Camera2 YUV capture. The Y plane is handed to Rust through JNI; no frame ever
  * reaches Dart. The UI only polls decoded hits and the JPEG preview.
  */
-class CameraCapture(private val context: Context) {
+class CameraCapture(
+    private val context: Context,
+    private val previewSurface: android.view.Surface? = null,
+) {
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
     private var camera: CameraDevice? = null
@@ -55,8 +58,12 @@ class CameraCapture(private val context: Context) {
             manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(device: CameraDevice) {
                     camera = device
+                    val targets = buildList {
+                        add(surface)
+                        previewSurface?.let { add(it) }
+                    }
                     device.createCaptureSession(
-                        listOf(surface),
+                        targets,
                         object : CameraCaptureSession.StateCallback() {
                             override fun onConfigured(configured: CameraCaptureSession) {
                                 session = configured
@@ -64,6 +71,7 @@ class CameraCapture(private val context: Context) {
                                     CameraDevice.TEMPLATE_PREVIEW,
                                 ).apply {
                                     addTarget(surface)
+                                    previewSurface?.let { addTarget(it) }
                                     set(
                                         CaptureRequest.CONTROL_AF_MODE,
                                         CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
@@ -241,6 +249,3 @@ class CameraCapture(private val context: Context) {
         }
     }
 }
-
-
-

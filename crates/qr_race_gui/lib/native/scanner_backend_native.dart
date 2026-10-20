@@ -53,6 +53,10 @@ class FfiScannerBackend implements ScannerBackend {
   int _lastPreviewSeq = 0;
   Uint8List? _lastPreview;
   bool _started = false;
+  int? _previewTextureId;
+
+  @override
+  int? get previewTextureId => _previewTextureId;
 
   @override
   void start({
@@ -81,11 +85,13 @@ class FfiScannerBackend implements ScannerBackend {
 
   Future<void> _startAndroidCapture(int width, int height, int fps) async {
     try {
-      await _channel.invokeMethod<void>('startCapture', {
+      await _channel.invokeMethod<int>('createPreviewTexture');
+      final id = await _channel.invokeMethod<int>('startCapture', {
         'width': width,
         'height': height,
         'fps': fps,
       });
+      _previewTextureId = id;
     } catch (_) {
       // The FFI state will report the failure; the UI stays usable.
     }
@@ -99,6 +105,7 @@ class FfiScannerBackend implements ScannerBackend {
     }
     _stop();
     _started = false;
+    _previewTextureId = null;
   }
 
   Future<void> _stopAndroidCapture() async {
@@ -138,8 +145,3 @@ class FfiScannerBackend implements ScannerBackend {
 }
 
 ScannerBackend createScannerBackend() => FfiScannerBackend();
-
-
-
-
-

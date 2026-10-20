@@ -96,6 +96,8 @@ pub struct TieredOutcome {
     pub tier: &'static str,
     pub detect_ms: f64,
     pub decode_ms: f64,
+    /// Detector candidate boxes in source-frame coordinates.
+    pub detections: Vec<crate::detector::ssd_detector::QuadPoints>,
 }
 
 /// Tiered WeChat pipeline:
@@ -133,6 +135,7 @@ impl TieredScanner {
                 tier: "fast",
                 detect_ms: 0.0,
                 decode_ms: started.elapsed().as_secs_f64() * 1000.0,
+                detections: Vec::new(),
             };
         }
         self.scan_cnn(frame)
@@ -149,6 +152,7 @@ impl TieredScanner {
     pub fn scan_cnn_at(&self, frame: &GrayFrame, target: usize) -> TieredOutcome {
         let detect_started = Instant::now();
         let boxes = self.detect_boxes(frame, target);
+        let detections = boxes.clone();
         let detect_ms = detect_started.elapsed().as_secs_f64() * 1000.0;
         let decode_started = Instant::now();
         let mut hits = Vec::new();
@@ -163,23 +167,22 @@ impl TieredScanner {
             // made the tiled path roughly three times slower.
             let mut direct = self.decode_crop(&crop, width, height);
             if !direct.is_empty() {
-                // zxing points are crop-local; shift them into frame
-                // coordinates so the UI can put the hit bubble on the QR.
-                let x0 = quad.iter().map(|p| p.0).fold(f32::MAX, f32::min).max(0.0) as f32;
-                let y0 = quad.iter().map(|p| p.1).fold(f32::MAX, f32::min).max(0.0) as f32;
+                // Use the detector quadrilateral for the UI. Crop-local zxing
+                // points are unreliable once the crop was padded/shifted by
+                // `crop_quad`; the detector box is already in frame space.
                 for hit in &mut direct {
-                    for point in &mut hit.points {
-                        point[0] += x0;
-                        point[1] += y0;
-                    }
+                    hit.points = quad.iter().map(|(x, y)| [*x, *y]).collect();
                 }
                 hits.extend(direct);
                 continue;
             }
             let area = (width * height) as f64;
             if area < 120.0 * 120.0 {
-                if let Some(sr_hits) = self.decode_with_sr(&crop, width, height) {
+                if let Some(mut sr_hits) = self.decode_with_sr(&crop, width, height) {
                     used_sr = true;
+                    for hit in &mut sr_hits {
+                        hit.points = quad.iter().map(|(x, y)| [*x, *y]).collect();
+                    }
                     hits.extend(sr_hits);
                 }
             }
@@ -189,6 +192,7 @@ impl TieredScanner {
             tier: if used_sr { "cnn+sr" } else { "cnn" },
             detect_ms,
             decode_ms: decode_started.elapsed().as_secs_f64() * 1000.0,
+            detections,
         }
     }
 

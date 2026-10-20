@@ -16,6 +16,10 @@ finished product.
 | Windows build | `flutter build windows --release` | built |
 | Web build | `flutter build web --release` | built; scan/QR use vendored zxing-wasm |
 | Android build | `flutter build apk --debug` | built (arm64 Rust lib + 2K Camera2 + backend switch + embedded server) |
+| Android device | OnePlus PLF110, demo room, 2K | 1920×1440 selected; fast p50 **8.3 ms**, p95 **21.1 ms**, CNN 6.1 ms; 1289 frames, dropped 5 |
+| Android overlay | same device | hit quadrilateral + CNN candidate box follow the newest frame; bubble shows content and `离线 · 未广播` |
+| Android resume | WeChat → back to scanner | Camera2 reopened automatically; frames resumed at 527 after resume |
+| Android backend switch | UI menu → zxing-only | frames reset and CNN counter disappeared, confirming a real backend restart |
 | Desktop FFI probe | P/Invoke DLL, backend 1 | `qr_scanner_start_backend=0`; camera unavailable (`0x80070005`), error surfaced, stop returns within 1 s |
 
 ### QR generation
@@ -95,9 +99,9 @@ finished product.
   fast path; 80–100 px with 1 px blur hit via CNN+SR; 50–60 px with blur, and
   ～120 px at 2 px blur, still miss. This is a distance proxy, not a field
   detection-rate claim.
-- Vendored: `crates/cvlite` (WeChat pixel helpers) and `crates/zxing-cpp`
-  (Rust binding + C++ core). `wxscan`/`wxing`/TFLite crates were deleted. See
-  `docs/VENDORED.md`.
+- Vendored: `crates/cvlite` (WeChat pixel helpers). `zxing-cpp` is a crates.io
+  dependency (`0.5.3`) and YUV conversion uses crates.io `yuv` `0.8`.
+  `wxscan`/`wxing`/TFLite crates were deleted. See `docs/VENDORED.md`.
 
 ### Self-host and Android device
 
@@ -123,18 +127,20 @@ finished product.
   authenticated and joined the room, whose member list then showed
   `host` as host and the guest as member. No pre-provisioned member account was
   needed; invitations carry the guest token and a room address.
-- Android camera: Camera2 YUV frames are pushed through JNI into Rust; the
-  preview is rotated at the small preview size (not per full frame), scan time
-  was 2–3 ms at 640×480, 7.8 ms at 960×720, and 6–16 ms at 1280×720 on device.
-  Final live test: QR centered on the PC screen decoded
-  `https://example.test/relay/东京` at 1280×720 / 13.5 ms and appeared exactly
-  once. The preview keeps the previous frame between updates, removing black
-  flicker.
+- Android camera: Camera2 YUV frames are pushed through JNI into Rust. The
+  preview is a SurfaceTexture registered with Flutter, so there is no JPEG,
+  no rotate_luma, and no per-frame preview copy. Real OnePlus PLF110 run:
+  1920×1440 selected, 1289 frames, fast p50 8.3 ms / p95 21.1 ms, CNN 6.1 ms,
+  5 dropped frames. The preview is a 1440×1920 portrait SurfaceTexture (not the 1920×1440 sensor frame) and is displayed with the correct aspect; the QR hit box tracks the newest frame;
+  the content bubble shows `https://example.test/live-demo-2k` with
+  `离线 · 未广播`. Going to WeChat and back reopened Camera2 automatically.
+  Evidence: ![Android 2K texture preview](assets/android-2k-texture.png) and
+  ![Android resume](assets/android-resume.png).
 - Duplicate hits are removed by decoded text as well as raw bytes (Rust), and
   auto-publish keeps a published-text set, so identical results are sent once.
 - The FFI scan crate is built without `image-io` (no PNG/BMP decoders on the
-  scan path). `image` remains only for the low-rate JPEG preview; `png` appears
-  transitively via `zxing-cpp → imageproc` and is never called by the camera loop.
+  scan path). `image` remains only for the desktop JPEG preview; Android has
+  no preview encoding.
 - Permission and links: CAMERA runtime dialog with Settings fallback;
   `MANAGE_EXTERNAL_STORAGE` request for arbitrary certificate paths; file picker
   copies into app cache. A `qrrace://connect?...` deep link filled server,
@@ -205,14 +211,13 @@ finished product.
 - Desktop FFI: C ABI state/preview and Dart binding; widget tests for the scan
   page.
 - Flutter: connect (including certificate fingerprint), lobby, room, host
-  actions, scan page; 27 tests at desktop and phone sizes.
+  actions, scan page; 29 tests at desktop and phone sizes.
 
 ## Known gaps
 
-1. **zxing-cpp + color camera needs a device re-run.** Desktop suite fast
-   10–13 ms; Android APK now sends Y/U/V and RGB-decodes, but the phone was
-   disconnected before a new p95/detection run. Pre-swap rxing numbers (fast
-   p95 6.9 ms, CNN 59.1 ms, 5/1075 dropped) are historical.
+1. **Physical web camera QR is still unverified.** The Web scanner path has
+   fake-camera and desktop-camera timing evidence, but no physical QR was held
+   in front of a browser camera.
 2. **No Python modules.** Removed end-to-end (core/API/store/Flutter); only
    Rust extension seams remain.
 3. **Apple capture does not exist.** iOS/macOS cannot be built or verified on
@@ -245,30 +250,3 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

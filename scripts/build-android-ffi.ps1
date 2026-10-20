@@ -48,7 +48,7 @@ $zxingBuild = Join-Path $root ".refs\zxing-android-$Abi"
 $zxingLib = Join-Path $zxingBuild "libZXing.so"
 if (-not (Test-Path $zxingLib)) {
     $toolchainFile = Join-Path $ndk.FullName "build\cmake\android.toolchain.cmake"
-    & cmake -S (Join-Path $root "crates/zxing-cpp/core") -B $zxingBuild -G Ninja `
+    & cmake -S (Join-Path $root ".refs/zxing-cpp-src") -B $zxingBuild -G Ninja `
         "-DCMAKE_TOOLCHAIN_FILE=$toolchainFile" "-DANDROID_ABI=$Abi" `
         "-DANDROID_PLATFORM=android-24" "-DBUILD_SHARED_LIBS=ON" `
         "-DZXING_READERS=ON" "-DZXING_WRITERS=ON" "-DZXING_WRITERS_OLD=OFF" "-DZXING_C_API=ON" `
@@ -77,7 +77,3 @@ Copy-Item $zxingLib $dest -Force
 $cxx = Join-Path $ndk.FullName "toolchains\llvm\prebuilt\windows-x86_64\sysroot\usr\lib\$target\libc++_shared.so"
 if (Test-Path $cxx) { Copy-Item $cxx $dest -Force }
 Write-Host "packaged $dest\libqr_race_ffi.so, libZXing.so, libc++_shared.so" -ForegroundColor Green
-
-
-
-
