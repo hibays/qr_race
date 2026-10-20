@@ -27,7 +27,8 @@ preview sequence) plus a low-rate JPEG preview.
 ## Android camera path (fast path)
 
 1. `CameraCapture.kt` opens the back camera with `ImageReader` at the requested
-   size (default 1280×720) and YUV_420_888.
+   size (default 2560×1440, falling back to the closest supported YUV size)
+   and YUV_420_888.
 2. On each image it copies **Y, U and V planes** (tightly packed, honoring `rowStride`/`pixelStride`).
 3. `nativePushFrame(width, height, rotation, y, u, v)` crosses JNI once. Rust
    converts YUV to tightly packed RGB, keeps luma, and queues both in a bounded
@@ -37,7 +38,7 @@ preview sequence) plus a low-rate JPEG preview.
    `ScanEngine` (pyramid detector + zxing-cpp on luma), then the CNN tiers.
    Frames are **not rotated** here; QR detection is rotation-independent.
    Sensor rotation is metadata used only when encoding the preview.
-5. The preview is downscaled to at most 480 px, rotated at that small size, and
+5. The preview is downscaled to at most 1280 px, rotated at that small size, and
    JPEG-encoded every 60 ms. Scanning never waits for the preview.
 6. `addImageAvailableListener` uses `acquireLatestImage()` and a busy flag, so
    the camera stays live and the UI never builds an unbounded backlog.
@@ -170,6 +171,7 @@ The next backend step is to replace `src/backend.rs` with an ORT session using
 the Android `libonnxruntime.so`, and to compare 384/768 schedules against the
 current tract implementation. TFLite/FFI upstream crates are vendored but not
 built. See `docs/MODELS.md` and `docs/VENDORED.md`.
+
 
 
 
