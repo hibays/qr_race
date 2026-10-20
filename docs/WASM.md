@@ -26,8 +26,8 @@ The browser path keeps frames in JavaScript; Dart only receives hits/stats.
   ```
 
 - WebP QR generation through zxing-wasm returned a 13,616-byte RIFF/WebP.
-- Physical browser camera acquisition was previously verified at 1280×720
-  (~3 ms/frame); the same `getUserMedia` path now feeds zxing-wasm.
+- Physical browser camera: `-RealCamera` acquired 1280×720 and zxing-wasm
+  scanned at ~6.9 ms/frame; no QR was in view, so a physical hit is still manual.
 
 ## Rebuild
 
@@ -39,3 +39,4 @@ The browser path keeps frames in JavaScript; Dart only receives hits/stats.
 - The browser backend is zxing-wasm, not the Rust zxing-cpp binding; both wrap
   the same ZXing-C++ core.
 - Physical-camera QR hit still needs a manual run.
+

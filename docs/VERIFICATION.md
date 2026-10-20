@@ -158,7 +158,8 @@ finished product.
   headless with a fake camera (Y4M of a QR page) and reports
   `HIT:https://example.test/relay`, 640×480, `scan_ms` ≈ 1.7.
 - Browser real camera: `pwsh -File scripts/browser-scan-probe.ps1 -RealCamera`
-  acquires 1280×720 from the PC camera; a physical QR hit remains manual.
+  acquired 1280×720 and zxing-wasm scanned at ~6.9 ms/frame; no QR was in
+  view, so a physical hit remains manual.
 - Real camera: camera access was enabled and the CLI scanned textured frames at
   1920×1080 (6.01 ms average, ~24 fps input) and 1280×720 (2.89 ms average,
   ~28 fps input); no QR was in view, so a live symbol was not decoded.
@@ -243,6 +244,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 
