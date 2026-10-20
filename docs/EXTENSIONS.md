@@ -15,7 +15,8 @@ The engineering seams that remain are ordinary Rust/Dart boundaries:
 - Flutter navigation/state — screens depend on `AppState` and `ApiClient`, not
   on a plugin runtime.
 
-The server still carries a small **internal extension catalog** (`ModuleManifest`,
-`/v1/modules`) from earlier work; it is not exposed in the client, not executed,
-and not part of the acceptance surface. It may be deleted or repurposed for
-native extensions later. There is no `rustpython` dependency in the workspace.
+The old module manifest/catalog, upload API, store rows and Flutter API models
+were removed. There is no `ModuleManifest`, no `/v1/modules`, and no
+`rustpython` dependency in the workspace. Extension work now means a new Rust
+crate/trait or a documented protocol change, not uploaded scripts.
+

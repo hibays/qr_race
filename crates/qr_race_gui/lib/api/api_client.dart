@@ -69,39 +69,6 @@ class ApiClient {
     return RoomView.fromJson(body);
   }
 
-  Future<List<ModuleInfo>> modules() async {
-    final body = await _get('/v1/modules');
-    final modules = body['modules'] as List<dynamic>? ?? const [];
-    return modules
-        .map((module) => ModuleInfo.fromJson(module as Map<String, dynamic>))
-        .toList();
-  }
-
-  Future<ModuleSource> moduleSource(String id) async {
-    final body = await _get('/v1/modules/${Uri.encodeComponent(id)}');
-    return ModuleSource.fromJson(body);
-  }
-
-  /// Admin only; uploads a module manifest and its source.
-  Future<ModuleInfo> uploadModule({
-    required String id,
-    required String version,
-    required String entry,
-    required List<String> hooks,
-    required List<String> capabilities,
-    required String source,
-  }) async {
-    final body = await _post('/v1/admin/modules', body: {
-      'id': id.trim(),
-      'version': version.trim(),
-      'entry': entry.trim(),
-      'hooks': hooks,
-      'capabilities': capabilities,
-      'source': source,
-    });
-    return ModuleInfo.fromJson(body);
-  }
-
   Future<void> join(String address) async {
     await _post('/v1/room/join', query: {'address': address});
   }
@@ -144,14 +111,6 @@ class ApiClient {
       '/v1/room/demote',
       query: {'address': address},
       body: {'target': target},
-    );
-  }
-
-  Future<void> setModules(String address, List<String> modules) async {
-    await _post(
-      '/v1/room/modules',
-      query: {'address': address},
-      body: {'modules': modules},
     );
   }
 
@@ -265,20 +224,17 @@ class LobbyRoom {
     required this.label,
     required this.host,
     required this.memberCount,
-    required this.moduleCount,
   });
 
   factory LobbyRoom.fromJson(Map<String, dynamic> json) => LobbyRoom(
         label: json['label'] as String,
         host: json['host'] as String,
         memberCount: json['member_count'] as int,
-        moduleCount: json['module_count'] as int,
       );
 
   final String label;
   final String host;
   final int memberCount;
-  final int moduleCount;
 }
 
 class RoomView {
@@ -286,7 +242,6 @@ class RoomView {
     required this.label,
     required this.lit,
     required this.host,
-    required this.modules,
     required this.members,
     required this.relays,
   });
@@ -295,9 +250,6 @@ class RoomView {
         label: json['label'] as String,
         lit: json['lit'] as bool,
         host: json['host'] as String,
-        modules: (json['modules'] as List<dynamic>? ?? const [])
-            .map((module) => module as String)
-            .toList(),
         members: (json['members'] as List<dynamic>? ?? const [])
             .map((member) => RoomMember.fromJson(member as Map<String, dynamic>))
             .toList(),
@@ -309,46 +261,8 @@ class RoomView {
   final String label;
   final bool lit;
   final String host;
-  final List<String> modules;
   final List<RoomMember> members;
   final List<Relay> relays;
-}
-
-class ModuleInfo {
-  const ModuleInfo({
-    required this.id,
-    required this.version,
-    required this.entry,
-    required this.hooks,
-    required this.capabilities,
-  });
-
-  factory ModuleInfo.fromJson(Map<String, dynamic> json) => ModuleInfo(
-        id: json['id'] as String? ?? '',
-        version: json['version'] as String? ?? '',
-        entry: json['entry'] as String? ?? '',
-        hooks: (json['hooks'] as List<dynamic>? ?? const []).cast<String>(),
-        capabilities:
-            (json['capabilities'] as List<dynamic>? ?? const []).cast<String>(),
-      );
-
-  final String id;
-  final String version;
-  final String entry;
-  final List<String> hooks;
-  final List<String> capabilities;
-}
-
-class ModuleSource {
-  const ModuleSource({required this.manifest, required this.source});
-
-  factory ModuleSource.fromJson(Map<String, dynamic> json) => ModuleSource(
-        manifest: ModuleInfo.fromJson(json['manifest'] as Map<String, dynamic>),
-        source: json['source'] as String? ?? '',
-      );
-
-  final ModuleInfo manifest;
-  final String source;
 }
 
 class RoomMember {
@@ -413,3 +327,4 @@ class Relay {
     return '$hour:$minute';
   }
 }
+

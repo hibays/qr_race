@@ -88,7 +88,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 - 2026-10-20 wasm 与浏览器：wasm 扫描内核在 Node 中 1280×720 约 18–22ms；Edge headless + 假摄像头（Y4M）跑通 `getUserMedia → canvas → wasm`，640×480 命中，扫描约 1.8ms。物理相机实拍仍未验证。
 - 2026-10-20 二维码生成：rxing 编码 2048×2048 无损 WebP（纠错 M、quality 90 / method 4），与 rcrm bridge 参数一致；桌面 FFI（Dart → DLL，2452 字节，PIL 读为 2048²）与 wasm（Node 同尺寸）各验证一次。Flutter 用 `Image.memory` 显示，已移除 `qr_flutter`。
 - 2026-10-20 CNN 权重转换：自行解析 WeChat Caffe 权重并写 ONNX。SR 输入 1×1×224²、输出 1×1×447²，与独立 NumPy 前向最大误差 5.5e-06；检测器输入 1×1×384²，输出 mbox_loc/conf/priorbox（6912 priors），DetectionOutput 无 ONNX 等价物，decode/NMS 已在 `qr_race_wechat` 实现；Android ORT 已接入扫描管线。
-- 2026-10-20 构建与测试：Rust 143 个测试、Flutter 29 个测试；Windows release、Web release、Android debug APK 均构建成功。
+- 2026-10-20 构建与测试：Rust 133 个测试、Flutter 27 个测试；Windows release、Web release、Android debug APK 均构建成功。
 - 2026-10-20 Android 自启动与扫码：`qr_race_embedded` 编进 `libqr_race_ffi.so`，App 内可选自签名/已有证书/HTTP，默认端口 18443；真机启动后显示 URL、证书指纹与服务器账号，并通过指纹固定 + token 登录。Camera2 的 Y 平面经 JNI 直接进 Rust（旋转元数据、预览小图旋转；640×480 约 2–3ms、960×720 约 7.8ms、1280×720 约 6–16ms），实拍 `https://example.test/camera-hit` 命中；预览保留上一帧，不再黑屏闪烁。
 - 2026-10-20 自动发布与动态码：扫码命中即自动发布，无需手动按钮；同一前缀（`A:`、`cam1|`）的新内容替换房间槽位，不同前缀可同时存在，房间按前缀显示最新一条。连接页支持 `qrrace://connect?...` 深链/粘贴链接预填服务器、指纹和 token；扫码/房间结果可一键跳微信、企业微信、浏览器或其他已安装 App，失败自动复制链接。
 - 2026-10-20 每房间动态成员：服务端新增 host-only `/v1/room/guest`，房主进房后现场生成临时成员 token；邀请链接带房间地址，guest 直接登录并进房。实测 guest 以 member 身份加入，host 列表正确；不再依赖预置“成员账号”。
@@ -106,6 +106,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 3. **房间是真实地点。** 京、区、级、房对应现实场地，房间码是鉴权路径的一部分；成员可以在别处，接力让这种分离成立。
 4. **原生深度，薄接缝。** 帧与推理留在原生层，Flutter 只负责界面；模块在 server 与 client 两端都可拔插，接口要窄、可替换。
 5. **生产即标准。** TDD、可复现的基准、明确的许可与安全边界；不拿演示级实现充数。
+
 
 
 

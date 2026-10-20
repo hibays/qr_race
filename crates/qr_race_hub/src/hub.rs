@@ -8,10 +8,9 @@ use std::collections::BTreeMap;
 use std::sync::Arc;
 
 use qr_race_core::{
-    Compression, CoreError, MAX_MODULE_SOURCE_BYTES, ModuleManifest, PayloadKind, RelayEntry,
-    RelayId, Room, RoomAddress, RoomRole, UserId,
+    Compression, CoreError, PayloadKind, RelayEntry, RelayId, Room, RoomAddress, RoomRole, UserId,
 };
-use qr_race_store::{ModuleRow, Store, StoreError};
+use qr_race_store::{Store, StoreError};
 use thiserror::Error;
 
 use crate::clock::Clock;
@@ -38,10 +37,6 @@ pub enum RoomEvent {
         address: RoomAddress,
         user: UserId,
         role: RoomRole,
-    },
-    ModulesChanged {
-        address: RoomAddress,
-        modules: Vec<String>,
     },
     RelayPublished {
         address: RoomAddress,
@@ -71,18 +66,8 @@ pub struct RoomView {
     pub address: RoomAddress,
     pub lit: bool,
     pub host: UserId,
-    pub modules: Vec<String>,
     pub members: Vec<MemberView>,
     pub relays: Vec<RelayEntry>,
-}
-
-/// An admin-uploaded module, kept whole so clients can download it.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct StoredModule {
-    pub manifest: ModuleManifest,
-    pub source: String,
-    pub uploaded_by: UserId,
-    pub uploaded_at_ms: u64,
 }
 
 #[derive(Debug, Error, PartialEq, Eq)]
@@ -102,15 +87,6 @@ pub enum HubError {
     #[error("user is not a participant of this room")]
     NotAParticipant,
 
-    #[error("module {0} is not uploaded")]
-    UnknownModule(String),
-
-    #[error("module source is empty")]
-    EmptyModule,
-
-    #[error("module source is {bytes} bytes; the limit is {limit}")]
-    ModuleTooLarge { bytes: usize, limit: usize },
-
     #[error("storage: {0}")]
     Storage(String),
 
@@ -121,7 +97,6 @@ pub enum HubError {
 pub struct Hub {
     rooms: BTreeMap<RoomAddress, Room>,
     relays: BTreeMap<RoomAddress, Vec<RelayEntry>>,
-    modules: BTreeMap<String, StoredModule>,
     clock: Arc<dyn Clock>,
     next_relay: u64,
     store: Option<Arc<Store>>,
@@ -136,7 +111,6 @@ impl Hub {
         Self {
             rooms: BTreeMap::new(),
             relays: BTreeMap::new(),
-            modules: BTreeMap::new(),
             clock,
             next_relay: 0,
             store: None,
@@ -164,85 +138,13 @@ impl Hub {
         }
         let next_relay = store.max_relay_seq().map_err(storage_error)?;
 
-        let modules: BTreeMap<String, StoredModule> = store
-            .load_modules()
-            .map_err(storage_error)?
-            .into_iter()
-            .map(|row| {
-                (
-                    row.manifest.id.clone(),
-                    StoredModule {
-                        manifest: row.manifest,
-                        source: row.source,
-                        uploaded_by: row.uploaded_by,
-                        uploaded_at_ms: row.uploaded_at_ms,
-                    },
-                )
-            })
-            .collect();
-
         Ok(Self {
             rooms,
             relays,
-            modules,
             clock,
             next_relay,
             store: Some(store),
         })
-    }
-
-    /// Registers an admin-uploaded module. The transport checks that the caller
-    /// is an admin; the hub owns validation and persistence.
-    pub fn upload_module(
-        &mut self,
-        actor: &UserId,
-        manifest: ModuleManifest,
-        source: String,
-    ) -> Result<(), HubError> {
-        if source.trim().is_empty() {
-            return Err(HubError::EmptyModule);
-        }
-        if source.len() > MAX_MODULE_SOURCE_BYTES {
-            return Err(HubError::ModuleTooLarge {
-                bytes: source.len(),
-                limit: MAX_MODULE_SOURCE_BYTES,
-            });
-        }
-
-        let stored = StoredModule {
-            manifest,
-            source,
-            uploaded_by: actor.clone(),
-            uploaded_at_ms: self.clock.now_ms(),
-        };
-        if let Some(store) = &self.store {
-            store
-                .upsert_module(&ModuleRow {
-                    manifest: stored.manifest.clone(),
-                    source: stored.source.clone(),
-                    uploaded_by: stored.uploaded_by.clone(),
-                    uploaded_at_ms: stored.uploaded_at_ms,
-                })
-                .map_err(storage_error)?;
-        }
-        self.modules.insert(stored.manifest.id.clone(), stored);
-        Ok(())
-    }
-
-    /// Every uploaded manifest, ordered by id.
-    pub fn modules(&self) -> Vec<&ModuleManifest> {
-        self.modules
-            .values()
-            .map(|module| &module.manifest)
-            .collect()
-    }
-
-    pub fn module_source(&self, id: &str) -> Option<&str> {
-        self.modules.get(id).map(|module| module.source.as_str())
-    }
-
-    pub fn module(&self, id: &str) -> Option<&StoredModule> {
-        self.modules.get(id)
     }
 
     fn persist_room(&self, address: &RoomAddress) -> Result<(), HubError> {
@@ -373,32 +275,6 @@ impl Hub {
         }])
     }
 
-    pub fn set_modules(
-        &mut self,
-        actor: &UserId,
-        address: &RoomAddress,
-        modules: Vec<String>,
-    ) -> Result<Vec<RoomEvent>, HubError> {
-        if let Some(unknown) = modules
-            .iter()
-            .find(|id| !self.modules.contains_key(id.as_str()))
-        {
-            return Err(HubError::UnknownModule(unknown.clone()));
-        }
-
-        let modules = {
-            let room = self.room_mut(address)?;
-            room.set_modules(actor, modules)?;
-            // Report what the room actually stores (sorted, deduplicated).
-            room.modules.clone()
-        };
-        self.persist_room(address)?;
-        Ok(vec![RoomEvent::ModulesChanged {
-            address: address.clone(),
-            modules,
-        }])
-    }
-
     /// Publish is the only way content enters a room, and only scanners may.
     pub fn publish_relay(
         &mut self,
@@ -477,7 +353,6 @@ impl Hub {
             address: address.clone(),
             lit: room.is_lit(),
             host: room.host.clone(),
-            modules: room.modules.clone(),
             members,
             relays,
         })
@@ -514,7 +389,7 @@ fn storage_error(error: StoreError) -> HubError {
 mod tests {
     use super::*;
     use crate::clock::ManualClock;
-    use qr_race_core::{Capital, HookPoint};
+    use qr_race_core::Capital;
     use qr_race_store::Store;
 
     fn address() -> RoomAddress {
@@ -550,10 +425,6 @@ mod tests {
             compression: Compression::None,
             payload: payload.to_vec(),
         }
-    }
-
-    fn manifest(id: &str) -> ModuleManifest {
-        ModuleManifest::new(id, "1.0.0", "main.py", vec![HookPoint::Frame], Vec::new()).unwrap()
     }
 
     #[test]
@@ -703,71 +574,6 @@ mod tests {
         hub.light_room(&host(), &address()).unwrap();
         assert_eq!(hub.lit_rooms().len(), 1);
         assert!(hub.lit_rooms()[0].is_lit());
-    }
-
-    #[test]
-    fn module_configuration_is_host_only() {
-        let (mut hub, _clock) = lit_room_with_members();
-        for id in ["a", "b"] {
-            hub.upload_module(&host(), manifest(id), format!("code for {id}"))
-                .unwrap();
-        }
-
-        assert_eq!(
-            hub.set_modules(&member("m-1"), &address(), vec!["a".into()]),
-            Err(HubError::Core(CoreError::NotHost {
-                action: "configure room modules"
-            }))
-        );
-        let events = hub
-            .set_modules(&host(), &address(), vec!["b".into(), "a".into()])
-            .unwrap();
-        assert_eq!(
-            events,
-            vec![RoomEvent::ModulesChanged {
-                address: address(),
-                modules: vec!["a".into(), "b".into()]
-            }]
-        );
-    }
-
-    #[test]
-    fn a_room_cannot_select_a_module_that_was_never_uploaded() {
-        let (mut hub, _clock) = lit_room_with_members();
-        assert_eq!(
-            hub.set_modules(&host(), &address(), vec!["ghost".into()]),
-            Err(HubError::UnknownModule("ghost".into()))
-        );
-        assert_eq!(
-            hub.set_modules(&host(), &address(), vec!["ghost".into()]),
-            Err(HubError::UnknownModule("ghost".into())),
-            "and the room still holds its old configuration"
-        );
-    }
-
-    #[test]
-    fn modules_are_listed_with_their_source() {
-        let (mut hub, _clock) = lit_room_with_members();
-        hub.upload_module(&host(), manifest("overlay"), "def on_frame(p): pass".into())
-            .unwrap();
-
-        assert_eq!(hub.modules().len(), 1);
-        assert_eq!(hub.modules()[0].id, "overlay");
-        assert_eq!(hub.module_source("overlay"), Some("def on_frame(p): pass"));
-        assert_eq!(hub.module_source("ghost"), None);
-    }
-
-    #[test]
-    fn a_module_survives_a_restart_with_the_rooms() {
-        let clock = ManualClock::new(1_700_000_000_000);
-        let store = Arc::new(Store::in_memory().unwrap());
-        let mut hub = Hub::with_store(Arc::new(clock.clone()), store.clone()).unwrap();
-        hub.upload_module(&host(), manifest("overlay"), "source code".into())
-            .unwrap();
-
-        let reloaded = Hub::with_store(Arc::new(clock), store).unwrap();
-        assert_eq!(reloaded.modules().len(), 1);
-        assert_eq!(reloaded.module_source("overlay"), Some("source code"));
     }
 
     #[test]

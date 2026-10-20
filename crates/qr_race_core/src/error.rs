@@ -33,7 +33,4 @@ pub enum CoreError {
 
     #[error("the room is already lit")]
     AlreadyLit,
-
-    #[error("invalid module manifest: {0}")]
-    Manifest(&'static str),
 }

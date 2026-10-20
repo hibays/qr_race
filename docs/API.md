@@ -16,8 +16,8 @@ POST /v1/auth
 A legacy `code` field is still accepted and verified if explicitly provided, but
 the product flow no longer asks for TOTP.
 
-`admin` is retained as a server-governance flag; it no longer controls a
-module-upload UI.
+`admin` is retained as a server-governance flag; it no longer controls any
+module-upload UI (the module catalog was removed).
 
 Every other route requires `Authorization: Bearer <session_id>`. Sessions expire
 after 12 hours by default; an expired session is `401` and the client must
@@ -161,5 +161,6 @@ an admin account if server governance is needed) and paste the JSON line into `a
 CORS is permissive (any origin, any header) so the Flutter web build can call
 the API from another origin. Tighten it if the server is exposed beyond a
 trusted network.
+
 
 

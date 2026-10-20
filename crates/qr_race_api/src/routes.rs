@@ -4,20 +4,19 @@
 use std::sync::Arc;
 
 use axum::Json;
-use axum::extract::{FromRequestParts, Path, Query, State};
+use axum::extract::{FromRequestParts, Query, State};
 use axum::http::StatusCode;
 use axum::http::header;
 use axum::http::request::Parts;
 use data_encoding::BASE64;
-use qr_race_core::{CoreError, ModuleManifest, RelayEntry, RoomAddress, UserId};
+use qr_race_core::{CoreError, RelayEntry, RoomAddress, UserId};
 use qr_race_hub::{RelayRequest, RoomEvent, generate_token, generate_totp_secret_base32};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::dto::{
-    AuthRequest, AuthResponse, CreateRoomRequest, LobbyDto, LobbyRoomDto, ModuleListDto,
-    ModuleManifestDto, ModuleSourceDto, ModulesRequest, RelayBody, RelayDto, RoomViewDto,
-    TargetRequest, UploadModuleRequest, WsTicketResponse,
+    AuthRequest, AuthResponse, CreateRoomRequest, LobbyDto, LobbyRoomDto, RelayBody, RelayDto,
+    RoomViewDto, TargetRequest, WsTicketResponse,
 };
 use crate::error::ApiError;
 
@@ -211,78 +210,6 @@ pub async fn demote(
     };
     state.publish(&address, &events);
     Ok(StatusCode::NO_CONTENT)
-}
-
-pub async fn modules(
-    State(state): State<Arc<AppState>>,
-    Authed(user): Authed,
-    Query(query): Query<RoomQuery>,
-    Json(body): Json<ModulesRequest>,
-) -> Result<StatusCode, ApiError> {
-    let address = query.address()?;
-    let events = {
-        let mut hub = state.hub.lock().expect("hub lock");
-        hub.set_modules(&user, &address, body.modules)?
-    };
-    state.publish(&address, &events);
-    Ok(StatusCode::NO_CONTENT)
-}
-
-pub async fn upload_module(
-    State(state): State<Arc<AppState>>,
-    Authed(user): Authed,
-    Json(body): Json<UploadModuleRequest>,
-) -> Result<(StatusCode, Json<ModuleManifestDto>), ApiError> {
-    if !state.is_admin(&user) {
-        return Err(ApiError::Forbidden(
-            "only an admin may upload modules".into(),
-        ));
-    }
-    let manifest = ModuleManifest::new(
-        body.id,
-        body.version,
-        body.entry,
-        body.hooks,
-        body.capabilities,
-    )?;
-    state
-        .hub
-        .lock()
-        .expect("hub lock")
-        .upload_module(&user, manifest.clone(), body.source)?;
-    Ok((
-        StatusCode::CREATED,
-        Json(ModuleManifestDto::from(&manifest)),
-    ))
-}
-
-pub async fn list_modules(
-    State(state): State<Arc<AppState>>,
-    Authed(_user): Authed,
-) -> Json<ModuleListDto> {
-    let hub = state.hub.lock().expect("hub lock");
-    Json(ModuleListDto {
-        modules: hub
-            .modules()
-            .into_iter()
-            .map(ModuleManifestDto::from)
-            .collect(),
-    })
-}
-
-pub async fn module_detail(
-    State(state): State<Arc<AppState>>,
-    Authed(_user): Authed,
-    Path(id): Path<String>,
-) -> Result<Json<ModuleSourceDto>, ApiError> {
-    let hub = state.hub.lock().expect("hub lock");
-    let module = hub
-        .module(&id)
-        .ok_or_else(|| ApiError::NotFound(format!("module {id} is not uploaded")))?;
-    Ok(Json(ModuleSourceDto {
-        manifest: ModuleManifestDto::from(&module.manifest),
-        source: module.source.clone(),
-    }))
 }
 
 pub async fn relay(

@@ -1,5 +1,5 @@
 //! SQLite persistence for the parts of the world that outlive a process:
-//! rooms (membership, roles, modules, join secret) and relays.
+//! rooms (membership, roles, join secret) and relays.
 //!
 //! Accounts stay in the operator's config file, not here: provisioning is an
 //! operator act and the config is already the source of truth for tokens.
@@ -9,8 +9,7 @@ use std::str::FromStr;
 use std::sync::Mutex;
 
 use qr_race_core::{
-    Capability, Compression, HookPoint, ModuleManifest, PayloadKind, RelayEntry, RelayId, Room,
-    RoomAddress, RoomState, SecretHash, UserId,
+    Compression, PayloadKind, RelayEntry, RelayId, Room, RoomAddress, RoomState, SecretHash, UserId,
 };
 use rusqlite::{Connection, params};
 use thiserror::Error;
@@ -26,15 +25,6 @@ pub enum StoreError {
 
 pub struct Store {
     connection: Mutex<Connection>,
-}
-
-/// One stored module: what the room config can select and clients download.
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub struct ModuleRow {
-    pub manifest: ModuleManifest,
-    pub source: String,
-    pub uploaded_by: UserId,
-    pub uploaded_at_ms: u64,
 }
 
 impl Store {
@@ -73,16 +63,6 @@ impl Store {
                 created_at_ms INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS relays_room_seq ON relays(room, seq);
-            CREATE TABLE IF NOT EXISTS modules (
-                id TEXT PRIMARY KEY,
-                version TEXT NOT NULL,
-                entry TEXT NOT NULL,
-                hooks TEXT NOT NULL,
-                capabilities TEXT NOT NULL,
-                source TEXT NOT NULL,
-                uploaded_by TEXT NOT NULL,
-                uploaded_at_ms INTEGER NOT NULL
-            );
             ",
         )?;
         Ok(Self {
@@ -97,8 +77,7 @@ impl Store {
         let members =
             serde_json::to_string(&room.members.iter().map(|id| &id.0).collect::<Vec<_>>())
                 .map_err(|error| StoreError::Corrupt(error.to_string()))?;
-        let modules = serde_json::to_string(&room.modules)
-            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
+        let modules = "[]";
         let state = match room.state {
             RoomState::Dark => "dark",
             RoomState::Lit => "lit",
@@ -144,9 +123,8 @@ impl Store {
 
     pub fn load_rooms(&self) -> Result<Vec<Room>, StoreError> {
         let connection = self.lock()?;
-        let mut statement = connection.prepare(
-            "SELECT address, host, state, co_hosts, members, join_secret, modules FROM rooms",
-        )?;
+        let mut statement = connection
+            .prepare("SELECT address, host, state, co_hosts, members, join_secret FROM rooms")?;
         let rows = statement.query_map([], |row| {
             Ok((
                 row.get::<_, String>(0)?,
@@ -155,13 +133,12 @@ impl Store {
                 row.get::<_, String>(3)?,
                 row.get::<_, String>(4)?,
                 row.get::<_, Option<String>>(5)?,
-                row.get::<_, String>(6)?,
             ))
         })?;
 
         let mut rooms = Vec::new();
         for row in rows {
-            let (address, host, state, co_hosts, members, join_secret, modules) = row?;
+            let (address, host, state, co_hosts, members, join_secret) = row?;
             rooms.push(decode_room(
                 &address,
                 &host,
@@ -169,7 +146,6 @@ impl Store {
                 &co_hosts,
                 &members,
                 join_secret.as_deref(),
-                &modules,
             )?);
         }
         Ok(rooms)
@@ -251,79 +227,6 @@ impl Store {
         Ok(value.unwrap_or(0).max(0) as u64)
     }
 
-    pub fn upsert_module(&self, module: &ModuleRow) -> Result<(), StoreError> {
-        let hooks = serde_json::to_string(&module.manifest.hooks)
-            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
-        let capabilities = serde_json::to_string(&module.manifest.capabilities)
-            .map_err(|error| StoreError::Corrupt(error.to_string()))?;
-
-        self.lock()?.execute(
-            "INSERT INTO modules
-             (id, version, entry, hooks, capabilities, source, uploaded_by, uploaded_at_ms)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
-             ON CONFLICT(id) DO UPDATE SET
-               version=excluded.version,
-               entry=excluded.entry,
-               hooks=excluded.hooks,
-               capabilities=excluded.capabilities,
-               source=excluded.source,
-               uploaded_by=excluded.uploaded_by,
-               uploaded_at_ms=excluded.uploaded_at_ms",
-            params![
-                module.manifest.id,
-                module.manifest.version,
-                module.manifest.entry,
-                hooks,
-                capabilities,
-                module.source,
-                module.uploaded_by.0,
-                module.uploaded_at_ms as i64,
-            ],
-        )?;
-        Ok(())
-    }
-
-    pub fn load_modules(&self) -> Result<Vec<ModuleRow>, StoreError> {
-        let connection = self.lock()?;
-        let mut statement = connection.prepare(
-            "SELECT id, version, entry, hooks, capabilities, source, uploaded_by, uploaded_at_ms
-             FROM modules ORDER BY id",
-        )?;
-        let rows = statement.query_map([], |row| {
-            Ok((
-                row.get::<_, String>(0)?,
-                row.get::<_, String>(1)?,
-                row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, String>(4)?,
-                row.get::<_, String>(5)?,
-                row.get::<_, String>(6)?,
-                row.get::<_, i64>(7)?,
-            ))
-        })?;
-
-        let mut modules = Vec::new();
-        for row in rows {
-            let (id, version, entry, hooks, capabilities, source, uploaded_by, uploaded_at_ms) =
-                row?;
-            modules.push(ModuleRow {
-                manifest: ModuleManifest {
-                    id,
-                    version,
-                    entry,
-                    hooks: serde_json::from_str::<Vec<HookPoint>>(&hooks)
-                        .map_err(|error| StoreError::Corrupt(error.to_string()))?,
-                    capabilities: serde_json::from_str::<Vec<Capability>>(&capabilities)
-                        .map_err(|error| StoreError::Corrupt(error.to_string()))?,
-                },
-                source,
-                uploaded_by: UserId(uploaded_by),
-                uploaded_at_ms: uploaded_at_ms.max(0) as u64,
-            });
-        }
-        Ok(modules)
-    }
-
     fn lock(&self) -> Result<std::sync::MutexGuard<'_, Connection>, StoreError> {
         self.connection
             .lock()
@@ -338,7 +241,6 @@ fn decode_room(
     co_hosts: &str,
     members: &str,
     join_secret: Option<&str>,
-    modules: &str,
 ) -> Result<Room, StoreError> {
     let address =
         RoomAddress::from_str(address).map_err(|error| StoreError::Corrupt(error.to_string()))?;
@@ -351,9 +253,6 @@ fn decode_room(
         serde_json::from_str(co_hosts).map_err(|error| StoreError::Corrupt(error.to_string()))?;
     let members: Vec<String> =
         serde_json::from_str(members).map_err(|error| StoreError::Corrupt(error.to_string()))?;
-    let modules: Vec<String> =
-        serde_json::from_str(modules).map_err(|error| StoreError::Corrupt(error.to_string()))?;
-
     Ok(Room {
         address,
         host: UserId(host.to_string()),
@@ -361,7 +260,6 @@ fn decode_room(
         members: members.into_iter().map(UserId).collect(),
         state,
         join_secret: join_secret.map(|secret| SecretHash::new(secret.to_string())),
-        modules,
     })
 }
 
@@ -420,8 +318,6 @@ mod tests {
             .unwrap();
         room.set_join_secret(&UserId("host-a".into()), Some(SecretHash::new("hash")))
             .unwrap();
-        room.set_modules(&UserId("host-a".into()), vec!["overlay".into()])
-            .unwrap();
         room
     }
 
@@ -439,7 +335,7 @@ mod tests {
     }
 
     #[test]
-    fn rooms_round_trip_with_membership_and_modules() {
+    fn rooms_round_trip_with_membership() {
         let store = Store::in_memory().unwrap();
         let room = room();
         store.upsert_room(&room, 1).unwrap();
@@ -506,28 +402,5 @@ mod tests {
         let _ = std::fs::remove_file(&path);
         let _ = std::fs::remove_file(path.with_extension("db-wal"));
         let _ = std::fs::remove_file(path.with_extension("db-shm"));
-    }
-
-    #[test]
-    fn modules_round_trip_with_manifest_and_source() {
-        use qr_race_core::{Capability, HookPoint, ModuleManifest};
-
-        let store = Store::in_memory().unwrap();
-        let row = ModuleRow {
-            manifest: ModuleManifest::new(
-                "overlay",
-                "1.2.0",
-                "main.py",
-                vec![HookPoint::Frame],
-                vec![Capability::Ui],
-            )
-            .unwrap(),
-            source: "def on_frame(payload):\n    return payload\n".into(),
-            uploaded_by: UserId("admin".into()),
-            uploaded_at_ms: 42,
-        };
-
-        store.upsert_module(&row).unwrap();
-        assert_eq!(store.load_modules().unwrap(), vec![row]);
     }
 }

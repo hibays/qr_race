@@ -111,7 +111,6 @@ void main() {
       label: '西京Z区B级103房',
       lit: false,
       host: 'host-a',
-      modules: [],
       members: [RoomMember(user: 'host-a', role: 'host', lastRelay: null)],
       relays: [],
     );
@@ -141,3 +140,4 @@ void main() {
     expect(find.text('离线演示模式不能建房'), findsOneWidget);
   });
 }
+

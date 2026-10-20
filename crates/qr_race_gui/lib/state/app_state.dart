@@ -24,14 +24,12 @@ class AppState extends ChangeNotifier {
         label: '东京A区1B级103房',
         host: 'host-a',
         memberCount: 4,
-        moduleCount: 0,
       ),
     ];
     state.room = RoomView(
       label: '东京A区1B级103房',
       lit: true,
       host: 'host-a',
-      modules: const [],
       members: const [
         RoomMember(user: 'host-a', role: 'host', lastRelay: 'r-1'),
         RoomMember(user: 'mika', role: 'co_host', lastRelay: 'r-2'),
@@ -298,3 +296,4 @@ class AppState extends ChangeNotifier {
     super.dispose();
   }
 }
+

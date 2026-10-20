@@ -3,8 +3,7 @@
 
 use data_encoding::BASE64;
 use qr_race_core::{
-    Capability, Compression, HookPoint, ModuleManifest, PayloadKind, RelayEntry, RelayId, Room,
-    RoomAddress, RoomRole, UserId,
+    Compression, PayloadKind, RelayEntry, RelayId, Room, RoomAddress, RoomRole, UserId,
 };
 use qr_race_hub::{MemberView, RoomEvent, RoomView};
 use serde::{Deserialize, Serialize};
@@ -25,7 +24,6 @@ pub struct AuthResponse {
     pub session_id: String,
     pub user_id: UserId,
     pub expires_at_ms: u64,
-    /// Admins see the module upload action in the client.
     pub admin: bool,
 }
 
@@ -43,11 +41,6 @@ pub struct CreateRoomRequest {
 #[derive(Debug, Deserialize)]
 pub struct TargetRequest {
     pub target: UserId,
-}
-
-#[derive(Debug, Deserialize)]
-pub struct ModulesRequest {
-    pub modules: Vec<String>,
 }
 
 #[derive(Debug, Deserialize)]
@@ -106,7 +99,6 @@ pub struct RoomViewDto {
     pub label: String,
     pub lit: bool,
     pub host: UserId,
-    pub modules: Vec<String>,
     pub members: Vec<MemberViewDto>,
     pub relays: Vec<RelayDto>,
 }
@@ -118,53 +110,10 @@ impl From<&RoomView> for RoomViewDto {
             label: view.address.to_string(),
             lit: view.lit,
             host: view.host.clone(),
-            modules: view.modules.clone(),
             members: view.members.iter().map(MemberViewDto::from).collect(),
             relays: view.relays.iter().map(RelayDto::from).collect(),
         }
     }
-}
-
-#[derive(Debug, Deserialize)]
-pub struct UploadModuleRequest {
-    pub id: String,
-    pub version: String,
-    pub entry: String,
-    pub hooks: Vec<HookPoint>,
-    pub capabilities: Vec<Capability>,
-    pub source: String,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ModuleManifestDto {
-    pub id: String,
-    pub version: String,
-    pub entry: String,
-    pub hooks: Vec<HookPoint>,
-    pub capabilities: Vec<Capability>,
-}
-
-impl From<&ModuleManifest> for ModuleManifestDto {
-    fn from(manifest: &ModuleManifest) -> Self {
-        Self {
-            id: manifest.id.clone(),
-            version: manifest.version.clone(),
-            entry: manifest.entry.clone(),
-            hooks: manifest.hooks.clone(),
-            capabilities: manifest.capabilities.clone(),
-        }
-    }
-}
-
-#[derive(Debug, Serialize)]
-pub struct ModuleListDto {
-    pub modules: Vec<ModuleManifestDto>,
-}
-
-#[derive(Debug, Serialize)]
-pub struct ModuleSourceDto {
-    pub manifest: ModuleManifestDto,
-    pub source: String,
 }
 
 #[derive(Debug, Serialize)]
@@ -173,7 +122,6 @@ pub struct LobbyRoomDto {
     pub label: String,
     pub host: UserId,
     pub member_count: usize,
-    pub module_count: usize,
 }
 
 impl From<&Room> for LobbyRoomDto {
@@ -183,7 +131,6 @@ impl From<&Room> for LobbyRoomDto {
             label: room.address.to_string(),
             host: room.host.clone(),
             member_count: 1 + room.co_hosts.len() + room.members.len(),
-            module_count: room.modules.len(),
         }
     }
 }
@@ -217,10 +164,6 @@ pub enum EventDto {
         user: UserId,
         role: RoomRole,
     },
-    ModulesChanged {
-        address: RoomAddress,
-        modules: Vec<String>,
-    },
     RelayPublished {
         address: RoomAddress,
         relay: RelayDto,
@@ -251,9 +194,6 @@ impl From<RoomEvent> for EventDto {
                 user,
                 role,
             },
-            RoomEvent::ModulesChanged { address, modules } => {
-                EventDto::ModulesChanged { address, modules }
-            }
             RoomEvent::RelayPublished { address, relay } => EventDto::RelayPublished {
                 address,
                 relay: RelayDto::from(&relay),

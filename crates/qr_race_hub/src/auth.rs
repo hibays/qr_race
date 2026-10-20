@@ -74,7 +74,7 @@ struct Account {
     token_hash: [u8; 32],
     totp_secret: Vec<u8>,
     last_step: Option<u64>,
-    /// Admins upload and distribute modules; ordinary accounts never can.
+    /// Admin is a server-governance flag; it is not a room role.
     admin: bool,
     failed_attempts: u32,
     locked_until_ms: u64,
@@ -124,7 +124,7 @@ impl AuthService {
         self.provision_as(user_id, token, totp_secret_base32, false)
     }
 
-    /// Same, but marks the account as an admin (module upload).
+    /// Same, but marks the account as a server admin.
     pub fn provision_as(
         &mut self,
         user_id: UserId,
@@ -157,7 +157,7 @@ impl AuthService {
         Ok(())
     }
 
-    /// True when this account may upload modules.
+    /// True when this account carries the server-governance flag.
     pub fn is_admin(&self, user_id: &UserId) -> bool {
         self.accounts
             .iter()

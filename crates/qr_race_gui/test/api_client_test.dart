@@ -29,7 +29,6 @@ void main() {
               'label': '东京A区1B级103房',
               'host': 'host-a',
               'member_count': 2,
-              'module_count': 0,
             }
           ],
         });
@@ -48,78 +47,6 @@ void main() {
     final rooms = await api.lobby();
     expect(rooms.single.label, '东京A区1B级103房');
     expect(requests.last.headers['authorization'], 'Bearer s-1');
-  });
-
-  test('lists modules and downloads their source', () async {
-    final client = MockClient((request) async {
-      if (request.url.path == '/v1/modules') {
-        return _json({
-          'modules': [
-            {
-              'id': 'overlay',
-              'version': '1.0.0',
-              'entry': 'main.py',
-              'hooks': ['frame'],
-              'capabilities': ['ui'],
-            }
-          ],
-        });
-      }
-      if (request.url.path == '/v1/modules/overlay') {
-        return _json({
-          'manifest': {
-            'id': 'overlay',
-            'version': '1.0.0',
-            'entry': 'main.py',
-            'hooks': ['frame'],
-            'capabilities': ['ui'],
-          },
-          'source': 'print(1)',
-        });
-      }
-      return http.Response('not found', 404);
-    });
-    final api = ApiClient(baseUrl: 'http://example.test', httpClient: client)
-      ..sessionId = 's-1';
-
-    final modules = await api.modules();
-    expect(modules.single.id, 'overlay');
-    expect(modules.single.hooks, ['frame']);
-
-    final source = await api.moduleSource('overlay');
-    expect(source.source, 'print(1)');
-    expect(source.manifest.capabilities, ['ui']);
-  });
-
-  test('uploads a module manifest and source as an admin', () async {
-    final requests = <http.Request>[];
-    final client = MockClient((request) async {
-      requests.add(request);
-      return _json({
-        'id': 'overlay',
-        'version': '1.0.0',
-        'entry': 'main.py',
-        'hooks': ['frame'],
-        'capabilities': ['ui'],
-      });
-    });
-    final api = ApiClient(baseUrl: 'http://example.test', httpClient: client)
-      ..sessionId = 's-1';
-
-    final module = await api.uploadModule(
-      id: 'overlay',
-      version: '1.0.0',
-      entry: 'main.py',
-      hooks: ['frame'],
-      capabilities: ['ui'],
-      source: 'print(1)',
-    );
-
-    expect(module.id, 'overlay');
-    expect(requests.single.method, 'POST');
-    final body = jsonDecode(requests.single.body) as Map<String, dynamic>;
-    expect(body['source'], 'print(1)');
-    expect(body['hooks'], ['frame']);
   });
 
   test('server errors become ApiException with the server message', () async {
@@ -151,7 +78,6 @@ void main() {
     await api.lightRoom('东京A区1B级103房');
     await api.promote('东京A区1B级103房', 'm-1');
     await api.demote('东京A区1B级103房', 'm-1');
-    await api.setModules('东京A区1B级103房', ['overlay']);
 
     expect(calls[0].url.path, '/v1/rooms');
     expect(jsonDecode(calls[0].body)['address'], '东京A区1B级103房');
@@ -160,8 +86,6 @@ void main() {
     expect(calls[2].url.path, '/v1/room/promote');
     expect(jsonDecode(calls[2].body)['target'], 'm-1');
     expect(calls[3].url.path, '/v1/room/demote');
-    expect(calls[4].url.path, '/v1/room/modules');
-    expect(jsonDecode(calls[4].body)['modules'], ['overlay']);
   });
 
   test('a room view keeps the member flags and relay bytes', () async {    final client = MockClient((request) async {
@@ -171,7 +95,6 @@ void main() {
           'label': '西京Z区B级103房',
           'lit': true,
           'host': 'host-a',
-          'modules': <String>[],
           'members': [
             {'user': 'host-a', 'role': 'host', 'last_relay': 'r-1'},
             {'user': 'm-1', 'role': 'co_host', 'last_relay': null},
@@ -227,3 +150,4 @@ http.Response _json(Map<String, Object?> body, {int status = 200}) {
     headers: {'content-type': 'application/json; charset=utf-8'},
   );
 }
+

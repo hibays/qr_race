@@ -29,7 +29,7 @@ status document, not a claim that every requirement is complete.
 | 20 | Guest/invite identities | Done | per-room guest endpoint, invite links |
 | 21 | External app scheme jump | Done | chooser/clipboard fallback |
 | 22 | QR generation via rxing WebP | Done | lossless VP8L, rcrm-aligned params |
-| 23 | Test infrastructure | Done | 143 Rust / 29 Flutter at last count; fuzz/smoke suites |
+| 23 | Test infrastructure | Done | 133 Rust / 27 Flutter at last count; fuzz/smoke suites |
 | 24 | Deployment docs | Done | Ubuntu/Windows/Android, self-host, TLS |
 | 25 | WeChat CNN budget | Done (60 ms) | p95: fast 6.9 ms, CNN 6.9 ms, tiled far 21.8 ms |
 
@@ -71,6 +71,7 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
+
 
 
 

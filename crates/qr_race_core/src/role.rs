@@ -17,8 +17,6 @@ pub enum RoomRole {
 pub enum RoomAbility {
     /// Scan and publish a relay into the room. Members only receive relays.
     PublishRelay,
-    /// Change which modules the room runs.
-    ConfigureModules,
     /// Grant or revoke co-host status.
     ManageCoHosts,
     /// See who is in the room.
@@ -29,11 +27,7 @@ impl RoomRole {
     pub const fn allows(self, ability: RoomAbility) -> bool {
         use RoomAbility::*;
         match self {
-            RoomRole::Host => matches!(
-                ability,
-                PublishRelay | ConfigureModules | ManageCoHosts | SeeMembers
-            ),
-            // Co-hosts publish. The brief gives module settings to the host.
+            RoomRole::Host => matches!(ability, PublishRelay | ManageCoHosts | SeeMembers),
             RoomRole::CoHost => matches!(ability, PublishRelay | SeeMembers),
             RoomRole::Member => matches!(ability, SeeMembers),
         }
@@ -79,11 +73,6 @@ impl Privileges {
     pub fn can(&self, ability: RoomAbility) -> bool {
         self.room.is_some_and(|role| role.allows(ability))
     }
-
-    /// Only the operator uploads modules; users pick from what already exists.
-    pub const fn can_upload_modules(&self) -> bool {
-        self.admin
-    }
 }
 
 #[cfg(test)]
@@ -98,13 +87,10 @@ mod tests {
     }
 
     #[test]
-    fn only_the_host_manages_co_hosts_and_modules() {
+    fn only_the_host_manages_co_hosts() {
         assert!(RoomRole::Host.allows(RoomAbility::ManageCoHosts));
         assert!(!RoomRole::CoHost.allows(RoomAbility::ManageCoHosts));
         assert!(!RoomRole::Member.allows(RoomAbility::ManageCoHosts));
-
-        assert!(RoomRole::Host.allows(RoomAbility::ConfigureModules));
-        assert!(!RoomRole::CoHost.allows(RoomAbility::ConfigureModules));
     }
 
     #[test]
@@ -116,8 +102,6 @@ mod tests {
 
     #[test]
     fn admin_is_separate_from_room_roles() {
-        assert!(Privileges::admin().can_upload_modules());
-        assert!(!Privileges::host().can_upload_modules());
         assert!(!Privileges::admin().can(RoomAbility::PublishRelay));
     }
 }

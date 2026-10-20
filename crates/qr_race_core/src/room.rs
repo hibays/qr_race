@@ -41,7 +41,6 @@ pub struct Room {
     pub members: BTreeSet<UserId>,
     pub state: RoomState,
     pub join_secret: Option<SecretHash>,
-    pub modules: Vec<String>,
 }
 
 impl Room {
@@ -53,7 +52,6 @@ impl Room {
             members: BTreeSet::new(),
             state: RoomState::Dark,
             join_secret: None,
-            modules: Vec::new(),
         }
     }
 
@@ -134,16 +132,6 @@ impl Room {
     ) -> Result<(), CoreError> {
         self.require_host(actor, "change the join password")?;
         self.join_secret = secret;
-        Ok(())
-    }
-
-    /// Replaces the room's module selection. Only the host configures modules.
-    pub fn set_modules(&mut self, actor: &UserId, modules: Vec<String>) -> Result<(), CoreError> {
-        self.require_host(actor, "configure room modules")?;
-        let mut unique = modules;
-        unique.sort();
-        unique.dedup();
-        self.modules = unique;
         Ok(())
     }
 
@@ -280,24 +268,6 @@ mod tests {
         assert!(room.join_secret.is_some());
         room.set_join_secret(&host(), None).unwrap();
         assert!(room.join_secret.is_none());
-    }
-
-    #[test]
-    fn modules_are_host_configured_and_deduplicated() {
-        let mut room = room();
-        let m1 = member("m-1");
-        room.join(m1.clone());
-
-        assert_eq!(
-            room.set_modules(&m1, vec!["a".into()]),
-            Err(CoreError::NotHost {
-                action: "configure room modules"
-            })
-        );
-
-        room.set_modules(&host(), vec!["b".into(), "a".into(), "a".into()])
-            .unwrap();
-        assert_eq!(room.modules, vec!["a".to_string(), "b".to_string()]);
     }
 
     #[test]

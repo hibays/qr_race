@@ -63,7 +63,6 @@ impl AppState {
         self.provision_as(user_id, token, totp_secret_base32, false)
     }
 
-    /// Same, with the admin bit that allows module upload.
     pub fn provision_as(
         &self,
         user_id: UserId,
@@ -164,10 +163,6 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/room/leave", post(routes::leave))
         .route("/v1/room/promote", post(routes::promote))
         .route("/v1/room/demote", post(routes::demote))
-        .route("/v1/room/modules", post(routes::modules))
-        .route("/v1/admin/modules", post(routes::upload_module))
-        .route("/v1/modules", get(routes::list_modules))
-        .route("/v1/modules/{id}", get(routes::module_detail))
         .route("/v1/room/relay", post(routes::relay))
         .route("/v1/room/events", get(ws::room_events))
         // The Flutter web build is served from a different origin than the API.

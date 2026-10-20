@@ -10,9 +10,9 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **143 passed** |
+| Rust tests | `cargo test --workspace` | **133 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
-| Flutter tests | `flutter test` | **29 passed** |
+| Flutter tests | `flutter test` | **27 passed** |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `pwsh -File scripts/build-wasm.ps1` then `flutter build web --release` | built |
 | Android build | `flutter build apk --debug` | built (arm64 Rust lib + Camera2 scanning + embedded server) |
@@ -193,10 +193,9 @@ finished product.
 
 ### Extensions
 
-- No Python/RustPython runtime or module upload UI. The internal extension
-  catalog (manifest/API/store) remains as an unused seam; it is not exposed in
-  Flutter and not part of acceptance. Extension points are documented in
-  `docs/EXTENSIONS.md`.
+- No Python/RustPython runtime, module upload UI, manifest/catalog API, store
+  rows or Flutter module models remain. Extension points are Rust traits/events
+  documented in `docs/EXTENSIONS.md`.
 
 ### Clients
 
@@ -212,8 +211,8 @@ finished product.
 1. **CNN speed is within the relaxed budget.** Synthetic p95: fast 6.9 ms,
    CNN 6.9 ms, tiled far 21.8 ms. One real-camera run: p95 17.4 ms, CNN 59.1 ms,
    5/1075 dropped, far code decoded. Multi-device/rate sweeps remain.
-2. **No Python modules.** Removed from the product; only the unused internal
-   extension catalog and Rust extension seams remain.
+2. **No Python modules.** Removed end-to-end (core/API/store/Flutter); only
+   Rust extension seams remain.
 3. **Apple capture does not exist.** iOS/macOS cannot be built or verified on
    Windows; Android now has its own Camera2 capture and in-process server.
 4. **No browser UI run.** Edge headless drove the scan probe page, but the Flutter
@@ -245,6 +244,8 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
+
 
 
 

@@ -13,7 +13,5 @@ pub use auth::{
     generate_totp_secret_base32,
 };
 pub use clock::{Clock, ManualClock, SystemClock};
-pub use hub::{
-    Hub, HubError, MAX_RELAYS_PER_ROOM, MemberView, RelayRequest, RoomEvent, RoomView, StoredModule,
-};
+pub use hub::{Hub, HubError, MAX_RELAYS_PER_ROOM, MemberView, RelayRequest, RoomEvent, RoomView};
 pub use totp::{DEFAULT_DIGITS, STEP_SECONDS};

@@ -61,9 +61,6 @@ impl From<HubError> for ApiError {
             HubError::RoomNotFound(_) => ApiError::NotFound(message),
             HubError::RoomNotLit(_) => ApiError::Conflict(message),
             HubError::NotAScanner | HubError::NotAParticipant => ApiError::Forbidden(message),
-            HubError::UnknownModule(_)
-            | HubError::EmptyModule
-            | HubError::ModuleTooLarge { .. } => ApiError::BadRequest(message),
             HubError::Storage(_) => ApiError::Internal(message),
             HubError::Core(core) => ApiError::from(core),
         }
@@ -81,7 +78,6 @@ impl From<CoreError> for ApiError {
             CoreError::Address(_)
             | CoreError::Empty(_)
             | CoreError::RelayTooLarge { .. }
-            | CoreError::Manifest(_)
             | CoreError::NotAMember
             | CoreError::NotACoHost
             | CoreError::AlreadyHost => ApiError::BadRequest(message),
