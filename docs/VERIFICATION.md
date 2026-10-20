@@ -156,7 +156,7 @@ finished product.
   18–22 ms wall and prints the exact payload.
 - Browser: `pwsh -File scripts/browser-scan-probe.ps1` runs Edge headless with a
   fake camera (Y4M of a QR page) and reports
-  `HIT:https://example.test/relay`, 640×480, `scan_ms` ≈ 1.8.
+  `HIT:https://example.test/relay`, 640×480, `scan_ms` ≈ 1.6.
 - Real camera: camera access was enabled and the CLI scanned textured frames at
   1920×1080 (6.01 ms average, ~24 fps input) and 1280×720 (2.89 ms average,
   ~28 fps input); no QR was in view, so a live symbol was not decoded.
@@ -241,6 +241,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 
