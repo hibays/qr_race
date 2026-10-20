@@ -123,7 +123,6 @@ class AppState extends ChangeNotifier {
       await client.join(address);
       room = await client.room(address);
       _roomAddress = address;
-      await refreshModuleCatalog();
       await _subscribe(client, address);
       return true;
     } catch (e) {
@@ -146,33 +145,6 @@ class AppState extends ChangeNotifier {
       error = _describe(e);
     }
     notifyListeners();
-  }
-
-  /// What the admin has uploaded; used by the host's module picker.
-  List<ModuleInfo> moduleCatalog = const [];
-
-  Future<void> refreshModuleCatalog() async {
-    final client = api;
-    if (client == null) return;
-    try {
-      moduleCatalog = await client.modules();
-    } catch (_) {
-      // A catalog failure must not hide the room itself.
-    }
-    notifyListeners();
-  }
-
-  Future<void> setModules(List<String> modules) async {
-    final client = api;
-    final address = _roomAddress;
-    if (client == null || address == null) return;
-    try {
-      await client.setModules(address, modules);
-      await refreshRoom();
-    } catch (e) {
-      error = _describe(e);
-      notifyListeners();
-    }
   }
 
   /// Creates the room, or reuses it if it already exists, then lights it.

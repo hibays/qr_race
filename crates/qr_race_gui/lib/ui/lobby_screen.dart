@@ -3,7 +3,6 @@ import 'package:flutter/material.dart';
 import '../api/api_client.dart';
 import '../state/app_state.dart';
 import 'connect_screen.dart';
-import 'module_upload_dialog.dart';
 import 'room_screen.dart';
 import 'theme.dart';
 
@@ -29,32 +28,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
     Navigator.of(context).pushAndRemoveUntil(
       MaterialPageRoute(builder: (_) => ConnectScreen(state: widget.state)),
       (_) => false,
-    );
-  }
-
-  Future<void> _uploadModule() async {
-    final api = widget.state.api;
-    if (api == null) return;
-    final uploaded = await showDialog<bool>(
-      context: context,
-      builder: (_) => ModuleUploadDialog(
-        onSubmit: (draft) async {
-          await api.uploadModule(
-            id: draft.id,
-            version: draft.version,
-            entry: draft.entry,
-            hooks: draft.hooks,
-            capabilities: draft.capabilities,
-            source: draft.source,
-          );
-        },
-      ),
-    );
-    if (!mounted || uploaded != true) return;
-    await widget.state.refreshModuleCatalog();
-    if (!mounted) return;
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('模组已上传')),
     );
   }
 
@@ -119,19 +92,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
           ),
         ),
         actions: [
-          ListenableBuilder(
-            listenable: widget.state,
-            builder: (context, _) {
-              if (!(widget.state.session?.admin ?? false)) {
-                return const SizedBox.shrink();
-              }
-              return IconButton(
-                tooltip: '上传模组',
-                onPressed: _uploadModule,
-                icon: const Icon(Icons.upload_file_outlined),
-              );
-            },
-          ),
           IconButton(
             tooltip: '创建房间',
             onPressed: _createRoom,
@@ -237,8 +197,7 @@ class _RoomCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 4),
                     Text(
-                      '房主 ${room.host} · ${room.memberCount} 人'
-                      '${room.moduleCount > 0 ? ' · ${room.moduleCount} 个模组' : ''}',
+                      '房主 ${room.host} · ${room.memberCount} 人',
                       style: const TextStyle(fontSize: 12.5, color: muted),
                     ),
                   ],

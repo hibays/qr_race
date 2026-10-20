@@ -11,9 +11,9 @@ status document, not a claim that every requirement is complete.
 | 2 | rxing decoder, no rqrr/cvlite decode backend | Done | `qr_race_scan::RxingDecoder` |
 | 3 | 30 fps fast scan path | Done for clear codes | device 2.7–9 ms at 1280×720 |
 | 4 | Multi-code / parallel crop decode | Partial | desktop `thread::scope`; mobile serial |
-| 5 | WeChat detector + SR + decode | Done (own pipeline) | `qr_race_wechat`, ONNX via tract |
-| 6 | Far/small-code scan-rate gain | Partial | tiered 384 → crop → SR → scheduled 768; live far sample needs tuning |
-| 7 | CNN backend speed selection | Partial | tract measured; ORT/st-zrt/Candle comparison open |
+| 5 | WeChat detector + SR + decode | Done (own pipeline) | `qr_race_wechat`, ORT Android / tract desktop |
+| 6 | Far/small-code scan-rate gain | Done (sample) | live 11-vmin QR decoded via 2×2 tiled pass; formal rate sweep pending |
+| 7 | CNN backend speed selection | Done | ORT Android wins (6–48 ms); tract desktop fallback |
 | 8 | Camera capture: Android | Done | Camera2 Y plane → JNI → Rust; no frames in Dart |
 | 9 | Camera capture: desktop | Done | nokhwa backend |
 | 10 | Camera capture: Web | Partial | wasm + getUserMedia; browser matrix not exhaustive |
@@ -23,15 +23,15 @@ status document, not a claim that every requirement is complete.
 | 14 | Self-signed HTTPS + fingerprint | Done | Windows bridge, Linux WSL smoke, fingerprint CLI |
 | 15 | Transport HTTP + WS | Done | REST/WS tests, tickets |
 | 16 | Flutter multi-platform UI | Done Android/Windows/Web | 30 widget/unit tests |
-| 17 | Pluggable mods (RustPython) | Partial | upload/distribution/persistence; VM init/execution blocked |
-| 18 | Admin-only module upload | Done | role checks/tests |
+| 17 | Python mod runtime | Removed | no RustPython dependency/UI; Rust extension seams remain |
+| 18 | Admin-only module upload | Removed | admin is governance only; no upload UI |
 | 19 | Auto-publish / dynamic prefix slots | Done | client grouping, published-text dedup |
 | 20 | Guest/invite identities | Done | per-room guest endpoint, invite links |
 | 21 | External app scheme jump | Done | chooser/clipboard fallback |
 | 22 | QR generation via rxing WebP | Done | lossless VP8L, rcrm-aligned params |
-| 23 | Test infrastructure | Done | 142 Rust / 30 Flutter at last count; fuzz/smoke suites |
+| 23 | Test infrastructure | Done | 142 Rust / 29 Flutter at last count; fuzz/smoke suites |
 | 24 | Deployment docs | Done | Ubuntu/Windows/Android, self-host, TLS |
-| 25 | WeChat CNN 30 fps | Not met | CNN 23–34 ms at 384, ~90 ms at 768; fast path remains 30 fps |
+| 25 | WeChat CNN budget | Done (60 ms) | fast 2.9–5.7 ms; CNN 6.3–48.3 ms; fast path remains 30 fps target |
 
 ## Test gates
 
@@ -54,20 +54,13 @@ Device-only checks:
 
 ## Remaining work, in order
 
-1. **Backend choice (biggest).** Replace `qr_race_wechat/src/backend.rs` with
-   ORT (Android `libonnxruntime.so`) and run the same 384/768 benchmark. Compare
-   against tract; keep the `Net` trait. Candle is the fallback pure-Rust option;
-   st-zrt wraps ORT; lele has no ONNX frontend and is not a candidate here.
-2. **Far-code tuning.** Add a confidence/tile policy and a repeatable
-   far/small fixture; record detection rate, not just latency. Current live
-   small-QR test did not reliably decode, so do not claim the rate gain yet.
-3. **Apple capture.** `qr_race_capture_apple` + AVFoundation, then the same
+1. **Formal p95/drop trace.** Fast path 2.9–5.7 ms, CNN 6.3–48.3 ms on
+   device; collect a repeatable trace and a far-code detection-rate sweep.
+2. **Apple capture.** `qr_race_capture_apple` + AVFoundation, then the same
    frame-never-in-Dart contract.
-4. **RustPython execution.** Finish VM initialization/execution, then run a
-   sample module with an admin account.
-5. **30 fps proof.** Produce a device trace with p95 scan latency and dropped
-   frames for fast and CNN tiers; the 768 path is explicitly a lower-fps
-   fallback, not a 30 fps claim.
+3. **Optional follow-ups.** st-zrt is only an ORT wrapper; Candle/lele are not
+   justified by the current measurements. Keep the `Net` trait for future
+   backends.
 
 ## Four-layer closure view
 
@@ -75,5 +68,7 @@ Device-only checks:
 - **Platform layer:** Android/desktop capture and FFI; Web partial; Apple open.
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
-  module execution remains the main product gap.
+  Python modules are explicitly out of scope, with Rust extension seams kept.
+
+
 

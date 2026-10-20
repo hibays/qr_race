@@ -32,22 +32,36 @@ Detector numeric parity is still open: OpenCV 5 removed the Caffe importer, and
 there is no Caffe runtime on this machine. The next check is a NumPy reference
 for the detector heads, or a comparison against an OpenCV 4 environment.
 
-## What is still missing
+## Current status
 
-1. **Faster backend.** The current tract backend runs both models on device
-   (fast path remains rxing; CNN path 23–34 ms at 384, ~90 ms at 768). ORT /
-   st-zrt / Candle comparison is the next step; replace `src/backend.rs` behind
-   the `Net` trait.
-2. **Far-code tuning.** The tiered pipeline has 384 → full-res crop → SR →
-   scheduled 768 detection. Live far/small samples still need a tuning pass
-   (confidence threshold, tile/ROI policy) before claiming scan-rate gains.
-3. **Detector numeric parity.** A NumPy reference for the detector heads or an
-   OpenCV 4 comparison is still open.
-4. **Wasm/Apple packaging.** Model bytes compile into the native FFI library;
-   wasm and Apple backends are not wired.
+- **Backend chosen:** Android uses ORT + ONNX Runtime 1.31; desktop uses tract
+  as fallback. Device HUD: fast path 2.9–5.7 ms; CNN 384 6.3–15.9 ms; 2×2 tiled
+  far-code pass 48.3 ms, inside the 60 ms relaxed CNN budget. `st-zrt` wraps ORT
+  (same kernels), `lele` has no ONNX frontend, Candle was not competitive enough
+  to justify replacing ORT. `OrtNet` and `TractNet` implement the same `Net`
+  trait.
+- **Far/small:** a live 11-vmin PC-screen QR decoded
+  `https://example.test/far-small-live` at 1280×720 through the tiled path.
+  This is one sample; a detection-rate/p95 sweep remains future work.
+- **Detector numeric parity** is still open (NumPy reference or OpenCV 4).
+- **Wasm/Apple packaging** is not wired; model bytes compile into the native
+  FFI library.
+
+## Implementation
+
+- `crates/qr_race_wechat/src/pipeline` equivalent modules: detector, scale,
+  decodermgr, wechat_qrcode.
+- `src/backend/ort.rs` (Android) and `src/backend/tract.rs` (desktop).
+- Android packages `libonnxruntime.so` in `jniLibs/arm64-v8a/`; desktop uses
+  tract so no DLL shipping is required.
 
 ## License
 
 Weights: © 2021 THL A29 Limited (Tencent), Apache-2.0. The license text is in
 `models/WeChat-QRCode-LICENSE.txt`. The ONNX files are format conversions of
 those weights.
+
+ONNX Runtime 1.31 (MIT) is not linked into the Rust static library; the Android
+build packages `jniLibs/arm64-v8a/libonnxruntime.so` from
+`com.microsoft.onnxruntime:onnxruntime-android:1.31.0`, and `ort` loads it with
+`load-dynamic`. Desktop uses tract instead, so no ORT DLL is shipped there.

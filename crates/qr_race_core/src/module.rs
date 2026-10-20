@@ -1,9 +1,9 @@
-//! Module manifests.
+//! Extension manifests (internal registry, no runtime).
 //!
-//! Modules are admin-uploaded Python programs run through RustPython. A manifest
-//! is the part the room config sees and the server validates before distributing
-//! code to clients. The capability list is deliberately open: the sandbox
-//! boundary is still an undecided product fact (see PRODUCT.md).
+//! This type is retained as a data seam for future native extensions. The
+//! product no longer exposes module upload/selection and there is no Python or
+//! RustPython execution; `source` is stored only by the legacy internal catalog.
+//! New extension work should use Rust traits and events instead.
 
 use serde::{Deserialize, Serialize};
 

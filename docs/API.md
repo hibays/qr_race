@@ -16,8 +16,8 @@ POST /v1/auth
 A legacy `code` field is still accepted and verified if explicitly provided, but
 the product flow no longer asks for TOTP.
 
-`admin` tells the client whether to show the module-upload action; the server
-still enforces it on `/v1/admin/modules`.
+`admin` is retained as a server-governance flag; it no longer controls a
+module-upload UI.
 
 Every other route requires `Authorization: Bearer <session_id>`. Sessions expire
 after 12 hours by default; an expired session is `401` and the client must
@@ -44,14 +44,13 @@ carry it percent-encoded as UTF-8.
 | Method | Path | Body | Result |
 |---|---|---|---|
 | `POST` | `/v1/rooms` | `{ "address": "东京A区1B级103房" }` | `201` + structured address; `409` if it exists |
-| `GET` | `/v1/lobby` | — | `{ "rooms": [ { address, label, host, member_count, module_count } ] }` |
+| `GET` | `/v1/lobby` | — | `{ "rooms": [ { address, label, host, member_count } ] }` |
 | `GET` | `/v1/room?address=…` | — | room view (below) |
 | `POST` | `/v1/room/light?address=…` | — | `204`; host only |
 | `POST` | `/v1/room/join?address=…` | — | `204`; room must be lit (host excepted) |
 | `POST` | `/v1/room/leave?address=…` | — | `204`; the host cannot leave |
 | `POST` | `/v1/room/promote?address=…` | `{ "target": "user-id" }` | `204`; host only |
 | `POST` | `/v1/room/demote?address=…` | `{ "target": "user-id" }` | `204`; host only |
-| `POST` | `/v1/room/modules?address=…` | `{ "modules": ["…"] }` | `204`; host only; ids must be uploaded |
 | `POST` | `/v1/room/relay?address=…` | `{ "kind": "text", "payload_b64": "…" }` | `200` + relay; host/co-host only |
 | `GET` | `/v1/room/events?address=…` | — | WebSocket event stream |
 
@@ -66,7 +65,6 @@ carry it percent-encoded as UTF-8.
   "label": "东京A区1B级103房",
   "lit": true,
   "host": "host-a",
-  "modules": [],
   "members": [
     { "user": "host-a", "role": "host", "last_relay": "r-1" },
     { "user": "m-1", "role": "co_host", "last_relay": null }
@@ -92,35 +90,6 @@ scanned and may be tapped to relay onward. `role` is `host`, `co_host` or
 A room keeps its newest 64 relays in memory; older ones are dropped. A client
 that was disconnected must re-fetch `GET /v1/room` after a gap.
 
-## Modules
-
-Modules are admin-uploaded Python sources. Only an account provisioned with
-`"admin": true` may upload; room hosts select from what exists, and selecting an
-unknown id is `400`.
-
-| Method | Path | Body | Result |
-|---|---|---|---|
-| `POST` | `/v1/admin/modules` | `{ id, version, entry, hooks, capabilities, source }` | `201` + manifest; admin only (`403` otherwise) |
-| `GET` | `/v1/modules` | — | `{ "modules": [ { id, version, entry, hooks, capabilities } ] }` |
-| `GET` | `/v1/modules/{id}` | — | `{ "manifest": {…}, "source": "…" }`; `404` if absent |
-
-`hooks` are `frame` / `action`; `capabilities` are `camera`, `network`,
-`storage`, `ui`. Source must be non-empty and at most 256 KiB.
-
-```json
-{
-  "id": "overlay",
-  "version": "1.0.0",
-  "entry": "main.py",
-  "hooks": ["frame"],
-  "capabilities": ["ui"],
-  "source": "def on_frame(payload):\n    return payload\n"
-}
-```
-
-Uploads and room selections survive a restart. The server distributes source to
-clients; executing it is still pending (see [MODULES.md](MODULES.md)).
-
 ## Events (WebSocket)
 
 Opening `/v1/room/events?address=…&ticket=…` (or with an `Authorization` header)
@@ -132,7 +101,7 @@ frame:
 ```
 
 Types: `room_created`, `room_lit`, `member_joined`, `member_left`,
-`role_changed`, `modules_changed`, `relay_published`. A client that lags is
+`role_changed`, `relay_published`. A client that lags is
 skipped forward by the server; it must re-sync with `GET /v1/room` when it sees
 a gap.
 
@@ -140,7 +109,7 @@ a gap.
 
 | Status | Meaning |
 |---|---|
-| `400` | malformed address, bad base64, empty/oversized relay, bad module list |
+| `400` | malformed address, bad base64, empty/oversized relay |
 | `401` | missing/invalid/expired session; unknown token |
 | `403` | authenticated but not allowed (member publishing, non-participant view, non-host control) |
 | `404` | unknown room |
@@ -187,8 +156,10 @@ needs HTTPS or localhost.
 ```
 
 Mint an account with `qr_race_server provision --user host-a` (add `--admin` for
-a module-upload account) and paste the JSON line into `accounts`.
+an admin account if server governance is needed) and paste the JSON line into `accounts`.
 
 CORS is permissive (any origin, any header) so the Flutter web build can call
 the API from another origin. Tighten it if the server is exposed beyond a
 trusted network.
+
+

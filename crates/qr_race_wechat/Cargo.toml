@@ -8,11 +8,17 @@ license.workspace = true
 # The ported module docs come from wxscan and reference its crate names.
 doctest = false
 
+[features]
+default = ["tract"]
+ort = ["dep:ort"]
+tract = ["dep:tract-onnx"]
+
 [dependencies]
 qr_race_scan.workspace = true
 cvlite = { path = "../cvlite" }
 wxing = { path = "../wxing" }
-tract-onnx = "0.21"
+tract-onnx = { version = "0.21", optional = true }
+ort = { version = "2.0.0-rc.15", default-features = false, features = ["load-dynamic"], optional = true }
 
 [dev-dependencies]
 qrcode = "0.14"

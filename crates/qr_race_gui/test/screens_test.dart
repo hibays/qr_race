@@ -36,7 +36,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the host sees and can open the room module picker', (tester) async {
+  testWidgets('the room exposes no Python/module UI', (tester) async {
     final state = AppState.demo();
     await pumpAt(
       tester,
@@ -44,11 +44,10 @@ void main() {
       RoomScreen(state: state, address: '东京A区1B级103房'),
     );
 
-    expect(find.text('未配置模组'), findsOneWidget);
-    await tester.tap(find.text('配置'));
-    await tester.pumpAndSettle();
-    expect(find.text('房间模组'), findsOneWidget);
-    expect(find.textContaining('还没有上传任何模组'), findsOneWidget);
+    expect(find.text('未配置模组'), findsNothing);
+    expect(find.text('配置'), findsNothing);
+    expect(find.byIcon(Icons.extension_outlined), findsNothing);
+    expect(find.text('房间模组'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

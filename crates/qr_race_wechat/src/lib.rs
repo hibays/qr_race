@@ -24,7 +24,7 @@ mod wechat_qrcode;
 
 use std::time::Instant;
 
-use backend::TractNet;
+use backend::DefaultNet;
 use detector::ssd_detector::{QuadPoints, SSDDetector};
 use qr_race_scan::{Decoder, GrayFrame, RxingDecoder, ScanHit};
 use scale::super_scale::SuperScale;
@@ -50,13 +50,13 @@ pub struct WeChatOutcome {
 
 /// A loaded WeChat CNN scanner.
 pub struct WeChatScanner {
-    inner: WeChatQRCode<TractNet>,
+    inner: WeChatQRCode<DefaultNet>,
 }
 
 impl WeChatScanner {
     pub fn new() -> Result<Self, String> {
-        let detector = TractNet::from_bytes(DETECT_ONNX)?;
-        let sr = TractNet::from_bytes(SR_ONNX)?;
+        let detector = DefaultNet::from_bytes(DETECT_ONNX)?;
+        let sr = DefaultNet::from_bytes(SR_ONNX)?;
         Ok(Self {
             inner: WeChatQRCode::new(Some(detector), Some(sr)),
         })
@@ -108,15 +108,15 @@ pub struct TieredOutcome {
 /// This keeps the 30 fps path at rxing speed while spending CNN work only on
 /// frames where the fast decoder failed — exactly the far/small-code case.
 pub struct TieredScanner {
-    detector: SSDDetector<TractNet>,
-    sr: SuperScale<TractNet>,
+    detector: SSDDetector<DefaultNet>,
+    sr: SuperScale<DefaultNet>,
     rxing: RxingDecoder,
 }
 
 impl TieredScanner {
     pub fn new() -> Result<Self, String> {
-        let detector = TractNet::from_bytes(DETECT_ONNX)?;
-        let sr = TractNet::from_bytes(SR_ONNX)?;
+        let detector = DefaultNet::from_bytes(DETECT_ONNX)?;
+        let sr = DefaultNet::from_bytes(SR_ONNX)?;
         Ok(Self {
             detector: SSDDetector::new(detector),
             sr: SuperScale::new(Some(sr)),
@@ -148,16 +148,7 @@ impl TieredScanner {
     /// callers should schedule it rather than use it every frame.
     pub fn scan_cnn_at(&self, frame: &GrayFrame, target: usize) -> TieredOutcome {
         let detect_started = Instant::now();
-        let boxes = self
-            .detector
-            .forward(
-                frame.data(),
-                frame.width() as usize,
-                frame.height() as usize,
-                target,
-                target,
-            )
-            .unwrap_or_default();
+        let boxes = self.detect_boxes(frame, target);
         let detect_ms = detect_started.elapsed().as_secs_f64() * 1000.0;
         let decode_started = Instant::now();
         let mut hits = Vec::new();
@@ -187,6 +178,47 @@ impl TieredScanner {
         }
     }
 
+    /// Detect at 384, or split the frame into four overlapping tiles when a
+    /// larger target is requested. Tiling preserves small modules while keeping
+    /// the model's fixed 384×384 input.
+    fn detect_boxes(&self, frame: &GrayFrame, target: usize) -> Vec<QuadPoints> {
+        if target <= 384 {
+            return self
+                .detector
+                .forward(
+                    frame.data(),
+                    frame.width() as usize,
+                    frame.height() as usize,
+                    384,
+                    384,
+                )
+                .unwrap_or_default();
+        }
+        let (w, h) = (frame.width(), frame.height());
+        let tile_w = (w * 3 / 5).max(1);
+        let tile_h = (h * 3 / 5).max(1);
+        let xs = [0, w.saturating_sub(tile_w)];
+        let ys = [0, h.saturating_sub(tile_h)];
+        let mut boxes = Vec::new();
+        for y0 in ys {
+            for x0 in xs {
+                let (crop, cw, ch) = crop_rect(frame, x0, y0, tile_w, tile_h);
+                let mut found = self
+                    .detector
+                    .forward(&crop, cw, ch, 384, 384)
+                    .unwrap_or_default();
+                for quad in &mut found {
+                    for point in quad.iter_mut() {
+                        point.0 += x0 as f32;
+                        point.1 += y0 as f32;
+                    }
+                }
+                boxes.extend(found);
+            }
+        }
+        boxes
+    }
+
     fn decode_crop(&self, data: &[u8], width: usize, height: usize) -> Vec<ScanHit> {
         let Ok(frame) = GrayFrame::new(width as u32, height as u32, data.to_vec()) else {
             return Vec::new();
@@ -196,9 +228,26 @@ impl TieredScanner {
 
     fn decode_with_sr(&self, data: &[u8], width: usize, height: usize) -> Option<Vec<ScanHit>> {
         let (square, side) = square_pad(data, width, height);
-        let (up, up_w, up_h) = self.sr.super_resolution_scale(&square, side, side)?;
+        // The SR graph is fixed 224×224. Resize the padded crop instead of
+        // feeding an arbitrary square (tract tolerated it, ORT does not).
+        let fixed = cvlite::resize(&square, side, side, 224, 224, cvlite::Interpolation::Cubic);
+        let (up, up_w, up_h) = self.sr.super_resolution_scale(&fixed, 224, 224)?;
         Some(self.decode_crop(&up, up_w, up_h))
     }
+}
+
+fn crop_rect(frame: &GrayFrame, x0: u32, y0: u32, w: u32, h: u32) -> (Vec<u8>, usize, usize) {
+    let x1 = (x0 + w).min(frame.width());
+    let y1 = (y0 + h).min(frame.height());
+    let cw = x1.saturating_sub(x0) as usize;
+    let ch = y1.saturating_sub(y0) as usize;
+    let mut data = Vec::with_capacity(cw * ch);
+    for y in y0..y1 {
+        for x in x0..x1 {
+            data.push(frame.pixel(x, y).unwrap_or(255));
+        }
+    }
+    (data, cw, ch)
 }
 
 fn crop_quad(frame: &GrayFrame, quad: &QuadPoints, pad: f32) -> (Vec<u8>, usize, usize) {

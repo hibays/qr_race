@@ -189,25 +189,20 @@ impl<N: Net> WeChatQRCode<N> {
 
     fn detect(&self, img: &[u8], width: usize, height: usize) -> Vec<QuadPoints> {
         if let Some(detector) = self.detector.as_ref() {
-            let target_area = 400.0f32 * 400.0;
-            let tmp_scale = if self.scale_factor == -1.0 {
-                1.0f32.min((target_area / (width * height) as f32).sqrt())
-            } else {
-                self.scale_factor
-            };
-            let detect_width = (width as f32 * tmp_scale) as usize;
-            let detect_height = (height as f32 * tmp_scale) as usize;
-            if detect_width > 0 && detect_height > 0 {
-                match detector.forward(img, width, height, detect_width, detect_height) {
-                    Ok(points) => return points,
-                    // Not fatal, but not nothing either: a detector that errors
-                    // reports no candidates, which is indistinguishable from a
-                    // frame with no code in it. Saying so is the difference
-                    // between a bug that is found and one that is not.
-                    Err(e) => eprintln!(
-                        "wxscan: the detector failed on a {detect_width}x{detect_height} input: {e}"
-                    ),
-                }
+            // The converted detector has a fixed 384x384 input. Upstream's
+            // variable 400x400 target works with tract's dynamic plans but not
+            // with the exported graph / ORT; keep the model's square.
+            let detect_width = 384;
+            let detect_height = 384;
+            match detector.forward(img, width, height, detect_width, detect_height) {
+                Ok(points) => return points,
+                // Not fatal, but not nothing either: a detector that errors
+                // reports no candidates, which is indistinguishable from a
+                // frame with no code in it. Saying so is the difference
+                // between a bug that is found and one that is not.
+                Err(e) => eprintln!(
+                    "wxscan: the detector failed on a {detect_width}x{detect_height} input: {e}"
+                ),
             }
             return Vec::new();
         }

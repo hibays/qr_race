@@ -12,7 +12,7 @@ finished product.
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
 | Rust tests | `cargo test --workspace` | **142 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
-| Flutter tests | `flutter test` | **30 passed** |
+| Flutter tests | `flutter test` | **29 passed** |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `pwsh -File scripts/build-wasm.ps1` then `flutter build web --release` | built |
 | Android build | `flutter build apk --debug` | built (arm64 Rust lib + Camera2 scanning + embedded server) |
@@ -67,15 +67,17 @@ finished product.
 ### WeChat CNN and tiered scanning
 
 - `qr_race_wechat` is our implementation under `crates/`, not a dependency on
-  the registry `wxscan` crate. ONNX weights load from `include_bytes!`; tract
-  runs detector + SR; tests cover the full pipeline, the tiered fast path and a
-  small synthetic symbol through the CNN path.
-- Device (OnePlus PLF110) HUD: clear-code fast path 2.7–9 ms; CNN 384
-  23–34 ms; scheduled 768 ~90 ms. Fast path still approaches 30 fps; CNN/768
-  frames are explicitly a lower-fps fallback.
-- Live small-QR screen test (11–14 vmin, ~70 px in the preview) did **not**
-  reliably decode even with the 768 tier, so the far/small scan-rate gain is
-  not claimed yet. Detector threshold/tile policy tuning remains.
+  the registry `wxscan` crate. ONNX weights load from `include_bytes!`; Android
+  uses ORT, desktop tract. Tests cover the full pipeline, the tiered fast path
+  and a small synthetic symbol through the CNN path.
+- Device (OnePlus PLF110) HUD with ORT: clear-code fast path 2.9–5.7 ms; CNN
+  384 6.3–15.9 ms; tiled far-code pass 48.3 ms (within the 60 ms budget).
+  A live 11-vmin QR on the PC screen decoded
+  `https://example.test/far-small-live`; the HUD showed fast 2.9 ms / CNN
+  48.3 ms. Clear codes never trigger CNN.
+- The live far/small case is now reproduced with ORT and the 2×2 tiled pass;
+  this is a single sample, not a measured detection-rate curve. Formal p95 and
+  dropped-frame measurements remain in `PROMPT_CLOSURE.md`.
 - Vendored sources (crates.io) are under `crates/wxscan`, `crates/cvlite`,
   `crates/wxing`, `crates/wxscan-tflite`, `crates/wxscan-ffi`; only the first
   three are built as path dependencies. See `docs/VENDORED.md`.
@@ -148,17 +150,15 @@ finished product.
 - Token login; five bad tokens → `429`; verified by hub/API tests and a live
   process. TOTP is no longer requested by the UI; the legacy verifier remains
   only for callers that explicitly send a code.
-- Room permissions: dark-room entry, host-only light/promote/demote/modules,
+- Room permissions: dark-room entry, host-only light/promote/demote,
   host/co-host-only publish — unit tests plus an HTTP end-to-end test.
 - WebSocket: real socket test with a single-use ticket.
 
 ### Persistence
 
-- SQLite store tests cover rooms, relays, modules, trimming, and reopening the
-  file.
+- SQLite store tests cover rooms, relays, trimming, and reopening the file.
 - Real-process restart: create/light/publish → stop → start → `GET /v1/room`
-  returns `lit=true` and the same relay bytes; module uploads and room selections
-  also survive.
+  returns `lit=true` and the same relay bytes.
 
 ### Transport security
 
@@ -171,13 +171,12 @@ finished product.
   pinning; a wrong fingerprint fails the handshake.
 - CLI integration test publishes through HTTPS using `--cacert`.
 
-### Modules
+### Extensions
 
-- Admin upload/list/source endpoints; members get `403`.
-- Room selection only accepts uploaded ids (`400` otherwise).
-- Uploads persist across restart.
-- Flutter: room module strip, host picker dialog, admin upload dialog; widget and
-  API tests cover them.
+- No Python/RustPython runtime or module upload UI. The internal extension
+  catalog (manifest/API/store) remains as an unused seam; it is not exposed in
+  Flutter and not part of acceptance. Extension points are documented in
+  `docs/EXTENSIONS.md`.
 
 ### Clients
 
@@ -186,19 +185,15 @@ finished product.
 - Desktop FFI: C ABI state/preview and Dart binding; widget tests for the scan
   page.
 - Flutter: connect (including certificate fingerprint), lobby, room, host
-  actions, module panels, scan page; 23 tests at desktop and phone sizes.
+  actions, scan page; 30 tests at desktop and phone sizes.
 
 ## Known gaps
 
-1. **CNN inference is not wired yet.** The ONNX models exist (SR verified,
-   detector structure-verified), but no ONNX Runtime backend implements the
-   `Detector`/`SuperResolver` traits and detector decode/NMS is pending. The
-   classical pyramid detector and bilinear super-res stand in behind the same
-   traits.
-2. **Module execution is blocked.** RustPython 0.6.0 panics during VM
-   initialization on this Windows host (`essential initialization failed`, or a
-   `codecs` recursion with the frozen stdlib); 0.5 is incompatible with the 0.6
-   stdlib. Distribution works; execution does not. See `docs/MODULES.md`.
+1. **CNN speed is within the relaxed budget.** Android ORT: fast 2.9–5.7 ms,
+   CNN 6.3–15.9 ms, tiled far 48.3 ms. Formal p95 and frame-drop traces are
+   still needed; the fast path remains the 30 fps guarantee.
+2. **No Python modules.** Removed from the product; only the unused internal
+   extension catalog and Rust extension seams remain.
 3. **Apple capture does not exist.** iOS/macOS cannot be built or verified on
    Windows; Android now has its own Camera2 capture and in-process server.
 4. **No browser UI run.** Edge headless drove the scan probe page, but the Flutter
@@ -230,6 +225,8 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
+
 
 
 

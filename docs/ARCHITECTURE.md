@@ -118,23 +118,26 @@ vendored under `crates/wxscan`, `crates/cvlite` and `crates/wxing` for study
 
 The scan worker runs tiers:
 
-1. **fast** — rxing on the full frame; clear codes stay at ~7 ms on device and
+1. **fast** — rxing on the full frame; clear codes stay at ~3–6 ms on device and
    the 30 fps path is never blocked by CNN work;
 2. **cnn** — only after a miss (every other frame), the WeChat detector at
    384×384, then each candidate is cropped from the **full-resolution** frame
    and decoded by rxing;
-3. **cnn+sr** — when a crop is smaller than 120×120, pad to square and run the
-   ONNX super-resolution net before decoding;
-4. **768 detector** — scheduled every fourth CNN pass for far/small symbols;
-   it preserves twice the module resolution at roughly 4× the detector cost,
-   so it is not used every frame.
+3. **cnn+sr** — when a crop is smaller than 120×120, pad to square, resize to
+   the SR graph's fixed 224×224, run the ONNX super-resolution net, then decode;
+4. **tiled far-code pass** — every fourth CNN attempt, split the frame into
+   four overlapping 2×2 tiles and run each through the same 384 detector. This
+   preserves small modules without needing a dynamic-shape model.
 
-The inference backend sits behind `wxscan::net::Net` (our vendored module);
-the current adapter is `TractNet` (pure Rust tract-onnx), with plans cached per
-input shape. ORT/st-zrt/Candle can replace `src/backend.rs` without touching
-the pipeline. Device measurements: fast path 2.7–9 ms; CNN 384 ~23–34 ms;
-768 ~90 ms. This means hard frames drop below 30 fps while the normal path
-stays at 30 fps.
+The backend sits behind `crate::net::Net`: Android uses `OrtNet` with ONNX
+Runtime 1.31 (`libonnxruntime.so` packaged in `jniLibs`); desktop uses the pure
+Rust tract backend as fallback. The session is mutex-guarded because ORT `run`
+takes `&mut Session`.
+
+Device HUD (OnePlus PLF110, ORT): fast 2.9–5.7 ms; CNN 384 6.3 ms (empty scene)
+to 15.9 ms (candidate + SR); tiled far-code pass 48.3 ms. A 11-vmin QR on the PC
+screen decoded `https://example.test/far-small-live` at 1280×720 in the tiled
+path, under the 60 ms CNN budget. Clear codes stay on the fast path.
 
 ## On-device numbers (OnePlus PLF110)
 

@@ -61,12 +61,6 @@ class _RoomScreenState extends State<RoomScreen> {
               ],
             ),
             actions: [
-              if (room != null && me?.role == 'host')
-                IconButton(
-                  tooltip: '配置模组',
-                  onPressed: () => _configureModules(room),
-                  icon: const Icon(Icons.extension_outlined),
-                ),
               if (room != null && (me?.canPublish ?? false))
                 IconButton(
                   tooltip: '扫码发布',
@@ -99,12 +93,6 @@ class _RoomScreenState extends State<RoomScreen> {
                     if (state.error != null) _ErrorBar(message: state.error!),
                     if (!room.lit && me?.role == 'host')
                       _UnlitBanner(onLight: state.lightRoom),
-                    if (room.modules.isNotEmpty || me?.role == 'host')
-                      _ModuleStrip(
-                        modules: room.modules,
-                        canEdit: me?.role == 'host',
-                        onEdit: () => _configureModules(room),
-                      ),
                     Expanded(child: _RoomBody(state: state, room: room)),
                   ],
                 ),
@@ -192,21 +180,6 @@ class _RoomScreenState extends State<RoomScreen> {
         SnackBar(content: Text(error.message)),
       );
     }
-  }
-
-  Future<void> _configureModules(RoomView room) async {
-    await widget.state.refreshModuleCatalog();
-    if (!mounted) return;
-    final selected = await showDialog<Set<String>>(
-      context: context,
-      builder: (_) => _ModulePicker(
-        catalog: widget.state.moduleCatalog,
-        selected: room.modules.toSet(),
-      ),
-    );
-    if (selected == null) return;
-    final sorted = selected.toList()..sort();
-    await widget.state.setModules(sorted);
   }
 
   Widget _loading(AppState state) {
@@ -704,140 +677,6 @@ class _UnlitBanner extends StatelessWidget {
           ),
         ],
       ),
-    );
-  }
-}
-
-class _ModuleStrip extends StatelessWidget {
-  const _ModuleStrip({
-    required this.modules,
-    required this.canEdit,
-    required this.onEdit,
-  });
-
-  final List<String> modules;
-  final bool canEdit;
-  final VoidCallback onEdit;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-      decoration: const BoxDecoration(
-        color: surface,
-        border: Border(bottom: BorderSide(color: line)),
-      ),
-      child: Row(
-        children: [
-          const Icon(Icons.extension_outlined, size: 16, color: muted),
-          const SizedBox(width: 8),
-          Expanded(
-            child: modules.isEmpty
-                ? const Text(
-                    '未配置模组',
-                    style: TextStyle(color: muted, fontSize: 12.5),
-                  )
-                : Wrap(
-                    spacing: 6,
-                    runSpacing: 6,
-                    children: [
-                      for (final id in modules) _ModuleChip(id: id),
-                    ],
-                  ),
-          ),
-          if (canEdit)
-            TextButton(
-              onPressed: onEdit,
-              child: Text(modules.isEmpty ? '配置' : '修改'),
-            ),
-        ],
-      ),
-    );
-  }
-}
-
-class _ModuleChip extends StatelessWidget {
-  const _ModuleChip({required this.id});
-
-  final String id;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-      decoration: BoxDecoration(
-        color: surfaceRaised,
-        borderRadius: BorderRadius.circular(999),
-        border: Border.all(color: line),
-      ),
-      child: Text(id, style: const TextStyle(fontSize: 12, color: ink)),
-    );
-  }
-}
-
-class _ModulePicker extends StatefulWidget {
-  const _ModulePicker({required this.catalog, required this.selected});
-
-  final List<ModuleInfo> catalog;
-  final Set<String> selected;
-
-  @override
-  State<_ModulePicker> createState() => _ModulePickerState();
-}
-
-class _ModulePickerState extends State<_ModulePicker> {
-  late final Set<String> _selected = {...widget.selected};
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: surfaceRaised,
-      title: const Text('房间模组'),
-      content: SizedBox(
-        width: 420,
-        child: widget.catalog.isEmpty
-            ? const Text(
-                '服务器还没有上传任何模组。管理员用 POST /v1/admin/modules 上传后再来配置。',
-                style: TextStyle(color: muted, height: 1.5),
-              )
-            : ListView(
-                shrinkWrap: true,
-                children: [
-                  for (final module in widget.catalog)
-                    CheckboxListTile(
-                      value: _selected.contains(module.id),
-                      onChanged: (checked) => setState(() {
-                        if (checked ?? false) {
-                          _selected.add(module.id);
-                        } else {
-                          _selected.remove(module.id);
-                        }
-                      }),
-                      controlAffinity: ListTileControlAffinity.leading,
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(module.id),
-                      subtitle: Text(
-                        '${module.version} · ${module.hooks.join('/')}'
-                        ' · ${module.capabilities.isEmpty ? '无能力' : module.capabilities.join('/')}',
-                        style: const TextStyle(color: muted, fontSize: 12),
-                      ),
-                    ),
-                ],
-              ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        TextButton(
-          onPressed: widget.catalog.isEmpty
-              ? null
-              : () => Navigator.of(context).pop(_selected),
-          child: const Text('保存'),
-        ),
-      ],
     );
   }
 }
