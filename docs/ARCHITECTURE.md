@@ -138,6 +138,9 @@ Device HUD (OnePlus PLF110, ORT): fast 2.9–6.8 ms; CNN 384 6.3 ms (empty scene
 to 15.9 ms (candidate + SR); tiled far-code pass 21.4 ms. A 11-vmin QR on the PC
 screen decoded `https://example.test/far-small-live` at 1280×720 in the tiled
 path, under the 60 ms CNN budget. Clear codes stay on the fast path.
+A real-camera run (1075 frames) measured HUD p95 17.4 ms, CNN 59.1 ms and
+5 dropped frames, and decoded the far QR. This is one run, not a multi-device
+rate curve.
 
 ## On-device numbers (OnePlus PLF110)
 
@@ -166,5 +169,6 @@ The next backend step is to replace `src/backend.rs` with an ORT session using
 the Android `libonnxruntime.so`, and to compare 384/768 schedules against the
 current tract implementation. TFLite/FFI upstream crates are vendored but not
 built. See `docs/MODELS.md` and `docs/VENDORED.md`.
+
 
 

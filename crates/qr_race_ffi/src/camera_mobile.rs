@@ -2,6 +2,7 @@
 //! through JNI, Rust scans them on a dedicated thread. Frames never enter Dart;
 //! Dart only polls hits, stats and the low-rate JPEG preview.
 
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, sync_channel};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
@@ -34,6 +35,8 @@ struct Shared {
     wechat_runs: u64,
     wechat_ms_last: f64,
     last_tier: Option<String>,
+    latencies: Vec<f64>,
+    max_ms: f64,
     hits: Vec<Hit>,
     preview: Vec<u8>,
     preview_seq: u64,
@@ -56,9 +59,11 @@ struct Session {
 }
 
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
+static DROPPED: AtomicU64 = AtomicU64::new(0);
 
 pub fn start(width: u32, height: u32) -> i32 {
     stop();
+    DROPPED.store(0, Ordering::Relaxed);
     let shared = Arc::new(Mutex::new(Shared {
         running: true,
         error: None,
@@ -70,6 +75,8 @@ pub fn start(width: u32, height: u32) -> i32 {
         wechat_runs: 0,
         wechat_ms_last: 0.0,
         last_tier: None,
+        latencies: Vec::new(),
+        max_ms: 0.0,
         hits: Vec::new(),
         preview: Vec::new(),
         preview_seq: 0,
@@ -123,6 +130,11 @@ pub fn start(width: u32, height: u32) -> i32 {
                             state.scans += 1;
                             state.scan_ms_last = elapsed_ms;
                             state.scan_ms_total += elapsed_ms;
+                            state.max_ms = state.max_ms.max(elapsed_ms);
+                            state.latencies.push(elapsed_ms);
+                            if state.latencies.len() > 512 {
+                                state.latencies.remove(0);
+                            }
                             state.width = frame.width;
                             state.height = frame.height;
                             state.rotation = frame.rotation;
@@ -225,7 +237,10 @@ pub fn push_gray(width: u32, height: u32, stride: u32, rotation: i32, data: &[u8
         rotation,
     }) {
         Ok(()) => 0,
-        Err(std::sync::mpsc::TrySendError::Full(_)) => 0,
+        Err(std::sync::mpsc::TrySendError::Full(_)) => {
+            DROPPED.fetch_add(1, Ordering::Relaxed);
+            0
+        }
         Err(_) => -1,
     }
 }
@@ -235,6 +250,13 @@ pub fn state_json() -> Vec<u8> {
         Ok(slot) => match slot.as_ref() {
             Some(session) => match session.shared.lock() {
                 Ok(state) => {
+                    let mut sorted = state.latencies.clone();
+                    sorted.sort_by(|a, b| a.total_cmp(b));
+                    let p95 = if sorted.is_empty() {
+                        0.0
+                    } else {
+                        sorted[((sorted.len() - 1) as f64 * 0.95).round() as usize]
+                    };
                     let json = serde_json::json!({
                         "running": state.running,
                         "error": state.error,
@@ -244,6 +266,9 @@ pub fn state_json() -> Vec<u8> {
                             "hits": state.hit_count,
                             "scan_ms_last": state.scan_ms_last,
                             "scan_ms_avg": if state.scans == 0 { 0.0 } else { state.scan_ms_total / state.scans as f64 },
+                            "p95_ms": p95,
+                            "max_ms": state.max_ms,
+                            "dropped": DROPPED.load(Ordering::Relaxed),
                             "wechat_runs": state.wechat_runs,
                             "wechat_ms_last": state.wechat_ms_last,
                             "last_tier": state.last_tier,
@@ -386,6 +411,15 @@ pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativePushFra
     // SAFETY: `i8` and `u8` have identical layout; we only read the slice.
     let bytes: &[u8] = unsafe { std::slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len()) };
     let _ = push_gray(width as u32, height as u32, stride as u32, rotation, bytes);
+}
+
+#[cfg(target_os = "android")]
+#[unsafe(no_mangle)]
+pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativeFrameDropped(
+    _env: jni::JNIEnv,
+    _class: jni::objects::JClass,
+) {
+    DROPPED.fetch_add(1, Ordering::Relaxed);
 }
 
 /// Starts the mobile scanner worker; camera frames arrive via JNI.

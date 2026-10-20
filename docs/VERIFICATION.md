@@ -77,10 +77,15 @@ finished product.
   21.4 ms. Clear codes never trigger CNN.
 - Formal device benchmark (20 fast / 10 CNN / 5 tiled iterations): fast p50
   6.8 ms, p95 6.9 ms; CNN 384 p50 5.5 ms, p95 6.9 ms; tiled far p50 21.4 ms,
-  p95 21.8 ms. This is a synthetic-frame trace, not a real-camera drop trace.
-- The live far/small case is now reproduced with ORT and the 2×2 tiled pass;
-  this is a single sample, not a measured detection-rate curve; a real-camera
-  dropped-frame trace remains in `PROMPT_CLOSURE.md`.
+  p95 21.8 ms.
+- Real camera run at 1280×720 (1075 frames, QR plus far/small QR): HUD p95
+  17.4 ms, last 14.6 ms, CNN 59.1 ms, dropped 5 frames; the far code
+  `https://example.test/far-small-live` was decoded. This is one measured run,
+  not a multi-device distribution.
+  ![Real-camera far-code HUD](assets/android-far-p95.png)
+- The live far/small case is now reproduced with ORT and the 2×2 tiled pass
+  (real-camera p95 17.4 ms, CNN 59.1 ms, 5/1075 dropped). This is one run, not
+  a multi-device detection-rate curve.
 - Vendored sources (crates.io) are under `crates/wxscan`, `crates/cvlite`,
   `crates/wxing`, `crates/wxscan-tflite`, `crates/wxscan-ffi`; only the first
   three are built as path dependencies. See `docs/VENDORED.md`.
@@ -192,9 +197,9 @@ finished product.
 
 ## Known gaps
 
-1. **CNN speed is within the relaxed budget.** Android ORT p95: fast 6.9 ms,
-   CNN 6.9 ms, tiled far 21.8 ms on synthetic frames. A real-camera dropped-frame
-   trace remains; the fast path is the 30 fps guarantee.
+1. **CNN speed is within the relaxed budget.** Synthetic p95: fast 6.9 ms,
+   CNN 6.9 ms, tiled far 21.8 ms. One real-camera run: p95 17.4 ms, CNN 59.1 ms,
+   5/1075 dropped, far code decoded. Multi-device/rate sweeps remain.
 2. **No Python modules.** Removed from the product; only the unused internal
    extension catalog and Rust extension seams remain.
 3. **Apple capture does not exist.** iOS/macOS cannot be built or verified on
@@ -228,6 +233,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 

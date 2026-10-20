@@ -12,7 +12,7 @@ status document, not a claim that every requirement is complete.
 | 3 | 30 fps fast scan path | Done for clear codes | device 2.7–9 ms at 1280×720 |
 | 4 | Multi-code / parallel crop decode | Partial | desktop `thread::scope`; mobile serial |
 | 5 | WeChat detector + SR + decode | Done (own pipeline) | `qr_race_wechat`, ORT Android / tract desktop |
-| 6 | Far/small-code scan-rate gain | Done (sample) | live 11-vmin QR decoded via 2×2 tiled pass; formal rate sweep pending |
+| 6 | Far/small-code scan-rate gain | Done (sample) | live far QR decoded; real-camera p95 17.4 ms, CNN 59.1 ms, 5/1075 dropped |
 | 7 | CNN backend speed selection | Done (tested: ORT/tract) | ORT 6–48 ms beats tract; st-zrt wraps ORT, lele N/A, Candle untested |
 | 8 | Camera capture: Android | Done | Camera2 Y plane → JNI → Rust; no frames in Dart |
 | 9 | Camera capture: desktop | Done | nokhwa backend |
@@ -54,9 +54,9 @@ Device-only checks:
 
 ## Remaining work, in order
 
-1. **Real-camera drop trace.** Synthetic p95 is measured (fast 6.9 ms, CNN
-   6.9 ms, tiled far 21.8 ms); collect a real-camera dropped-frame trace and a
-   far-code detection-rate sweep.
+1. **Multi-device/rate sweep.** Synthetic p95 (fast 6.9 ms, CNN 6.9 ms, tiled
+   far 21.8 ms) and one real-camera run (p95 17.4 ms, CNN 59.1 ms, 5/1075
+   dropped) are measured. A multi-device detection-rate sweep remains.
 2. **Apple capture.** `qr_race_capture_apple` + AVFoundation, then the same
    frame-never-in-Dart contract.
 3. **Optional follow-ups.** st-zrt is only an ORT wrapper; lele is not an
@@ -70,6 +70,7 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
+
 
 
 

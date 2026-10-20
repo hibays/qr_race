@@ -136,6 +136,7 @@ class CameraCapture(private val context: Context) {
     private fun onImage(source: ImageReader) {
         val image = source.acquireLatestImage() ?: return
         if (!busy.compareAndSet(false, true)) {
+            nativeFrameDropped()
             image.close()
             return
         }
@@ -197,6 +198,8 @@ class CameraCapture(private val context: Context) {
     }
 
     private external fun nativePushFrame(width: Int, height: Int, stride: Int, rotation: Int, data: ByteArray)
+
+    private external fun nativeFrameDropped()
 
     companion object {
         private const val TAG = "qr_race_camera"

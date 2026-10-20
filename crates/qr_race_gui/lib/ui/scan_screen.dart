@@ -349,7 +349,9 @@ class _StatusChip extends StatelessWidget {
         ? '启动中…'
         : '${snapshot!.width}×${snapshot!.height} · 帧 ${snapshot!.frames}'
             ' · ${snapshot!.scanMs.toStringAsFixed(1)}ms'
-            '${snapshot!.wechatRuns > 0 ? ' · CNN ${snapshot!.wechatMs.toStringAsFixed(1)}ms' : ''}';
+            ' · p95 ${snapshot!.p95Ms.toStringAsFixed(1)}ms'
+            '${snapshot!.wechatRuns > 0 ? ' · CNN ${snapshot!.wechatMs.toStringAsFixed(1)}ms' : ''}'
+            '${snapshot!.dropped > 0 ? ' · 丢 ${snapshot!.dropped}' : ''}';
     return Container(
       padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
       decoration: BoxDecoration(

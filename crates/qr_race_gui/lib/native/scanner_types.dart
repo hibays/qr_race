@@ -18,6 +18,9 @@ class ScannerSnapshot {
     this.wechatRuns = 0,
     this.wechatMs = 0,
     this.lastTier,
+    this.p95Ms = 0,
+    this.maxMs = 0,
+    this.dropped = 0,
   });
 
   factory ScannerSnapshot.fromJson(
@@ -43,6 +46,9 @@ class ScannerSnapshot {
       wechatRuns: stats['wechat_runs'] as int? ?? 0,
       wechatMs: (stats['wechat_ms_last'] as num?)?.toDouble() ?? 0,
       lastTier: stats['last_tier'] as String?,
+      p95Ms: (stats['p95_ms'] as num?)?.toDouble() ?? 0,
+      maxMs: (stats['max_ms'] as num?)?.toDouble() ?? 0,
+      dropped: stats['dropped'] as int? ?? 0,
     );
   }
 
@@ -62,6 +68,9 @@ class ScannerSnapshot {
   final int wechatRuns;
   final double wechatMs;
   final String? lastTier;
+  final double p95Ms;
+  final double maxMs;
+  final int dropped;
 }
 
 class ScanHit {
