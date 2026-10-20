@@ -24,6 +24,8 @@ const HOST_TOKEN: &str = "host-token-0123456789";
 const HOST_SECRET: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
 const MEMBER_TOKEN: &str = "member-token-0123456789";
 const MEMBER_SECRET: &str = "GEZDGNBVGY3TQOJQGEZDGNBVGY3TQOJQ";
+const MEMBER2_TOKEN: &str = "member2-token-0123456789";
+const MEMBER2_SECRET: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
 const ADDRESS: &str = "东京A区1B级103房";
 const PAYLOAD: &str = "https://example.test/relay?n=42";
 
@@ -88,6 +90,9 @@ async fn a_scanned_code_travels_from_camera_to_member_screen() {
     state
         .provision(UserId("m-1".into()), MEMBER_TOKEN, MEMBER_SECRET)
         .unwrap();
+    state
+        .provision(UserId("m-2".into()), MEMBER2_TOKEN, MEMBER2_SECRET)
+        .unwrap();
 
     let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
     let addr = listener.local_addr().unwrap();
@@ -97,6 +102,7 @@ async fn a_scanned_code_travels_from_camera_to_member_screen() {
     let base = format!("http://{addr}");
     let host = login(&http, &base, HOST_TOKEN, HOST_SECRET, &clock).await;
     let member = login(&http, &base, MEMBER_TOKEN, MEMBER_SECRET, &clock).await;
+    let member2 = login(&http, &base, MEMBER2_TOKEN, MEMBER2_SECRET, &clock).await;
     let encoded = utf8_percent_encode(ADDRESS, NON_ALPHANUMERIC).to_string();
 
     http.post(format!("{base}/v1/rooms"))
@@ -105,7 +111,7 @@ async fn a_scanned_code_travels_from_camera_to_member_screen() {
         .send()
         .await
         .unwrap();
-    for (action, session) in [("light", &host), ("join", &member)] {
+    for (action, session) in [("light", &host), ("join", &member), ("join", &member2)] {
         let response = http
             .post(format!("{base}/v1/room/{action}?address={encoded}"))
             .bearer_auth(session)
@@ -128,6 +134,18 @@ async fn a_scanned_code_travels_from_camera_to_member_screen() {
     let ticket = ticket_body["ticket"].as_str().unwrap();
     let url = format!("ws://{addr}/v1/room/events?address={encoded}&ticket={ticket}");
     let (mut socket, _) = connect_async(url).await.unwrap();
+    let ticket2_body: Value = http
+        .post(format!("{base}/v1/ws-ticket"))
+        .bearer_auth(&member2)
+        .send()
+        .await
+        .unwrap()
+        .json()
+        .await
+        .unwrap();
+    let ticket2 = ticket2_body["ticket"].as_str().unwrap();
+    let url2 = format!("ws://{addr}/v1/room/events?address={encoded}&ticket={ticket2}");
+    let (mut socket2, _) = connect_async(url2).await.unwrap();
 
     // 4. Publish exactly the bytes the scanner produced.
     let payload_b64 = data_encoding::BASE64.encode(&hit.raw);
@@ -155,6 +173,21 @@ async fn a_scanned_code_travels_from_camera_to_member_screen() {
     assert_eq!(
         data_encoding::BASE64.decode(delivered.as_bytes()).unwrap(),
         hit.raw
+    );
+
+    let frame2 = tokio::time::timeout(Duration::from_secs(5), socket2.next())
+        .await
+        .expect("the second member should receive the relay")
+        .expect("the socket should stay open")
+        .expect("the frame should decode");
+    let Message::Text(text2) = frame2 else {
+        panic!("expected a text frame, got {frame2:?}");
+    };
+    let event2: Value = serde_json::from_str(text2.as_str()).unwrap();
+    assert_eq!(event2["type"], "relay_published");
+    assert_eq!(
+        event2["relay"]["payload_b64"],
+        event["relay"]["payload_b64"]
     );
 
     server.abort();

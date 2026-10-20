@@ -168,7 +168,8 @@ finished product.
   only for callers that explicitly send a code.
 - Room permissions: dark-room entry, host-only light/promote/demote,
   host/co-host-only publish — unit tests plus an HTTP end-to-end test.
-- WebSocket: real socket test with a single-use ticket.
+- WebSocket: real socket test with a single-use ticket; end-to-end now has
+  host + two members, both receive the same relay bytes.
 
 ### Persistence
 
@@ -241,6 +242,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 
