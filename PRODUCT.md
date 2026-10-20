@@ -90,7 +90,8 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 - 2026-10-20 粗到精扫描（release，1280×720 场景）：整帧解码 p50 4.629ms；金字塔检测 2.331ms（解码降到 0.127ms）；金字塔 + 按需双线性超分 4.037ms（超分 1.319ms）。检测/超分是 trait 实现，CNN 模型到位后可替换。
 - 2026-10-20 wasm 与浏览器：wasm 扫描内核在 Node 中 1280×720 约 18–22ms；Edge headless + 假摄像头（Y4M）跑通 `getUserMedia → canvas → wasm`，640×480 命中，扫描约 1.8ms。物理相机实拍仍未验证。
 - 2026-10-20 二维码生成：rxing 编码 2048×2048 无损 WebP（纠错 M、quality 90 / method 4），与 rcrm bridge 参数一致；桌面 FFI（Dart → DLL，2452 字节，PIL 读为 2048²）与 wasm（Node 同尺寸）各验证一次。Flutter 用 `Image.memory` 显示，已移除 `qr_flutter`。
-- 2026-10-20 构建与测试：Rust 125 个测试、Flutter 23 个测试；Windows release、Web release、Android debug APK 均构建成功。Android APK 不含原生相机与 Rust 扫描库。
+- 2026-10-20 CNN 权重转换：自行解析 WeChat Caffe 权重并写 ONNX。SR 输入 1×1×224²、输出 1×1×447²，与独立 NumPy 前向最大误差 5.5e-06；检测器输入 1×1×384²，输出 mbox_loc/conf/priorbox（6912 priors），DetectionOutput 无 ONNX 等价物，decode/NMS 待实现。推理后端尚未接入扫描管线。
+- 2026-10-20 构建与测试：Rust 127 个测试、Flutter 23 个测试；Windows release、Web release、Android debug APK 均构建成功。Android APK 不含原生相机与 Rust 扫描库。
 - 2026-10-20 运维能力：SQLite 重启恢复、内置自签名 HTTPS（证书指纹固定）、登录失败 5 次锁定 60 秒、模组上传/分发/持久化均有过真实进程冒烟。
 - 没有真实活动数据、用户研究、性能实测数字、证言、客户案例或视觉资产。未来页面与文档不得编造这些。
 

@@ -38,6 +38,20 @@ finished product.
   (over the 33 ms budget) while the pyramid pipeline is 7.6 ms. Table in
   `docs/PERF.md`.
 
+### Model conversion
+
+- `tools/caffe_to_onnx.py` parses the WeChat Caffe prototxt/caffemodel with
+  generated bindings and writes ONNX directly (no conversion service). The SSD
+  extension fields are in `tools/caffe_wechat.proto`.
+- SR: `models/sr.onnx` (24 KB) is numerically verified against an independent
+  NumPy forward of the same weights, max abs diff **5.5e-06**, shape
+  `1×1×447×447` from `1×1×224×224`.
+- Detector: `models/detect.onnx` (1.19 MB) loads in ONNX Runtime and returns
+  `mbox_loc [1,27648]`, `mbox_conf_flatten [1,13824]`,
+  `mbox_priorbox [1,2,27648]`; softmax sums to 1. `DetectionOutput` is omitted;
+  decode/NMS is the next step. No Caffe runtime was available for detector
+  numeric parity (OpenCV 5 removed `readNetFromCaffe`).
+
 ## Feature evidence
 
 ### Scan pipeline
@@ -103,10 +117,11 @@ finished product.
 
 ## Known gaps
 
-1. **CNN detector and CNN super-resolution are not implemented.** The WeChat
-   Caffe weights are not ONNX, no ONNX QR-detector model is available offline,
-   and no inference runtime was added. The classical pyramid detector and
-   bilinear super-res stand in behind the same traits.
+1. **CNN inference is not wired yet.** The ONNX models exist (SR verified,
+   detector structure-verified), but no ONNX Runtime backend implements the
+   `Detector`/`SuperResolver` traits and detector decode/NMS is pending. The
+   classical pyramid detector and bilinear super-res stand in behind the same
+   traits.
 2. **Module execution is blocked.** RustPython 0.6.0 panics during VM
    initialization on this Windows host (`essential initialization failed`, or a
    `codecs` recursion with the frozen stdlib); 0.5 is incompatible with the 0.6

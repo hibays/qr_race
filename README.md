@@ -4,9 +4,9 @@
 
 产品事实记录在 [PRODUCT.md](PRODUCT.md)；原始需求见 [PROMPT.md](PROMPT.md)。
 
-## 现在有什么（M0–M24）
+## 现在有什么（M0–M26）
 
-工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/模组面板/管理员上传）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建、可运行的 wasm 扫描内核与 Web 相机接入、内置自签名 HTTPS、浏览器相机→wasm 扫码端到端验证、模组上传/分发、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android debug APK 构建、rxing 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）都已落地并通过测试；模组执行、移动/Apple 原生采集、CNN 检测器与真实二维码入镜尚未完成。
+工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/模组面板/管理员上传）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建、可运行的 wasm 扫描内核与 Web 相机接入、内置自签名 HTTPS、浏览器相机→wasm 扫码端到端验证、模组上传/分发、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android debug APK 构建、rxing 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）都已落地并通过测试；模组执行、移动/Apple 原生采集、CNN 推理接入与真实二维码入镜尚未完成。
 
 ```
 crates/
@@ -30,6 +30,8 @@ docs/PERF.md                   实测与解读（含相机采集数据）
 docs/MODULES.md                模组契约与 RustPython 试验记录（当前受阻）
 docs/WASM.md                   wasm 扫描内核：ABI、构建方式与运行时胶水缺口
 docs/VERIFICATION.md           最终审计：门禁、功能证据与已知缺口
+docs/MODELS.md                 WeChat Caffe → ONNX：转换、验证与推理接入计划
+models/                        sr.onnx / detect.onnx（Apache-2.0，见 models/README.md）
 tools/qr_bench.html            手工双码测试台（浏览器打开，用手机拍屏幕）
 .refs/                         gitignored 的参考副本（WeChat 权重、wxscan）
 ```
@@ -216,6 +218,8 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M23 真实相机帧验证：1080p 6.01ms / 720p 2.89ms，采集约 24–28fps（无码入镜）
 - [x] M24 二维码生成改用 rxing：2048² 无损 WebP（q90/m4），FFI 与 wasm 两路，移除 qr_flutter
 - [x] M25 程序化扰动纹理套件：10 个场景（噪声/模糊/低对比/梯度/旋转/透视/小码/多码/相机混合），bench --suite 与测试共用
+- [x] M26 Caffe→ONNX：自行转换 SR/检测器；SR 与独立 NumPy 前向最大误差 5.5e-06，检测器输出 raw heads（decode/NMS 待接入）
+- [ ] CNN 推理接入：ONNX Runtime 后端 + 检测器后处理 + 按需 SR
 - [ ] 模组执行（RustPython 阻塞，见 docs/MODULES.md）
 - [ ] 物理相机实拍；Web 预览流
 - [ ] 移动 / Apple 采集后端
