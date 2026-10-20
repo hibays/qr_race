@@ -6,7 +6,7 @@
 
 ## 现在有什么（M0–M30）
 
-工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/模组面板/管理员上传/桌面与 Android 一键自部署）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建、可运行的 wasm 扫描内核与 Web 相机接入、内置自签名 HTTPS、浏览器相机→wasm 扫码端到端验证、模组上传/分发、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android App（内置 Rust 服务端、Camera2→Rust 扫码、权限/所有文件访问引导、二维码显示）、按前缀的自动发布与动态槽位、外部 App scheme 跳转、rxing 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）都已落地并通过测试；模组执行、Apple 采集、CNN 推理接入尚未完成。
+工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/模组面板/管理员上传/桌面与 Android 一键自部署）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建、可运行的 wasm 扫描内核与 Web 相机接入、内置自签名 HTTPS、浏览器相机→wasm 扫码端到端验证、模组上传/分发、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android App（内置 Rust 服务端、Camera2→Rust 扫码、权限/所有文件访问引导、二维码显示）、按前缀的自动发布与动态槽位、外部 App scheme 跳转、rxing 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）、自实现微信 CNN 分层流水线（rxing 快路径 → CNN 384 → 全分辨率 crop → 小码 SR → 调度 768）都已落地并通过测试；模组执行、Apple 采集、ORT 后端替换与远码调优尚未完成。
 
 ```
 crates/
@@ -21,6 +21,8 @@ crates/
 ├── qr_race_store/             SQLite 持久化：房间、成员/角色、模组选择、接力
 ├── qr_race_tls/               自签名证书生成/复用 + hyper-util TLS 服务循环
 ├── qr_race_api/               HTTP + WebSocket 传输：会话、房间 API、事件广播
+├── qr_race_wechat/            自实现微信检测/超分流水线（tract ONNX 后端）
+├── wxscan/ cvlite/ wxing/     vendored 上游算法源码（学习/对照，路径依赖）
 ├── qr_race_cli/               扫描客户端（bin: qr_scan）：图片或相机 → 登录 → 发布接力
 ├── qr_race_gui/               Flutter 客户端：连接、大厅、房间接力墙、扫码页（手机/桌面同套界面）
 └── qr_race_bench/             基准 CLI：生成 fixture、跑耗时分布、输出 JSON
@@ -28,6 +30,10 @@ src/                           唯一的 server 二进制：serve / provision
 DEPLOY.md                      部署与真机测试：一键自部署、USB/Wi-Fi、权限、排错
 docs/API.md                    客户端契约（端点、状态码、事件、WS ticket）
 docs/PERF.md                   实测与解读（含相机采集数据）
+docs/ARCHITECTURE.md           客户端/相机/服务端/身份/动态码数据流与实测取舍
+docs/VENDORED.md               wxscan/cvlite/wxing 的 vendored 来源与构建状态
+docs/PROMPT_CLOSURE.md        PROMPT.md 分层收尾清单、门禁与剩余缺口
+docs/MODELS.md                 WeChat Caffe → ONNX：转换、验证与推理接入计划
 docs/MODULES.md                模组契约与 RustPython 试验记录（当前受阻）
 docs/WASM.md                   wasm 扫描内核：ABI、构建方式与运行时胶水缺口
 docs/VERIFICATION.md           最终审计：门禁、功能证据与已知缺口
@@ -232,16 +238,19 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M23 真实相机帧验证：1080p 6.01ms / 720p 2.89ms，采集约 24–28fps（无码入镜）
 - [x] M24 二维码生成改用 rxing：2048² 无损 WebP（q90/m4），FFI 与 wasm 两路，移除 qr_flutter
 - [x] M25 程序化扰动纹理套件：10 个场景（噪声/模糊/低对比/梯度/旋转/透视/小码/多码/相机混合），bench --suite 与测试共用
-- [x] M26 Caffe→ONNX：自行转换 SR/检测器；SR 与独立 NumPy 前向最大误差 5.5e-06，检测器输出 raw heads（decode/NMS 待接入）
-- [x] M27 桌面客户端一键自部署：自动 provision 服务器身份、写 TLS/SQLite 配置、启动服务器、展示 URL/指纹/token/secret，并可直接用主机账号连接
+- [x] M26 Caffe→ONNX：自行转换 SR/检测器；SR 与独立 NumPy 前向最大误差 5.5e-06，检测器 prior decode/NMS 已在 qr_race_wechat 实现
+- [x] M27 桌面客户端一键自部署：自动 provision 服务器身份、写 TLS/SQLite 配置、启动服务器、展示 URL/指纹/token，并可直接用主机账号连接
 - [x] M28 Android 真机：arm64 Rust 库打包（rxing 二维码显示）、相机权限弹窗 + 拒绝后“去设置”引导、adb reverse 下 TLS 指纹登录成功
 - [x] M29 Android 内置服务端：`qr_race_embedded` 编译进 `libqr_race_ffi.so`，UI 可选自签名/已有证书/HTTP，默认 18443；真机 TLS 指纹登录成功
 - [x] M30 Android Camera2 → JNI → Rust 扫描：720×1280 预览、约 6ms/帧，实拍二维码命中；自动发布、前缀动态槽位、外部 App scheme 跳转、连接链接预填
 - [x] M31 每房间动态成员：房主专用 `/v1/room/guest` 生成临时身份，邀请链接直接进房；服务端不再要求预置“成员账号”
 - [x] M32 桌面自部署进 bridge：Rust 通过 Windows Job Object 持有 server 子进程，关闭 GUI 自动清理；配置/SQLite 复用；桌面 CJK 字体回退对齐 rcrm；TOTP 2FA 从产品与初版需求移除
-- [ ] WeChat CNN 推理：ONNX Runtime Mobile + prior decode/NMS + 按需 SR
+- [x] M33 自实现 WeChat 分层：tract ONNX CNN 384 → 全分辨率 crop → 小码 SR → 调度 768；vendored wxscan/cvlite/wxing；真机 fast 2.7–9ms、CNN 23–34ms
+- [ ] ORT/st-zrt/Candle 后端替换与远码调优；CNN 层尚未达到 30fps
 - [ ] 模组执行（RustPython 阻塞，见 docs/MODULES.md）
 - [ ] Web 预览流；Apple 采集
 - [ ] 模组层：RustPython 0.6 在 Windows 初始化失败，暂缓（见 [docs/MODULES.md](docs/MODULES.md)）
 - [ ] Web/wasm 实时采集扫码
+
+
 

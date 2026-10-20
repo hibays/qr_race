@@ -1,9 +1,10 @@
-# 部署与真机测试（Windows + Android）
+# 部署与真机测试（Ubuntu + Windows + Android）
 
-这份文档假设你只有一台 Windows 电脑和一台安卓手机，不熟悉服务端部署。先选一条路：
+这份文档从一台 Ubuntu 中心服务器或一台 Windows 电脑 + 一台安卓手机开始。先选一条路：
 
 | 我想做什么 | 用哪个 | 需要服务器吗 |
 |---|---|---|
+| 多设备共用中心服务器 | Ubuntu + `deploy-server-linux.sh` | 需要（自签名 HTTPS） |
 | 手机自己开服并扫码 | Android App →「自部署服务器」 | 不需要电脑 |
 | 手机连电脑房间 | 桌面版「自部署服务器」+ 手机 App | 需要（电脑上自动启动） |
 | 只验证扫码/二维码 | CLI `qr_scan` / `qr_bench` | 不需要服务器 |
@@ -11,9 +12,34 @@
 
 > Android 现在可以：在 App 内启动编译进 `libqr_race_ffi.so` 的服务端（TLS 自签名/已有证书/HTTP 可选）、用 Camera2 采集并由 Rust 直接扫码、识别后自动发布、按前缀动态更新槽位、点击结果跳转微信/企业微信/浏览器。相机权限运行时申请；读取任意目录的证书需要“所有文件访问权限”。
 >
-> **扫码内核是 rxing，不是微信 CNN**：`models/*.onnx` 只是转换产物，当前没有 ONNX Runtime/模型执行；微信检测器与超分尚未接入。
->
-> ![Android 相机权限弹窗](assets/android-permission.png)
+> **扫码内核是分层算法**：rxing 全帧快路径；miss 时进入微信 CNN 检测器 + 全分辨率 crop + 小码 SR，再由 rxing 解码。768 检测只按调度触发，避免拖垮 30fps 快路径。详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 与 [docs/VENDORED.md](docs/VENDORED.md)。
+
+## 0. Ubuntu 中心服务器（推荐）
+
+```bash
+sudo apt install -y build-essential pkg-config libssl-dev python3
+cargo build --release -p qr_race_server
+
+# 安装为 systemd 服务；数据在 /var/lib/qr_race，--host 写进证书 SAN
+sudo PUBLIC_HOST=race.example.lan \
+  ./scripts/deploy-server-linux.sh --port 8443 --host race.example.lan
+```
+
+脚本生成 host token（已存在则复用）和自签名 `cert.pem/key.pem`，启动 systemd 服务，打印：
+
+```
+server URL:   https://<host>:8443
+host token:   ...
+fingerprint:  <64 hex>
+```
+
+指纹也可单独读取：
+
+```bash
+qr_race_server fingerprint --cert /var/lib/qr_race/cert.pem
+```
+
+客户端填 HTTPS URL + 指纹 + token。自签名链接若没有 64 位 hex 指纹，构造时直接拒绝，避免生成必然握手失败的链接。无 systemd 时用 `--foreground`；防火墙放行 8443/TCP，`config.json`/`key.pem` 按密码文件保护。
 
 ## 1. 最快路径：桌面版一键自部署
 

@@ -1,20 +1,51 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:qr_race_gui/api/connect_link.dart';
 
+const _fingerprint =
+    '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef';
+
 void main() {
-  test('builds and parses a connect link', () {
+  test('self-signed HTTPS link carries the pinned fingerprint', () {
     final link = buildConnectLink(
       server: 'https://127.0.0.1:8443',
-      fingerprint: 'abc123',
+      fingerprint: _fingerprint,
       token: 'secret-token',
-      secret: 'JBSWY3DPEHPK3PXP',
+      room: '东京A区1B级103房',
     );
     expect(link, startsWith('qrrace://connect?'));
+    expect(link, contains('fingerprint=$_fingerprint'));
     final parsed = parseConnectLink(link)!;
     expect(parsed.server, 'https://127.0.0.1:8443');
-    expect(parsed.fingerprint, 'abc123');
+    expect(parsed.fingerprint, _fingerprint);
     expect(parsed.token, 'secret-token');
-    expect(parsed.secret, 'JBSWY3DPEHPK3PXP');
+    expect(parsed.room, '东京A区1B级103房');
+  });
+
+  test('refuses a self-signed link without a fingerprint', () {
+    expect(
+      () => buildConnectLink(
+        server: 'https://192.168.0.3:8443',
+        token: 't',
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => buildConnectLink(
+        server: 'https://localhost:8443',
+        fingerprint: 'abc123',
+      ),
+      throwsArgumentError,
+    );
+  });
+
+  test('public HTTPS may omit the pinned fingerprint', () {
+    final link = buildConnectLink(
+      server: 'https://race.example.com',
+      token: 't',
+    );
+    final parsed = parseConnectLink(link)!;
+    expect(parsed.fingerprint, isNull);
+    expect(parsed.server, 'https://race.example.com');
   });
 
   test('accepts a bare query and rejects unrelated text', () {

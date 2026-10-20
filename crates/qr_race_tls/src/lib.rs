@@ -290,6 +290,10 @@ mod tests {
         let fingerprint = first.cert_fingerprint_sha256().unwrap();
         assert_eq!(fingerprint.len(), 64);
         assert!(fingerprint.chars().all(|c| c.is_ascii_hexdigit()));
+        assert_eq!(
+            fingerprint_pem_file(&settings.cert).as_deref(),
+            Some(fingerprint.as_str())
+        );
 
         let _ = std::fs::remove_dir_all(&dir);
     }

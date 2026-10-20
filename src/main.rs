@@ -30,6 +30,11 @@ enum Command {
         #[arg(long, default_value = "config.json")]
         config: PathBuf,
     },
+    /// Print the SHA-256 fingerprint of a PEM certificate (hex, no colons).
+    Fingerprint {
+        #[arg(long)]
+        cert: PathBuf,
+    },
     /// Mint a bearer token for one user.
     Provision {
         #[arg(long)]
@@ -95,6 +100,16 @@ async fn main() -> ExitCode {
             print_provision(&user, admin);
             ExitCode::SUCCESS
         }
+        Command::Fingerprint { cert } => match qr_race_tls::fingerprint_pem_file(&cert) {
+            Some(fingerprint) => {
+                println!("{fingerprint}");
+                ExitCode::SUCCESS
+            }
+            None => {
+                eprintln!("qr_race_server: cannot read certificate {}", cert.display());
+                ExitCode::FAILURE
+            }
+        },
         Command::Serve { config } => match serve(&config).await {
             Ok(()) => ExitCode::SUCCESS,
             Err(error) => {

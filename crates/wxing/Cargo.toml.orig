@@ -1,0 +1,31 @@
+[package]
+name = "wxing"
+description = "Rust port of the ZXing fork used by WeChat: QR binarization, finder pattern detection and decoding"
+keywords = ["qrcode", "zxing", "barcode", "decoder", "scanner"]
+categories = ["computer-vision", "encoding"]
+version = "0.1.0"
+edition = "2021"
+license = "Apache-2.0"
+repository = "https://github.com/wilinz/wxing"
+rust-version = "1.75"
+readme = "README.md"
+# Test fixtures are dev-only: the black-box corpus is what a checkout runs
+# `cargo test` against, and gen_fixtures.py is what regenerates it. Neither is
+# built by a caller of this crate. Matches cvlite.
+exclude = ["tests/**", "tools/**"]
+
+[dependencies]
+cvlite = "0.1.0"
+
+[dev-dependencies]
+# Decodes the black-box fixtures; the crate itself takes raw luminance bytes
+# and has no image format handling of its own.
+image = { version = "0.25", default-features = false, features = ["png"] }
+
+[features]
+default = []
+# Timing and counter instrumentation on hot paths, used by the wxscan profile example
+profiling = []
+
+[profile.release]
+opt-level = 3

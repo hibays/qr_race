@@ -3,6 +3,7 @@ members = [
     "crates/qr_race_core",
     "crates/qr_race_scan",
     "crates/qr_race_scan_wasm",
+    "crates/qr_race_wechat",
     "crates/qr_race_qr",
     "crates/qr_race_fixtures",
     "crates/qr_race_capture",
@@ -17,6 +18,12 @@ members = [
     "crates/qr_race_bench",
 ]
 resolver = "3"
+# Vendored reference crates are path dependencies of qr_race_wechat, not part
+# of our test/lint gate (they carry their own upstream tests).
+exclude = [
+    "crates/wxscan-tflite",
+    "crates/wxscan-ffi",
+]
 
 [workspace.package]
 version = "0.1.0"
@@ -27,6 +34,7 @@ rust-version = "1.85"
 [workspace.dependencies]
 qr_race_core = { path = "crates/qr_race_core" }
 qr_race_scan = { path = "crates/qr_race_scan" }
+qr_race_wechat = { path = "crates/qr_race_wechat" }
 qr_race_qr = { path = "crates/qr_race_qr" }
 qr_race_fixtures = { path = "crates/qr_race_fixtures" }
 qr_race_capture = { path = "crates/qr_race_capture" }
@@ -75,3 +83,4 @@ overflow-checks = true
 [profile.release]
 lto = true
 codegen-units = 1
+

@@ -108,6 +108,34 @@ CJK SC` as `fontFamilyFallback` (the rcrm approach), fixing CJK tofu on Windows.
   (WeChat/WeCom/browser), direct launch for custom schemes, and copies the link
   when no app handles it.
 
+## WeChat CNN: tiered, not the whole frame every frame
+
+`qr_race_wechat` is our copy of the WeChat pipeline; it does not depend on the
+registry `wxscan` crate. The algorithm modules (`detector`, `scale`,
+`decodermgr`, `wechat_qrcode`) live in the crate, with the upstream sources
+vendored under `crates/wxscan`, `crates/cvlite` and `crates/wxing` for study
+(see `docs/VENDORED.md`).
+
+The scan worker runs tiers:
+
+1. **fast** — rxing on the full frame; clear codes stay at ~7 ms on device and
+   the 30 fps path is never blocked by CNN work;
+2. **cnn** — only after a miss (every other frame), the WeChat detector at
+   384×384, then each candidate is cropped from the **full-resolution** frame
+   and decoded by rxing;
+3. **cnn+sr** — when a crop is smaller than 120×120, pad to square and run the
+   ONNX super-resolution net before decoding;
+4. **768 detector** — scheduled every fourth CNN pass for far/small symbols;
+   it preserves twice the module resolution at roughly 4× the detector cost,
+   so it is not used every frame.
+
+The inference backend sits behind `wxscan::net::Net` (our vendored module);
+the current adapter is `TractNet` (pure Rust tract-onnx), with plans cached per
+input shape. ORT/st-zrt/Candle can replace `src/backend.rs` without touching
+the pipeline. Device measurements: fast path 2.7–9 ms; CNN 384 ~23–34 ms;
+768 ~90 ms. This means hard frames drop below 30 fps while the normal path
+stays at 30 fps.
+
 ## On-device numbers (OnePlus PLF110)
 
 | requested capture | negotiated | scan p50-ish | notes |
@@ -123,11 +151,16 @@ margin for small/distant codes while staying well under the 33 ms budget in the
 measured runs. 640×480 is available with
 `--dart-define=SCAN_WIDTH=640 --dart-define=SCAN_HEIGHT=480` for battery/testing.
 
-## WeChat CNN models: not executed yet
+## WeChat CNN: what is actually running
 
-Scanning is **rxing plus classical pyramid/bilinear**, not the WeChat detector or
-super-resolution network. `models/detect.onnx` and `models/sr.onnx` are converted
-weights only; the project has no ONNX Runtime dependency and never loads them.
-Running the WeChat algorithm would require an inference backend (ONNX Runtime
-Mobile), detector prior decode/NMS, and crop-based SR. See `docs/MODELS.md`.
+`models/detect.onnx` and `models/sr.onnx` are loaded from `include_bytes!` by
+`qr_race_wechat`. The pipeline is real: prior decode/NMS, full-resolution crop,
+rxing decode, and on-demand SR run on device. It is **not** ONNX Runtime Mobile;
+the current backend is tract, which is why the 384 detector costs ~23–34 ms and
+the 768 pass ~90 ms. The fast rxing path remains the 30 fps guarantee.
+
+The next backend step is to replace `src/backend.rs` with an ORT session using
+the Android `libonnxruntime.so`, and to compare 384/768 schedules against the
+current tract implementation. TFLite/FFI upstream crates are vendored but not
+built. See `docs/MODELS.md` and `docs/VENDORED.md`.
 

@@ -15,6 +15,9 @@ class ScannerSnapshot {
     required this.previewSeq,
     required this.preview,
     required this.source,
+    this.wechatRuns = 0,
+    this.wechatMs = 0,
+    this.lastTier,
   });
 
   factory ScannerSnapshot.fromJson(
@@ -37,6 +40,9 @@ class ScannerSnapshot {
       previewSeq: json['preview_seq'] as int? ?? 0,
       preview: preview,
       source: json['source'] as String?,
+      wechatRuns: stats['wechat_runs'] as int? ?? 0,
+      wechatMs: (stats['wechat_ms_last'] as num?)?.toDouble() ?? 0,
+      lastTier: stats['last_tier'] as String?,
     );
   }
 
@@ -53,6 +59,9 @@ class ScannerSnapshot {
   final int previewSeq;
   final Uint8List? preview;
   final String? source;
+  final int wechatRuns;
+  final double wechatMs;
+  final String? lastTier;
 }
 
 class ScanHit {

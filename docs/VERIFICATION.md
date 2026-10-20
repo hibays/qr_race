@@ -10,9 +10,9 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **131 passed** |
+| Rust tests | `cargo test --workspace` | **142 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
-| Flutter tests | `flutter test` | **28 passed** |
+| Flutter tests | `flutter test` | **30 passed** |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `pwsh -File scripts/build-wasm.ps1` then `flutter build web --release` | built |
 | Android build | `flutter build apk --debug` | built (arm64 Rust lib + Camera2 scanning + embedded server) |
@@ -51,6 +51,34 @@ finished product.
   `mbox_priorbox [1,2,27648]`; softmax sums to 1. `DetectionOutput` is omitted;
   decode/NMS is the next step. No Caffe runtime was available for detector
   numeric parity (OpenCV 5 removed `readNetFromCaffe`).
+
+### Linux central server
+
+- Built `qr_race_server` for x86_64 Linux in WSL (Arch) and ran it with a
+  generated self-signed certificate on port 18480. `qr_race_server fingerprint
+  --cert` and the server log printed the same SHA-256
+  (`956fadb0…fe942b`); `curl --cacert` + token-only `POST /v1/auth` returned
+  `200`. `scripts/deploy-server-linux.sh --foreground` also generated config,
+  certificate, token and fingerprint.
+- The script prints URL, host token and fingerprint; certificate SANs include
+  the public host, LAN IP, localhost and 127.0.0.1. Ubuntu uses the same binary
+  (WSL Arch is the available Linux test environment, not a full Ubuntu host).
+
+### WeChat CNN and tiered scanning
+
+- `qr_race_wechat` is our implementation under `crates/`, not a dependency on
+  the registry `wxscan` crate. ONNX weights load from `include_bytes!`; tract
+  runs detector + SR; tests cover the full pipeline, the tiered fast path and a
+  small synthetic symbol through the CNN path.
+- Device (OnePlus PLF110) HUD: clear-code fast path 2.7–9 ms; CNN 384
+  23–34 ms; scheduled 768 ~90 ms. Fast path still approaches 30 fps; CNN/768
+  frames are explicitly a lower-fps fallback.
+- Live small-QR screen test (11–14 vmin, ~70 px in the preview) did **not**
+  reliably decode even with the 768 tier, so the far/small scan-rate gain is
+  not claimed yet. Detector threshold/tile policy tuning remains.
+- Vendored sources (crates.io) are under `crates/wxscan`, `crates/cvlite`,
+  `crates/wxing`, `crates/wxscan-tflite`, `crates/wxscan-ffi`; only the first
+  three are built as path dependencies. See `docs/VENDORED.md`.
 
 ### Self-host and Android device
 
@@ -202,5 +230,6 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 

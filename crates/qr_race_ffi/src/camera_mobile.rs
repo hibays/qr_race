@@ -9,6 +9,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use data_encoding::BASE64;
 use qr_race_capture::GrayFrame;
 use qr_race_scan::{RxingDecoder, ScanEngine};
+use qr_race_wechat::TieredScanner;
 use serde::Serialize;
 
 const PREVIEW_INTERVAL: Duration = Duration::from_millis(60);
@@ -30,6 +31,9 @@ struct Shared {
     hit_count: u64,
     scan_ms_last: f64,
     scan_ms_total: f64,
+    wechat_runs: u64,
+    wechat_ms_last: f64,
+    last_tier: Option<String>,
     hits: Vec<Hit>,
     preview: Vec<u8>,
     preview_seq: u64,
@@ -63,6 +67,9 @@ pub fn start(width: u32, height: u32) -> i32 {
         hit_count: 0,
         scan_ms_last: 0.0,
         scan_ms_total: 0.0,
+        wechat_runs: 0,
+        wechat_ms_last: 0.0,
+        last_tier: None,
         hits: Vec::new(),
         preview: Vec::new(),
         preview_seq: 0,
@@ -76,20 +83,41 @@ pub fn start(width: u32, height: u32) -> i32 {
         .name("qr-scanner-android".to_string())
         .spawn(move || {
             let engine = ScanEngine::new(Box::new(RxingDecoder::new()));
+            let tiered = TieredScanner::new().ok();
+            let mut frame_seq: u64 = 0;
             let mut last_preview: Option<Instant> = None;
             while let Ok(frame) = rx.recv() {
                 let Ok(gray) = GrayFrame::new(frame.width, frame.height, frame.data) else {
                     continue;
                 };
                 let started = Instant::now();
+                frame_seq += 1;
                 match engine.scan(&gray) {
                     Ok(outcome) => {
                         let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
-                        let hits: Vec<(String, Vec<u8>)> = outcome
+                        let mut hits: Vec<(String, Vec<u8>)> = outcome
                             .hits
                             .into_iter()
                             .map(|hit| (hit.text, hit.raw))
                             .collect();
+                        // Tiered fallback: rxing is the 30 fps fast path; only a
+                        // miss (about every other frame) wakes the CNN detector.
+                        if hits.is_empty() && frame_seq % 2 == 0 {
+                            if let Some(tiered) = &tiered {
+                                let cnn_started = Instant::now();
+                                // Most CNN passes use 384; every fourth pass
+                                // spends the 768 detector for far/small codes.
+                                let target = if frame_seq % 8 == 0 { 768 } else { 384 };
+                                let cnn = tiered.scan_cnn_at(&gray, target);
+                                let cnn_ms = cnn_started.elapsed().as_secs_f64() * 1000.0;
+                                hits.extend(cnn.hits.into_iter().map(|hit| (hit.text, hit.raw)));
+                                if let Ok(mut state) = worker_shared.lock() {
+                                    state.wechat_runs += 1;
+                                    state.wechat_ms_last = cnn_ms;
+                                    state.last_tier = Some(cnn.tier.to_string());
+                                }
+                            }
+                        }
                         if let Ok(mut state) = worker_shared.lock() {
                             state.frames += 1;
                             state.scans += 1;
@@ -216,6 +244,9 @@ pub fn state_json() -> Vec<u8> {
                             "hits": state.hit_count,
                             "scan_ms_last": state.scan_ms_last,
                             "scan_ms_avg": if state.scans == 0 { 0.0 } else { state.scan_ms_total / state.scans as f64 },
+                            "wechat_runs": state.wechat_runs,
+                            "wechat_ms_last": state.wechat_ms_last,
+                            "last_tier": state.last_tier,
                         },
                         "hits": state.hits,
                         "preview_seq": state.preview_seq,
@@ -252,7 +283,7 @@ fn empty_state() -> Vec<u8> {
     serde_json::to_vec(&serde_json::json!({
         "running": false,
         "error": null,
-        "stats": { "frames": 0, "scans": 0, "hits": 0, "scan_ms_last": 0.0, "scan_ms_avg": 0.0 },
+        "stats": { "frames": 0, "scans": 0, "hits": 0, "scan_ms_last": 0.0, "scan_ms_avg": 0.0, "wechat_runs": 0, "wechat_ms_last": 0.0, "last_tier": null },
         "hits": [],
         "preview_seq": 0,
         "source": null,

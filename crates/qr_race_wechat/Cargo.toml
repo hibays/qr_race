@@ -1,0 +1,18 @@
+[package]
+name = "qr_race_wechat"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[lib]
+# The ported module docs come from wxscan and reference its crate names.
+doctest = false
+
+[dependencies]
+qr_race_scan.workspace = true
+cvlite = { path = "../cvlite" }
+wxing = { path = "../wxing" }
+tract-onnx = "0.21"
+
+[dev-dependencies]
+qrcode = "0.14"

@@ -34,16 +34,17 @@ for the detector heads, or a comparison against an OpenCV 4 environment.
 
 ## What is still missing
 
-1. **Rust inference.** Add an ONNX Runtime backend (`ort`) implementing the
-   `Detector` and `SuperResolver` traits over these models. The engine is
-   already trait-based; only the backends are missing.
-2. **Detector postprocess.** Decode `mbox_loc` against `mbox_priorbox`
-   (CENTER_SIZE/variance), threshold `mbox_conf`, run NMS, and map boxes back to
-   frame coordinates.
-3. **SR integration.** Run `sr.onnx` only on small detected crops (the
-   on-demand stage), never per frame.
-4. **Platform packaging.** Ship the two ONNX files with the desktop/mobile
-   builds and expose them through the existing FFI/wasm layers.
+1. **Faster backend.** The current tract backend runs both models on device
+   (fast path remains rxing; CNN path 23–34 ms at 384, ~90 ms at 768). ORT /
+   st-zrt / Candle comparison is the next step; replace `src/backend.rs` behind
+   the `Net` trait.
+2. **Far-code tuning.** The tiered pipeline has 384 → full-res crop → SR →
+   scheduled 768 detection. Live far/small samples still need a tuning pass
+   (confidence threshold, tile/ROI policy) before claiming scan-rate gains.
+3. **Detector numeric parity.** A NumPy reference for the detector heads or an
+   OpenCV 4 comparison is still open.
+4. **Wasm/Apple packaging.** Model bytes compile into the native FFI library;
+   wasm and Apple backends are not wired.
 
 ## License
 
