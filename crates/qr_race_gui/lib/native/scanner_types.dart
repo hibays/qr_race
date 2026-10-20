@@ -83,14 +83,9 @@ class ScanHit {
 
   factory ScanHit.fromJson(Map<String, dynamic> json) => ScanHit(
         text: json['text'] as String? ?? '',
-        raw: base64Decode(json['raw_b64'] as String),
+        raw: _decodeBase64(json['raw_b64']),
         atMs: json['at_ms'] as int? ?? 0,
-        points: (json['points'] as List<dynamic>? ?? const [])
-            .map((point) {
-              final values = (point as List<dynamic>).cast<num>();
-              return (values[0].toDouble(), values[1].toDouble());
-            })
-            .toList(growable: false),
+        points: _decodePoints(json['points']),
       );
 
   final String text;
@@ -121,3 +116,24 @@ abstract class ScannerBackend {
   void dispose();
 }
 
+
+Uint8List _decodeBase64(Object? value) {
+  if (value is! String || value.isEmpty) return Uint8List(0);
+  try {
+    return base64Decode(value);
+  } on FormatException {
+    return Uint8List(0);
+  }
+}
+
+List<(double, double)> _decodePoints(Object? value) {
+  if (value is! List) return const [];
+  final points = <(double, double)>[];
+  for (final item in value) {
+    if (item is! List || item.length < 2) continue;
+    final x = item[0];
+    final y = item[1];
+    if (x is num && y is num) points.add((x.toDouble(), y.toDouble()));
+  }
+  return List.unmodifiable(points);
+}

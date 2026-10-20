@@ -165,7 +165,7 @@ class _ScanScreenState extends State<ScanScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             const Text('自动扫码', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
-            Text(widget.address, style: const TextStyle(fontSize: 12, color: muted)),
+            Text(widget.address, style: const TextStyle(fontSize: 12, color: Colors.white70)),
           ],
         ),
       ),
@@ -809,4 +809,5 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
 
