@@ -208,6 +208,12 @@ class CameraCapture(private val context: Context) {
     ): Size {
         val sizes = map?.getOutputSizes(ImageFormat.YUV_420_888)
         if (sizes.isNullOrEmpty()) return Size(width, height)
+        sizes.firstOrNull { it.width == width && it.height == height }?.let { return it }
+        // Prefer the largest supported size that does not exceed the requested
+        // 2K target. This avoids picking 4K on devices that also expose 1080p.
+        sizes.filter { it.width <= width && it.height <= height }
+            .maxByOrNull { it.width.toLong() * it.height }
+            ?.let { return it }
         return sizes.minByOrNull { abs(it.width - width) + abs(it.height - height) }
             ?: Size(width, height)
     }
