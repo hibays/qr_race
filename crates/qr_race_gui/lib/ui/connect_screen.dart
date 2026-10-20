@@ -87,7 +87,11 @@ class _ConnectScreenState extends State<ConnectScreen> {
         ],
       ),
     );
-    controller.dispose();
+    // Do not dispose `controller` here: the dialog's TextField can still be in
+    // its dismissal animation when this future completes. Disposing it then
+    // triggers "A TextEditingController was used after being disposed" and
+    // Flutter's red error screen. The controller is owned by the dialog for the
+    // rest of its lifetime.
     if (raw == null || !mounted) return;
     if (parseConnectLink(raw) == null) {
       ScaffoldMessenger.of(context).showSnackBar(

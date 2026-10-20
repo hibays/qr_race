@@ -124,6 +124,21 @@ void main() {
     expect(room.relays.single.payloadBytes, utf8.encode('hello relay'));
   });
 
+  testWidgets('arbitrary text in the link dialog does not throw', (tester) async {
+    final state = AppState();
+    await tester.pumpWidget(
+      MaterialApp(theme: buildTheme(), home: ConnectScreen(state: state)),
+    );
+
+    await tester.tap(find.text('从连接链接填充'));
+    await tester.pumpAndSettle();
+    await tester.enterText(find.byType(TextField).last, '随便一个链接');
+    await tester.tap(find.text('填充'));
+    await tester.pumpAndSettle();
+
+    expect(tester.takeException(), isNull);
+    expect(find.text('无法识别这个连接链接'), findsOneWidget);
+  });
   testWidgets('the connect screen asks for server and token', (tester) async {
     final state = AppState();
     await tester.pumpWidget(
@@ -150,4 +165,6 @@ http.Response _json(Map<String, Object?> body, {int status = 200}) {
     headers: {'content-type': 'application/json; charset=utf-8'},
   );
 }
+
+
 
