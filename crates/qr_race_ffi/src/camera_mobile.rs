@@ -446,7 +446,7 @@ fn rotate_luma(data: Vec<u8>, width: u32, height: u32, rotation: i32) -> (Vec<u8
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativePushFrame(
-    mut env: jni::JNIEnv,
+    env: jni::JNIEnv,
     _class: jni::objects::JClass,
     width: jni::sys::jint,
     height: jni::sys::jint,
@@ -528,3 +528,4 @@ mod tests {
         assert_eq!(&black[..3], &[16, 16, 16]);
     }
 }
+
