@@ -34,6 +34,21 @@ struct StateDto<'a> {
 /// camera failures surface through `qr_scanner_state`.
 #[unsafe(no_mangle)]
 pub extern "C" fn qr_scanner_start(camera: u32, width: u32, height: u32, fps: u32) -> i32 {
+    start(camera, width, height, fps, 0)
+}
+
+/// Desktop backend switch: 0 = hybrid, 1 = zxing-cpp only, 2 = WeChat CNN.
+#[unsafe(no_mangle)]
+pub extern "C" fn qr_scanner_start_backend(
+    camera: u32,
+    width: u32,
+    height: u32,
+    backend: u32,
+) -> i32 {
+    start(camera, width, height, 30, backend)
+}
+
+fn start(camera: u32, width: u32, height: u32, fps: u32, backend: u32) -> i32 {
     qr_scanner_stop();
 
     let shared = Arc::new(Mutex::new(SharedState::new()));
@@ -48,13 +63,14 @@ pub extern "C" fn qr_scanner_start(camera: u32, width: u32, height: u32, fps: u3
         .name("qr-scanner".to_string())
         .spawn(move || {
             match CameraSource::open_with(camera, CameraConfig { width, height, fps }) {
-                Ok(source) => crate::scanner::run_source(
+                Ok(source) => crate::scanner::run_source_with_backend(
                     source,
                     thread_shared.clone(),
                     thread_stop,
                     width,
                     height,
                     fps,
+                    backend,
                 ),
                 Err(error) => {
                     if let Ok(mut state) = thread_shared.lock() {

@@ -17,7 +17,10 @@ mod desktop_server;
 mod scanner;
 
 #[cfg(feature = "desktop-camera")]
-pub use camera::{qr_scanner_preview, qr_scanner_start, qr_scanner_state, qr_scanner_stop};
+pub use camera::{
+    qr_scanner_preview, qr_scanner_start, qr_scanner_start_backend, qr_scanner_state,
+    qr_scanner_stop,
+};
 #[cfg(all(not(feature = "desktop-camera"), target_os = "android"))]
 pub use camera_mobile::{
     qr_scanner_preview, qr_scanner_start, qr_scanner_start_backend, qr_scanner_state,

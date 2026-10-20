@@ -99,6 +99,7 @@ impl Default for SharedState {
 
 /// Runs a capture source to exhaustion or until `stop` is set. The same
 /// function serves the real camera and the tests' fake source.
+#[allow(dead_code)]
 pub fn run_source<S: CaptureSource>(
     source: S,
     shared: Arc<Mutex<SharedState>>,
@@ -106,6 +107,19 @@ pub fn run_source<S: CaptureSource>(
     width: u32,
     height: u32,
     fps: u32,
+) {
+    run_source_with_backend(source, shared, stop, width, height, fps, 0);
+}
+
+/// `backend`: 0 = hybrid, 1 = zxing-cpp only, 2 = WeChat CNN only.
+pub fn run_source_with_backend<S: CaptureSource>(
+    source: S,
+    shared: Arc<Mutex<SharedState>>,
+    stop: Arc<AtomicBool>,
+    width: u32,
+    height: u32,
+    fps: u32,
+    backend: u32,
 ) {
     let description = source.description().to_string();
     let negotiated = source.resolution();
@@ -124,6 +138,18 @@ pub fn run_source<S: CaptureSource>(
         }
     };
     let engine = ScanEngine::new(Box::new(ZxingDecoder::new()));
+    let tiered = if backend == 1 {
+        None
+    } else {
+        match qr_race_wechat::TieredScanner::new() {
+            Ok(scanner) => Some(scanner),
+            Err(error) => {
+                fail(&shared, format!("wechat backend: {error}"));
+                return;
+            }
+        }
+    };
+    let mut frame_seq: u64 = 0;
     let mut last_preview: Option<Instant> = None;
 
     {
@@ -148,19 +174,31 @@ pub fn run_source<S: CaptureSource>(
         };
 
         let started = Instant::now();
-        let outcome = match engine.scan(&frame) {
-            Ok(outcome) => outcome,
-            Err(error) => {
-                fail(&shared, format!("scan: {error}"));
-                return;
+        frame_seq += 1;
+        let mut hits: Vec<(String, Vec<u8>)> = if backend == 2 {
+            Vec::new()
+        } else {
+            match engine.scan(&frame) {
+                Ok(outcome) => outcome
+                    .hits
+                    .into_iter()
+                    .map(|hit| (hit.text, hit.raw))
+                    .collect(),
+                Err(error) => {
+                    fail(&shared, format!("scan: {error}"));
+                    return;
+                }
             }
         };
+        if hits.is_empty()
+            && backend != 1
+            && (backend == 2 || frame_seq.is_multiple_of(2))
+            && let Some(tiered) = &tiered
+        {
+            let cnn = tiered.scan_cnn_at(&frame, 384);
+            hits.extend(cnn.hits.into_iter().map(|hit| (hit.text, hit.raw)));
+        }
         let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
-        let hits = outcome
-            .hits
-            .into_iter()
-            .map(|hit| (hit.text, hit.raw))
-            .collect();
 
         {
             let mut state = shared.lock().expect("scanner state lock");
