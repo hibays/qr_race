@@ -60,38 +60,10 @@ class _ConnectScreenState extends State<ConnectScreen> {
   }
 
   Future<void> _askLink() async {
-    final controller = TextEditingController();
     final raw = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('从连接链接填充'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          minLines: 1,
-          maxLines: 4,
-          decoration: const InputDecoration(
-            labelText: 'qrrace://connect?...',
-            hintText: '粘贴服务器、指纹和 token',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('取消'),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.pop(context, controller.text),
-            child: const Text('填充'),
-          ),
-        ],
-      ),
+      builder: (context) => const _LinkDialog(),
     );
-    // Do not dispose `controller` here: the dialog's TextField can still be in
-    // its dismissal animation when this future completes. Disposing it then
-    // triggers "A TextEditingController was used after being disposed" and
-    // Flutter's red error screen. The controller is owned by the dialog for the
-    // rest of its lifetime.
     if (raw == null || !mounted) return;
     if (parseConnectLink(raw) == null) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -277,6 +249,50 @@ class _ErrorLine extends StatelessWidget {
         borderRadius: BorderRadius.circular(10),
       ),
       child: Text(message, style: const TextStyle(color: danger, height: 1.4)),
+    );
+  }
+}
+
+class _LinkDialog extends StatefulWidget {
+  const _LinkDialog();
+
+  @override
+  State<_LinkDialog> createState() => _LinkDialogState();
+}
+
+class _LinkDialogState extends State<_LinkDialog> {
+  final _controller = TextEditingController();
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: const Text('从连接链接填充'),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        minLines: 1,
+        maxLines: 4,
+        decoration: const InputDecoration(
+          labelText: 'qrrace://connect?...',
+          hintText: '粘贴服务器、指纹和 token',
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('取消'),
+        ),
+        FilledButton(
+          onPressed: () => Navigator.pop(context, _controller.text),
+          child: const Text('填充'),
+        ),
+      ],
     );
   }
 }

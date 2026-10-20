@@ -104,6 +104,34 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
+  testWidgets('the scan screen requests 2K and can switch backends', (tester) async {
+    final backend = RecordingBackend();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTheme(),
+        home: ScanScreen(
+          state: AppState.demo(),
+          address: '东京A区1B级103房',
+          backend: backend,
+          permission: const GrantedCameraPermission(),
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 20));
+
+    expect(backend.width, 2560);
+    expect(backend.height, 1440);
+    expect(backend.backend, 'hybrid');
+
+    await tester.tap(find.byTooltip('扫码后端'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('仅 zxing-cpp'));
+    await tester.pumpAndSettle();
+
+    expect(backend.backend, 'zxing');
+    await tester.pumpWidget(const SizedBox());
+  });
   testWidgets('a missing native scanner is explained, not crashed', (tester) async {
     final state = AppState.demo();
     await tester.pumpWidget(
@@ -190,3 +218,31 @@ class _DeniedPermission implements CameraPermission {
   }
 }
 
+
+class RecordingBackend implements ScannerBackend {
+  int width = 0;
+  int height = 0;
+  String backend = '';
+
+  @override
+  void start({
+    required int camera,
+    required int width,
+    required int height,
+    required int fps,
+    String backend = 'hybrid',
+  }) {
+    this.width = width;
+    this.height = height;
+    this.backend = backend;
+  }
+
+  @override
+  void stop() {}
+
+  @override
+  ScannerSnapshot poll() => fakeSnapshot();
+
+  @override
+  void dispose() {}
+}
