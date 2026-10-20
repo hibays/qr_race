@@ -1,13 +1,13 @@
 参考 G:\Projects\rcrm 的项目结构，自实现[wechat_qrscan](https://github.com/opencv/opencv_contrib/tree/5.x/modules/wechat_qrcode)作为扫码后端，支持多码同扫，无阻塞，界面上显示检测成功反馈框，尽可能使用成熟、热度、现代、活跃的库和部分的自实现，网络搜索。
 
 Target Platforms: Android	arm64-v8a, armeabi-v7a, x86_64；iOS，macOS，Linux, Windows；Web
-硬要求：rxing 快路径 30fps+（单帧 <33ms）；微信 CNN 分层路径允许放宽到 ≤60ms，且必须按需触发
+硬要求：zxing-cpp 快路径 30fps+（单帧 <33ms，彩色相机）；微信 CNN 分层路径允许放宽到 ≤60ms，且必须按需触发
 技术栈上追求高性能，混合原生，同时有wasm支持，通过脚本预设 features 或分 crate 实现各 target 不同后端同功能，用flutter实现多平台原生gui，注意各层粒度分布合理工程化。保留 Rust trait/事件/协议层的扩展点即可；不实现 Python 模组运行时，也不要求可拔插 server/client mod。
 各crate应置于 crates/ 下，最外层 src/ 应为单一 server 二进制
 
 https://github.com/wilinz/wxscan -- 插件 that 实现wechat_qrscan在flutter，可为参考
 注：
-其自实现的 cvlite 和 tflite 后端和 自 port rxing 都不怎么样，我建议直接使用rxing最新版，换掉这几个后端，网络搜索 onnx 的高性能后端，按平台选择
+其自实现的 cvlite 和 tflite 后端都不怎么样，扫码统一用 zxing-cpp；网络搜索 onnx 的高性能后端，按平台选择
 
 TDD 开发，要注意测试项目通过率和速度，使用 fuzz/smoke/unit/unify 测试，测试项目可以参考 tools/qr_bench.html 和自构建，以及各角度困难码和通信、plugin等
 
@@ -54,4 +54,5 @@ MVP 工作路径如：
 - 要注意松耦合等的工程化设计
 - 可以尝试在原生使用 st-zrt，或者 Candle 或 lele，当然可以分平台选择性能最优
 - wechat_qrscan 应该通过运行时策略启用，在 qr_bench 中分别测“只检测+解码”和“检测+超分+解码”的耗时分布。快路径 30fps、CNN 层 ≤60ms 的预算下，超分应当按需触发（例如检测框面积低于阈值才启用），而不是每帧无条件跑。
+
 

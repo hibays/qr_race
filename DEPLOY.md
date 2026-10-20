@@ -12,7 +12,7 @@
 
 > Android 现在可以：在 App 内启动编译进 `libqr_race_ffi.so` 的服务端（TLS 自签名/已有证书/HTTP 可选）、用 Camera2 采集并由 Rust 直接扫码、识别后自动发布、按前缀动态更新槽位、点击结果跳转微信/企业微信/浏览器。相机权限运行时申请；读取任意目录的证书需要“所有文件访问权限”。
 >
-> **扫码内核是分层算法**：rxing 全帧快路径；miss 时进入微信 CNN 检测器 + 全分辨率 crop + 小码 SR，再由 rxing 解码。768 检测只按调度触发，避免拖垮 30fps 快路径。详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 与 [docs/VENDORED.md](docs/VENDORED.md)。
+> **扫码内核是分层算法**：zxing-cpp 彩色快路径；miss 时进入微信 CNN 检测器 + 全分辨率 crop + 小码 SR，再由 zxing-cpp 解码。768 检测只按调度触发，避免拖垮 30fps 快路径。详见 [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) 与 [docs/VENDORED.md](docs/VENDORED.md)。
 
 ## 0. Ubuntu 中心服务器（推荐）
 
@@ -61,7 +61,7 @@ qr_race_server fingerprint --cert /var/lib/qr_race/cert.pem
 
    ![Android 已登录大厅](assets/android-lobby.png)
 
-   ![Android 房间里的 rxing 二维码](assets/android-room.png)
+   ![Android 房间里的二维码](assets/android-room.png)
 
 4. 手机加入时，让对方打开房主复制的 **邀请链接**：链接会填好服务器、指纹、token，自动登录并直接进入该房间。
 
@@ -269,4 +269,5 @@ pwsh -File scripts\deploy-server.ps1 -Port 8443
 - `config.json`、`cert.pem`、`key.pem`、`qr_race.db` 都含敏感信息，不要提交。
 - 管理员账号可以上传模组，只发给可信的人。
 - 当前 App 允许明文 HTTP 仅用于本地调试；正式使用请走 HTTPS。
+
 
