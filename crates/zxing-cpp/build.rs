@@ -21,6 +21,7 @@ fn main() -> miette::Result<()> {
 			.define("BUILD_SHARED_LIBS", "OFF")
 			.define("ZXING_READERS", "ON")
 			.define("ZXING_WRITERS", "ON")
+			.define("ZXING_WRITERS_OLD", "OFF")
 			.define("ZXING_EXPERIMENTAL_API", "OFF")
 			.define("ZXING_C_API", "ON")
 			.define("ZXING_USE_BUNDLED_ZINT", "ON")
@@ -62,3 +63,6 @@ fn main() -> miette::Result<()> {
 	// perl -0777 -i -pe 's/(pub const (?:ZXing_(?:Barcode|Image)Format_\w+: ZXing_(?:Barcode|Image)Format) = )(\d+);/$1 . sprintf("0x%04X;", $2)/ge' src/bindings.rs
 	Ok(())
 }
+
+
+
