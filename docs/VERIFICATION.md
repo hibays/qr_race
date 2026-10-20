@@ -16,6 +16,7 @@ finished product.
 | Windows build | `flutter build windows --release` | built |
 | Web build | `flutter build web --release` | built; scan/QR use vendored zxing-wasm |
 | Android build | `flutter build apk --debug` | built (arm64 Rust lib + 2K Camera2 + backend switch + embedded server) |
+| Desktop FFI probe | P/Invoke DLL, backend 1 | `qr_scanner_start_backend=0`; camera unavailable (`0x80070005`), error surfaced, stop returns within 1 s |
 
 ### QR generation
 
@@ -244,6 +245,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 

@@ -99,14 +99,21 @@ fn start(camera: u32, width: u32, height: u32, fps: u32, backend: u32) -> i32 {
     }
 }
 
-/// Stops the scanner and waits for its thread to finish.
+/// Stops the scanner and waits up to one second for its thread to finish.
+/// `Camera::frame()` and camera open are blocking calls; joining forever can
+/// hang the UI when the driver or device is unavailable.
 #[unsafe(no_mangle)]
 pub extern "C" fn qr_scanner_stop() {
     let session = SESSION.lock().ok().and_then(|mut slot| slot.take());
     if let Some(mut session) = session {
         session.stop.store(true, Ordering::SeqCst);
         if let Some(join) = session.join.take() {
-            let _ = join.join();
+            let (tx, rx) = std::sync::mpsc::channel();
+            std::thread::spawn(move || {
+                let _ = join.join();
+                let _ = tx.send(());
+            });
+            let _ = rx.recv_timeout(std::time::Duration::from_secs(1));
         }
     }
 }
