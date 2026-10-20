@@ -27,6 +27,7 @@ class WebScannerBackend implements ScannerBackend {
     required int width,
     required int height,
     required int fps,
+    String backend = 'hybrid',
   }) {
     _running = true;
     _error = null;
@@ -89,3 +90,5 @@ class WebScannerBackend implements ScannerBackend {
 }
 
 ScannerBackend createScannerBackend() => WebScannerBackend();
+
+

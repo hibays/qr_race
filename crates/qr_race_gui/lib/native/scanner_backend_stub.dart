@@ -17,6 +17,7 @@ class UnsupportedScannerBackend implements ScannerBackend {
     required int width,
     required int height,
     required int fps,
+    String backend = 'hybrid',
   }) {
     throw UnsupportedError(reason);
   }

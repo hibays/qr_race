@@ -159,6 +159,7 @@ class FailingBackend implements ScannerBackend {
     required int width,
     required int height,
     required int fps,
+    String backend = 'hybrid',
   }) {
     throw StateError('boom');
   }
@@ -188,3 +189,4 @@ class _DeniedPermission implements CameraPermission {
     settingsOpened = true;
   }
 }
+

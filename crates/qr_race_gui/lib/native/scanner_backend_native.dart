@@ -17,6 +17,13 @@ class FfiScannerBackend implements ScannerBackend {
     _start = _library.lookupFunction<
         Int32 Function(Uint32, Uint32, Uint32, Uint32),
         int Function(int, int, int, int)>('qr_scanner_start');
+    try {
+      _startBackend = _library.lookupFunction<
+          Int32 Function(Uint32, Uint32, Uint32, Uint32),
+          int Function(int, int, int, int)>('qr_scanner_start_backend');
+    } catch (_) {
+      _startBackend = null;
+    }
     _stop = _library.lookupFunction<Void Function(), void Function()>(
       'qr_scanner_stop',
     );
@@ -32,10 +39,12 @@ class FfiScannerBackend implements ScannerBackend {
 
   static const _channel = MethodChannel('app.qrrace.qr_race_gui/camera');
 
-  static const int _initialCapacity = 128 * 1024;
+  // The preview is now up to 1280px JPEG (~150 KB); state JSON is small.
+  static const int _initialCapacity = 2 * 1024 * 1024;
 
   final DynamicLibrary _library;
   late final int Function(int, int, int, int) _start;
+  int Function(int, int, int, int)? _startBackend;
   late final void Function() _stop;
   late final int Function(Pointer<Uint8>, int) _state;
   late final int Function(Pointer<Uint8>, int) _preview;
@@ -51,8 +60,16 @@ class FfiScannerBackend implements ScannerBackend {
     required int width,
     required int height,
     required int fps,
+    String backend = 'hybrid',
   }) {
-    final code = _start(camera, width, height, fps);
+    final mode = switch (backend) {
+      'zxing' => 1,
+      'wechat' => 2,
+      _ => 0,
+    };
+    final code = _startBackend != null
+        ? _startBackend!(camera, width, height, mode)
+        : _start(camera, width, height, fps);
     if (code != 0) {
       throw StateError('qr_scanner_start returned $code');
     }
@@ -121,5 +138,8 @@ class FfiScannerBackend implements ScannerBackend {
 }
 
 ScannerBackend createScannerBackend() => FfiScannerBackend();
+
+
+
 
 

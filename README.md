@@ -72,6 +72,9 @@ tools/qr_bench.html            手工双码测试台（浏览器打开，用手�
 识别核心是分层的：
 
 - **fast**：zxing-cpp 彩色 RGB → miss 再用 `try_harder` 彩色重试 → 仍 miss 才回退 luma/CNN；桌面合成套件 9–13ms，Android 彩色链路待真机重测；
+- **2K/彩色**：Android 请求 2560×1440（按设备能力回退），Camera2 传 Y/U/V，Rust 转 RGB；预览提升到 1280px JPEG；
+- **可切换后端**：扫码页可在混合 / 仅 zxing-cpp / 微信 CNN 间切换，FFI 走 `qr_scanner_start_backend`；
+- **全屏取景**：相机铺满屏幕，结果面板悬浮在底部；识别气泡按四角坐标贴在二维码附近并显示“已广播到房间/广播中/离线”。
 - **CNN**：fast miss 后进入 WeChat 检测器（384×384），候选框回全分辨率 crop，再由 zxing-cpp 解码；小 crop 按需跑 SR；
 - **远码**：每第 4 次 CNN 把画面切成 2×2 重叠块，各送 384 检测，保留小模块；
 - **后端**：Android 用 ORT（`libonnxruntime.so`，真机 CNN 5.5–21.4ms）；桌面用 tract 兜底；
@@ -242,6 +245,8 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [ ] Apple 采集（AVFoundation）
 - [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
 - [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+
+
 
 
 

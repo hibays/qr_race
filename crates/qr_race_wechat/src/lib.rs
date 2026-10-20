@@ -161,8 +161,18 @@ impl TieredScanner {
             // Try the full-resolution crop first. SR is only the fallback for
             // a crop that is genuinely too small; running it unconditionally
             // made the tiled path roughly three times slower.
-            let direct = self.decode_crop(&crop, width, height);
+            let mut direct = self.decode_crop(&crop, width, height);
             if !direct.is_empty() {
+                // zxing points are crop-local; shift them into frame
+                // coordinates so the UI can put the hit bubble on the QR.
+                let x0 = quad.iter().map(|p| p.0).fold(f32::MAX, f32::min).max(0.0) as f32;
+                let y0 = quad.iter().map(|p| p.1).fold(f32::MAX, f32::min).max(0.0) as f32;
+                for hit in &mut direct {
+                    for point in &mut hit.points {
+                        point[0] += x0;
+                        point[1] += y0;
+                    }
+                }
                 hits.extend(direct);
                 continue;
             }
@@ -443,3 +453,4 @@ mod tests {
         );
     }
 }
+

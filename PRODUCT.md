@@ -95,7 +95,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 - 2026-10-20 桌面自部署进 bridge：Rust bridge 在 Windows Job Object 中启动 `qr_race_server`，GUI 关闭/崩溃会杀掉子进程并释放端口；配置/账号/SQLite 复用 `%APPDATA%\qr_race\selfhost\desktop`。桌面字体按 rcrm 加 `Microsoft YaHei/PingFang SC/SimHei/Noto Sans CJK SC` 回退。TOTP 2FA 已从 PRODUCT/PROMPT/UI/API 流程移除（只保留 legacy 校验代码）。
 - 2026-10-20 自实现微信 CNN 分层流水线：`qr_race_wechat` 不再依赖 registry `wxscan`，算法模块与 ONNX 后端在本仓库（Android ORT / 桌面 tract）；zxing-cpp 全帧 fast path（彩色 RGB 优先，miss 先 try_harder 彩色重试），仍 miss 后 CNN 384 → 全分辨率 crop（zxing-cpp）→ 小码 SR → 每第 4 次 CNN 做 2×2 重叠分块检测。旧 rxing 真机数据：p95 fast 17.4ms、CNN 59.1ms；切到 zxing-cpp + YUV 彩色后待真机重测。`crates/cvlite` 仍 vendored 供 WeChat 缩放；wxscan/wxing 已删除。
 - 2026-10-20 Ubuntu 中心服务器：新增 `scripts/deploy-server-linux.sh`、`qr_race_server fingerprint --cert`，systemd/前台两种模式；WSL Linux 实测自签名 HTTPS 启动、指纹与日志/CLI 一致、token-only 认证 200。自签名连接链接构造时必须带 64-hex 指纹。
-- 2026-10-20 Android 真机：OnePlus PLF110（`3B163Q00LSK00000`）安装 debug APK；`adb reverse` + 自签名 HTTPS + 证书指纹 + token 登录成功进入大厅；房间里的接力二维码由 zxing-cpp WebP 正常显示。扫码页会弹出系统相机权限；拒绝后提供“重新申请/打开系统设置”，`MainActivity` 把不可再询问的拒绝映射为 permanentlyDenied 并跳转应用设置。相机采集已接入彩色：Camera2 Y/U/V 三平面经 JNI 进 Rust，Rust 转 RGB 供 zxing-cpp（同时保留 luma 给 CNN/预览）；1280×720 YUV 转换开销待真机测量。重复结果按文本/字节去重。
+- 2026-10-20 Android 真机：OnePlus PLF110（`3B163Q00LSK00000`）安装 debug APK；`adb reverse` + 自签名 HTTPS + 证书指纹 + token 登录成功进入大厅；房间里的接力二维码由 zxing-cpp WebP 正常显示。扫码页会弹出系统相机权限；拒绝后提供“重新申请/打开系统设置”，`MainActivity` 把不可再询问的拒绝映射为 permanentlyDenied 并跳转应用设置。相机采集已接入彩色与移动端 2K 请求（2560×1440，按设备能力回退）：Camera2 Y/U/V 三平面经 JNI 进 Rust，Rust 转 RGB 供 zxing-cpp（同时保留 luma 给 CNN/预览）；预览 1280px JPEG，扫码页全屏取景，识别气泡按四角坐标显示内容与广播状态。扫码后端可在混合/仅 zxing-cpp/微信 CNN 间切换。
 - 2026-10-20 运维能力：SQLite 重启恢复、内置自签名 HTTPS（证书指纹固定）、登录失败 5 次锁定 60 秒、房间/角色/接力持久化均有过真实进程冒烟。
 - 没有真实活动数据、用户研究、性能实测数字、证言、客户案例或视觉资产。未来页面与文档不得编造这些。
 
@@ -106,6 +106,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 3. **房间是真实地点。** 京、区、级、房对应现实场地，房间码是鉴权路径的一部分；成员可以在别处，接力让这种分离成立。
 4. **原生深度，薄接缝。** 帧与推理留在原生层，Flutter 只负责界面；模块在 server 与 client 两端都可拔插，接口要窄、可替换。
 5. **生产即标准。** TDD、可复现的基准、明确的许可与安全边界；不拿演示级实现充数。
+
 
 
 

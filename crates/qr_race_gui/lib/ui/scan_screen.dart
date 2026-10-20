@@ -36,6 +36,8 @@ class _ScanScreenState extends State<ScanScreen> {
   String? _initError;
   String? _permissionError;
   bool _requesting = true;
+  String _backendName = 'hybrid';
+  bool _listOnly = false;
 
   @override
   void initState() {
@@ -72,8 +74,9 @@ class _ScanScreenState extends State<ScanScreen> {
     try {
       final controller = ScanController(
         backend: widget.backend ?? createScannerBackend(),
-        width: const int.fromEnvironment('SCAN_WIDTH', defaultValue: 1280),
-        height: const int.fromEnvironment('SCAN_HEIGHT', defaultValue: 720),
+        width: const int.fromEnvironment('SCAN_WIDTH', defaultValue: 2560),
+        height: const int.fromEnvironment('SCAN_HEIGHT', defaultValue: 1440),
+        backendName: _backendName,
       );
       _controller = controller;
       controller.start();
@@ -122,11 +125,39 @@ class _ScanScreenState extends State<ScanScreen> {
     super.dispose();
   }
 
+  void _changeBackend(String backend) {
+    if (backend == _backendName) return;
+    _controller?.dispose();
+    _controller = null;
+    setState(() => _backendName = backend);
+    _startScanner();
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
     return Scaffold(
+      extendBodyBehindAppBar: true,
       appBar: AppBar(
+        backgroundColor: Colors.black.withValues(alpha: 0.42),
+        elevation: 0,
+        actions: [
+          PopupMenuButton<String>(
+            tooltip: '扫码后端',
+            initialValue: _backendName,
+            onSelected: _changeBackend,
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: 'hybrid', child: Text('混合：zxing-cpp + CNN')),
+              PopupMenuItem(value: 'zxing', child: Text('仅 zxing-cpp')),
+              PopupMenuItem(value: 'wechat', child: Text('微信 CNN（自实现）')),
+            ],
+          ),
+          IconButton(
+            tooltip: _listOnly ? '显示相机' : '只看结果',
+            onPressed: () => setState(() => _listOnly = !_listOnly),
+            icon: Icon(_listOnly ? Icons.camera_alt_outlined : Icons.view_list_outlined),
+          ),
+        ],
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -162,7 +193,12 @@ class _ScanScreenState extends State<ScanScreen> {
                             controller.fatalError != null) {
                           return _InitError(message: controller.fatalError!);
                         }
-                        return _Body(controller: controller);
+                        return _Body(
+                          controller: controller,
+                          listOnly: _listOnly,
+                          onToggleList: () =>
+                              setState(() => _listOnly = !_listOnly),
+                        );
                       },
                     ),
     );
@@ -234,106 +270,326 @@ class _PermissionBlocked extends StatelessWidget {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({required this.controller});
+  const _Body({
+    required this.controller,
+    required this.listOnly,
+    required this.onToggleList,
+  });
 
   final ScanController controller;
+  final bool listOnly;
+  final VoidCallback onToggleList;
 
   @override
   Widget build(BuildContext context) {
     final snapshot = controller.snapshot;
-    final preview = snapshot?.preview;
-
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        // Keep the preview large but never let it starve the result list.
-        final byWidth = constraints.maxWidth * 9 / 16;
-        final previewHeight =
-            (constraints.maxHeight * 0.45).clamp(140.0, 420.0);
-        final height = previewHeight < byWidth ? previewHeight : byWidth;
-
-        return Column(
-          children: [
-            SizedBox(
-              height: height,
-              width: double.infinity,
-              child: Container(
-                color: Colors.black,
-                child: Stack(
-                  fit: StackFit.expand,
-                  children: [
-                    if (preview != null)
-                      Image.memory(
-                        preview,
-                        fit: BoxFit.contain,
-                        gaplessPlayback: true,
-                      )
-                    else
-                      const Center(
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Icon(Icons.videocam_off_outlined,
-                                color: muted, size: 34),
-                            SizedBox(height: 8),
-                            Text(
-                              '等待相机预览…',
-                              style: TextStyle(color: muted, fontSize: 12.5),
-                            ),
-                          ],
-                        ),
-                      ),
-                    Positioned(
-                      left: 12,
-                      bottom: 12,
-                      child: _StatusChip(snapshot: snapshot),
-                    ),
+    if (listOnly) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 92),
+        child: _Results(
+          controller: controller,
+          snapshot: snapshot,
+          onToggleList: onToggleList,
+        ),
+      );
+    }
+    return Stack(
+      children: [
+        Positioned.fill(
+          child: Container(
+            color: Colors.black,
+            child: snapshot?.preview != null
+                ? Image.memory(
+                    snapshot!.preview!,
+                    fit: BoxFit.cover,
+                    gaplessPlayback: true,
+                  )
+                : const _CameraPlaceholder(),
+          ),
+        ),
+        Positioned.fill(
+          child: IgnorePointer(
+            child: DecoratedBox(
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                  colors: [
+                    Colors.black.withValues(alpha: 0.42),
+                    Colors.transparent,
+                    Colors.black.withValues(alpha: 0.52),
                   ],
+                  stops: const [0, 0.45, 1],
                 ),
               ),
             ),
-            if (controller.fatalError != null)
-              _Banner(message: controller.fatalError!, color: danger),
-            if (snapshot?.error != null)
-              _Banner(message: snapshot!.error!, color: danger),
-            if (controller.publishError != null)
-              _Banner(message: controller.publishError!, color: warn),
-            const Padding(
-              padding: EdgeInsets.fromLTRB(16, 16, 16, 8),
-              child: Row(
-                children: [
-                  Text(
-                    '识别结果 · 自动发布',
-                    style: TextStyle(
-                      fontSize: 12,
-                      letterSpacing: 1.2,
-                      color: muted,
-                    ),
-                  ),
-                  SizedBox(width: 8),
-                  Expanded(child: Divider(color: line)),
-                ],
+          ),
+        ),
+        Positioned.fill(
+          child: _HitOverlay(controller: controller, snapshot: snapshot),
+        ),
+        Positioned(
+          left: 12,
+          bottom: 12,
+          child: _StatusChip(snapshot: snapshot),
+        ),
+        Positioned(
+          left: 0,
+          right: 0,
+          bottom: 0,
+          height: MediaQuery.sizeOf(context).height * 0.34,
+          child: _Results(
+            controller: controller,
+            snapshot: snapshot,
+            onToggleList: onToggleList,
+            floating: true,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+class _CameraPlaceholder extends StatelessWidget {
+  const _CameraPlaceholder();
+
+  @override
+  Widget build(BuildContext context) {
+    return const Center(
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.videocam_off_outlined, color: muted, size: 34),
+          SizedBox(height: 8),
+          Text('等待相机预览…', style: TextStyle(color: muted, fontSize: 12.5)),
+        ],
+      ),
+    );
+  }
+}
+
+class _Results extends StatelessWidget {
+  const _Results({
+    required this.controller,
+    required this.snapshot,
+    required this.onToggleList,
+    this.floating = false,
+  });
+
+  final ScanController controller;
+  final ScannerSnapshot? snapshot;
+  final VoidCallback onToggleList;
+  final bool floating;
+
+  @override
+  Widget build(BuildContext context) {
+    final hits = snapshot?.hits ?? const <ScanHit>[];
+    final column = Column(
+      children: [
+        if (controller.fatalError != null)
+          _Banner(message: controller.fatalError!, color: danger),
+        if (snapshot?.error != null)
+          _Banner(message: snapshot!.error!, color: danger),
+        if (controller.publishError != null)
+          _Banner(message: controller.publishError!, color: warn),
+        Padding(
+          padding: const EdgeInsets.fromLTRB(16, 10, 8, 6),
+          child: Row(
+            children: [
+              const Text(
+                '识别结果 · 自动发布',
+                style: TextStyle(fontSize: 12, letterSpacing: 1.2, color: muted),
               ),
-            ),
-            Expanded(
-              child: snapshot == null || snapshot.hits.isEmpty
-                  ? const _NoHits()
-                  : ListView.separated(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
-                      itemCount: snapshot.hits.length,
-                      separatorBuilder: (_, _) => const SizedBox(height: 8),
-                      itemBuilder: (context, index) {
-                        final hit = snapshot.hits[index];
-                        return _HitTile(
-                          hit: hit,
-                          published: controller.isPublished(hit),
-                          autoPublish: controller.autoPublishEnabled,
-                        );
-                      },
-                    ),
+              const SizedBox(width: 8),
+              const Expanded(child: Divider(color: line)),
+              IconButton(
+                tooltip: '只看结果',
+                visualDensity: VisualDensity.compact,
+                onPressed: onToggleList,
+                icon: const Icon(Icons.fullscreen, size: 18),
+              ),
+            ],
+          ),
+        ),
+        Expanded(
+          child: hits.isEmpty
+              ? const _NoHits()
+              : ListView.separated(
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 16),
+                  itemCount: hits.length,
+                  separatorBuilder: (_, _) => const SizedBox(height: 8),
+                  itemBuilder: (context, index) {
+                    final hit = hits[index];
+                    return _HitTile(
+                      hit: hit,
+                      published: controller.isPublished(hit),
+                      autoPublish: controller.autoPublishEnabled,
+                    );
+                  },
+                ),
+        ),
+      ],
+    );
+    if (!floating) return column;
+    return Container(
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.66),
+        borderRadius: const BorderRadius.vertical(top: Radius.circular(18)),
+        border: Border(top: BorderSide(color: ink.withValues(alpha: 0.12))),
+      ),
+      child: column,
+    );
+  }
+}
+
+/// Draws the latest hit next to its QR corners. The preview is already rotated
+/// upright by Rust, and the points are in the unrotated sensor frame.
+class _HitOverlay extends StatelessWidget {
+  const _HitOverlay({required this.controller, required this.snapshot});
+
+  final ScanController controller;
+  final ScannerSnapshot? snapshot;
+
+  @override
+  Widget build(BuildContext context) {
+    final hits = snapshot?.hits ?? const <ScanHit>[];
+    if (hits.isEmpty) return const SizedBox.shrink();
+    final latest = hits.first;
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final size = Size(constraints.maxWidth, constraints.maxHeight);
+        final source = _SourceSize.of(snapshot);
+        final point = _mapToView(latest.points, snapshot, source, size);
+        final left = point == null
+            ? 16.0
+            : (point.dx - 130).clamp(8.0, size.width - 268.0);
+        final top = point == null
+            ? 96.0
+            : (point.dy - 54).clamp(78.0, size.height - 160.0);
+        return Stack(
+          children: [
+            Positioned(
+              left: left,
+              top: top,
+              child: _HitBubble(
+                hit: latest,
+                published: controller.isPublished(latest),
+                autoPublish: controller.autoPublishEnabled,
+              ),
             ),
           ],
         );
       },
+    );
+  }
+}
+
+class _SourceSize {
+  const _SourceSize(this.width, this.height);
+  final double width;
+  final double height;
+
+  static _SourceSize of(ScannerSnapshot? snapshot) {
+    if (snapshot == null || snapshot.width == 0 || snapshot.height == 0) {
+      return const _SourceSize(1, 1);
+    }
+    final rotation = ((snapshot.rotation % 360) + 360) % 360;
+    return rotation == 90 || rotation == 270
+        ? _SourceSize(snapshot.height.toDouble(), snapshot.width.toDouble())
+        : _SourceSize(snapshot.width.toDouble(), snapshot.height.toDouble());
+  }
+}
+
+Offset? _mapToView(
+  List<(double, double)> points,
+  ScannerSnapshot? snapshot,
+  _SourceSize source,
+  Size view,
+) {
+  if (points.isEmpty || snapshot == null) return null;
+  final rotation = ((snapshot.rotation % 360) + 360) % 360;
+  final raw = points.first;
+  final w = snapshot.width.toDouble();
+  final h = snapshot.height.toDouble();
+  final rotated = switch (rotation) {
+    90 => Offset(h - 1 - raw.$2, raw.$1),
+    180 => Offset(w - 1 - raw.$1, h - 1 - raw.$2),
+    270 => Offset(raw.$2, w - 1 - raw.$1),
+    _ => Offset(raw.$1, raw.$2),
+  };
+  final scale = (view.width / source.width) > (view.height / source.height)
+      ? view.width / source.width
+      : view.height / source.height;
+  final drawn = Size(source.width * scale, source.height * scale);
+  final offset = Offset(
+    (view.width - drawn.width) / 2,
+    (view.height - drawn.height) / 2,
+  );
+  return offset + Offset(rotated.dx * scale, rotated.dy * scale);
+}
+
+class _HitBubble extends StatelessWidget {
+  const _HitBubble({
+    required this.hit,
+    required this.published,
+    required this.autoPublish,
+  });
+
+  final ScanHit hit;
+  final bool published;
+  final bool autoPublish;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = hit.text.isEmpty ? '（二进制内容）' : hit.text;
+    final status = !autoPublish
+        ? '离线 · 未广播'
+        : published
+            ? '已广播到房间'
+            : '广播中…';
+    return ConstrainedBox(
+      constraints: const BoxConstraints(maxWidth: 260),
+      child: Container(
+        padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: published ? accent : Colors.white.withValues(alpha: 0.35),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text(
+              text,
+              maxLines: 3,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 13, height: 1.3, color: Colors.white),
+            ),
+            const SizedBox(height: 4),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Icon(
+                  published ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
+                  size: 13,
+                  color: published ? accent : muted,
+                ),
+                const SizedBox(width: 4),
+                Text(
+                  status,
+                  style: TextStyle(
+                    fontSize: 11,
+                    color: published ? accent : muted,
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
     );
   }
 }
@@ -550,3 +806,4 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+

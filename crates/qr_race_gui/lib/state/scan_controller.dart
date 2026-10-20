@@ -11,9 +11,10 @@ class ScanController extends ChangeNotifier {
   ScanController({
     required this.backend,
     this.camera = 0,
-    this.width = 1280,
-    this.height = 720,
+    this.width = 2560,
+    this.height = 1440,
     this.fps = 30,
+    this.backendName = 'hybrid',
     this.interval = const Duration(milliseconds: 120),
   });
 
@@ -22,6 +23,7 @@ class ScanController extends ChangeNotifier {
   final int width;
   final int height;
   final int fps;
+  final String backendName;
   final Duration interval;
 
   ScannerSnapshot? snapshot;
@@ -56,6 +58,7 @@ class ScanController extends ChangeNotifier {
         width: width,
         height: height,
         fps: fps,
+        backend: backendName,
       );
       _timer = Timer.periodic(interval, (_) => _poll());
     } catch (error) {
@@ -161,6 +164,7 @@ class FakeScannerBackend implements ScannerBackend {
     required int width,
     required int height,
     required int fps,
+    String backend = 'hybrid',
   }) {
     started = true;
   }
@@ -218,3 +222,4 @@ ScannerSnapshot fakeSnapshot({
     source: 'fake camera',
   );
 }
+

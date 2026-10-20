@@ -12,10 +12,10 @@ finished product.
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
 | Rust tests | `cargo test --workspace` | **134 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
-| Flutter tests | `flutter test` | **27 passed** |
+| Flutter tests | `flutter test` | **28 passed** |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `flutter build web --release` | built; scan/QR use vendored zxing-wasm |
-| Android build | `flutter build apk --debug` | built (arm64 Rust lib + Camera2 scanning + embedded server) |
+| Android build | `flutter build apk --debug` | built (arm64 Rust lib + 2K Camera2 + backend switch + embedded server) |
 
 ### QR generation
 
@@ -244,6 +244,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 

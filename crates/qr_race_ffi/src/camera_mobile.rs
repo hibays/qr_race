@@ -15,7 +15,7 @@ use qr_race_wechat::TieredScanner;
 use serde::Serialize;
 
 const PREVIEW_INTERVAL: Duration = Duration::from_millis(60);
-const PREVIEW_MAX_WIDTH: u32 = 480;
+const PREVIEW_MAX_WIDTH: u32 = 1280;
 const MAX_HITS: usize = 8;
 
 #[derive(Clone, Serialize)]
@@ -23,6 +23,8 @@ struct Hit {
     text: String,
     raw_b64: String,
     at_ms: u64,
+    /// Four corners in source-frame pixels, [tl, tr, br, bl].
+    points: Vec<[f32; 2]>,
 }
 
 struct Shared {
@@ -64,9 +66,10 @@ struct Session {
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 static DROPPED: AtomicU64 = AtomicU64::new(0);
 
-pub fn start(width: u32, height: u32) -> i32 {
+pub fn start(width: u32, height: u32, backend: u32) -> i32 {
     stop();
     DROPPED.store(0, Ordering::Relaxed);
+    let mode = backend.min(2);
     let shared = Arc::new(Mutex::new(Shared {
         running: true,
         error: None,
@@ -104,15 +107,21 @@ pub fn start(width: u32, height: u32) -> i32 {
                 };
                 let started = Instant::now();
                 frame_seq += 1;
+                let fast_enabled = mode != 2;
+                let cnn_enabled = mode != 1;
                 // The fast path gets RGB from Camera2. On a miss, retry the RGB
                 // frame with zxing-cpp's harder reader before waking the CNN;
                 // this is the main recognition-rate lever for dim/far codes.
-                let mut color_hits = frame
-                    .color
-                    .as_deref()
-                    .and_then(|rgb| decoder.decode_rgb(rgb, frame.width, frame.height).ok())
-                    .unwrap_or_default();
-                if color_hits.is_empty() {
+                let mut color_hits = if fast_enabled {
+                    frame
+                        .color
+                        .as_deref()
+                        .and_then(|rgb| decoder.decode_rgb(rgb, frame.width, frame.height).ok())
+                        .unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                if fast_enabled && color_hits.is_empty() {
                     color_hits = frame
                         .color
                         .as_deref()
@@ -121,7 +130,7 @@ pub fn start(width: u32, height: u32) -> i32 {
                         })
                         .unwrap_or_default();
                 }
-                let outcome = if color_hits.is_empty() {
+                let outcome = if fast_enabled && color_hits.is_empty() {
                     engine.scan(&gray)
                 } else {
                     Ok(qr_race_scan::ScanOutcome {
@@ -132,14 +141,14 @@ pub fn start(width: u32, height: u32) -> i32 {
                 match outcome {
                     Ok(outcome) => {
                         let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
-                        let mut hits: Vec<(String, Vec<u8>)> = outcome
+                        let mut hits: Vec<(String, Vec<u8>, Vec<[f32; 2]>)> = outcome
                             .hits
                             .into_iter()
-                            .map(|hit| (hit.text, hit.raw))
+                            .map(|hit| (hit.text, hit.raw, hit.points))
                             .collect();
-                        // Tiered fallback: zxing-cpp is the 30 fps fast path; only a
-                        // miss (about every other frame) wakes the CNN detector.
-                        if hits.is_empty() && frame_seq % 2 == 0 {
+                        // Tiered fallback: mode 0 runs it every other miss;
+                        // mode 2 (WeChat) runs it on every frame.
+                        if cnn_enabled && hits.is_empty() && (mode == 2 || frame_seq % 2 == 0) {
                             if let Some(tiered) = &tiered {
                                 let cnn_started = Instant::now();
                                 // Most CNN passes use 384; every fourth pass
@@ -147,7 +156,11 @@ pub fn start(width: u32, height: u32) -> i32 {
                                 let target = if frame_seq % 8 == 0 { 768 } else { 384 };
                                 let cnn = tiered.scan_cnn_at(&gray, target);
                                 let cnn_ms = cnn_started.elapsed().as_secs_f64() * 1000.0;
-                                hits.extend(cnn.hits.into_iter().map(|hit| (hit.text, hit.raw)));
+                                hits.extend(
+                                    cnn.hits
+                                        .into_iter()
+                                        .map(|hit| (hit.text, hit.raw, hit.points)),
+                                );
                                 if let Ok(mut state) = worker_shared.lock() {
                                     state.wechat_runs += 1;
                                     state.wechat_ms_last = cnn_ms;
@@ -168,7 +181,7 @@ pub fn start(width: u32, height: u32) -> i32 {
                             state.width = frame.width;
                             state.height = frame.height;
                             state.rotation = frame.rotation;
-                            for (text, raw) in hits {
+                            for (text, raw, points) in hits {
                                 let raw_b64 = BASE64.encode(&raw);
                                 if state
                                     .hits
@@ -183,6 +196,7 @@ pub fn start(width: u32, height: u32) -> i32 {
                                         text,
                                         raw_b64,
                                         at_ms: now_ms(),
+                                        points,
                                     },
                                 );
                                 state.hits.truncate(MAX_HITS);
@@ -337,7 +351,7 @@ fn preview_jpeg(frame: &GrayFrame, max_width: u32, rotation: i32) -> Option<Vec<
     let (data, width, height) = rotate_luma(data, width, height, rotation);
     let image = image::GrayImage::from_raw(width, height, data)?;
     let mut buffer = Vec::new();
-    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, 60);
+    let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, 78);
     encoder
         .encode_image(&image::DynamicImage::ImageLuma8(image))
         .ok()?;
@@ -484,7 +498,19 @@ pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativeFrameDr
 /// Starts the mobile scanner worker; camera frames arrive via JNI.
 #[unsafe(no_mangle)]
 pub extern "C" fn qr_scanner_start(_camera: u32, width: u32, height: u32, _fps: u32) -> i32 {
-    start(width, height)
+    start(width, height, 0)
+}
+
+/// Starts with an explicit backend: 0 = hybrid, 1 = zxing-cpp only,
+/// 2 = WeChat CNN only.
+#[unsafe(no_mangle)]
+pub extern "C" fn qr_scanner_start_backend(
+    _camera: u32,
+    width: u32,
+    height: u32,
+    backend: u32,
+) -> i32 {
+    start(width, height, backend)
 }
 
 #[unsafe(no_mangle)]

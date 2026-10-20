@@ -74,29 +74,44 @@ class ScannerSnapshot {
 }
 
 class ScanHit {
-  const ScanHit({required this.text, required this.raw, required this.atMs});
+  const ScanHit({
+    required this.text,
+    required this.raw,
+    required this.atMs,
+    this.points = const [],
+  });
 
   factory ScanHit.fromJson(Map<String, dynamic> json) => ScanHit(
         text: json['text'] as String? ?? '',
         raw: base64Decode(json['raw_b64'] as String),
         atMs: json['at_ms'] as int? ?? 0,
+        points: (json['points'] as List<dynamic>? ?? const [])
+            .map((point) {
+              final values = (point as List<dynamic>).cast<num>();
+              return (values[0].toDouble(), values[1].toDouble());
+            })
+            .toList(growable: false),
       );
 
   final String text;
   final Uint8List raw;
   final int atMs;
 
+  /// Four source-frame corners, [top-left, top-right, bottom-right, bottom-left].
+  final List<(double, double)> points;
+
   String get key => base64Encode(raw);
 }
 
 /// The platform scanner session, behind an interface so tests never load a
-/// native library and the web build has a real (if unsupported) implementation.
+/// native library and the web build has a real implementation.
 abstract class ScannerBackend {
   void start({
     required int camera,
     required int width,
     required int height,
     required int fps,
+    String backend = 'hybrid',
   });
 
   void stop();
@@ -105,3 +120,4 @@ abstract class ScannerBackend {
 
   void dispose();
 }
+
