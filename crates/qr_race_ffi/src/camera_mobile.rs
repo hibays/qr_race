@@ -116,7 +116,9 @@ pub fn start(width: u32, height: u32) -> i32 {
                     color_hits = frame
                         .color
                         .as_deref()
-                        .and_then(|rgb| hard_decoder.decode_rgb(rgb, frame.width, frame.height).ok())
+                        .and_then(|rgb| {
+                            hard_decoder.decode_rgb(rgb, frame.width, frame.height).ok()
+                        })
                         .unwrap_or_default();
                 }
                 let outcome = if color_hits.is_empty() {
