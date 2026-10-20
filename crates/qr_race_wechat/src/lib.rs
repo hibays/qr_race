@@ -409,4 +409,37 @@ mod tests {
                 .any(|hit| hit.text == "https://example.test/tiered-fast")
         );
     }
+
+    #[test]
+    fn perturbed_suite_reports_the_detection_rate() {
+        let scanner = TieredScanner::new().expect("tiered loads");
+        let mut scenes = 0;
+        let mut fully_matched = 0;
+        for scene in qr_race_fixtures::scenes() {
+            scenes += 1;
+            let outcome = scanner.scan(&scene.frame);
+            let texts: Vec<&str> = outcome.hits.iter().map(|hit| hit.text.as_str()).collect();
+            let matched = scene
+                .expected
+                .iter()
+                .filter(|expected| texts.contains(&expected.as_str()))
+                .count();
+            let complete = matched == scene.expected.len();
+            fully_matched += usize::from(complete);
+            println!(
+                "suite {}: tier={} hits={}/{} detect={:.1}ms decode={:.1}ms",
+                scene.name,
+                outcome.tier,
+                matched,
+                scene.expected.len(),
+                outcome.detect_ms,
+                outcome.decode_ms
+            );
+        }
+        // Diagnostic floor, not the final acceptance rate.
+        assert!(
+            fully_matched * 2 >= scenes,
+            "only {fully_matched}/{scenes} scenes fully decoded"
+        );
+    }
 }

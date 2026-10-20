@@ -22,3 +22,4 @@ ort = { version = "2.0.0-rc.15", default-features = false, features = ["load-dyn
 
 [dev-dependencies]
 qrcode = "0.14"
+qr_race_fixtures.workspace = true

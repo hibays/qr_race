@@ -10,7 +10,7 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **142 passed** |
+| Rust tests | `cargo test --workspace` | **143 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
 | Flutter tests | `flutter test` | **29 passed** |
 | Windows build | `flutter build windows --release` | built |
@@ -86,6 +86,9 @@ finished product.
 - The live far/small case is now reproduced with ORT and the 2×2 tiled pass
   (real-camera p95 17.4 ms, CNN 59.1 ms, 5/1075 dropped). This is one run, not
   a multi-device detection-rate curve.
+- Deterministic fixture suite: 10/10 scenes fully decoded (clean/noise/blur/
+  low-contrast/gradient/rotated/perspective/small/multi/camera-like), all on
+  the fast path; the separate synthetic small-code test exercises CNN/SR.
 - Vendored sources (crates.io) are under `crates/wxscan`, `crates/cvlite`,
   `crates/wxing`, `crates/wxscan-tflite`, `crates/wxscan-ffi`; only the first
   three are built as path dependencies. See `docs/VENDORED.md`.
@@ -233,6 +236,8 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
+
 
 
 

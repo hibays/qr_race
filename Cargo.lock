@@ -2888,6 +2888,7 @@ version = "0.1.0"
 dependencies = [
  "cvlite",
  "ort",
+ "qr_race_fixtures",
  "qr_race_scan",
  "qrcode",
  "tract-onnx",
