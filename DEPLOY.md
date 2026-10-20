@@ -34,7 +34,7 @@
 
    ![Android 房间里的 rxing 二维码](assets/android-room.png)
 
-4. 手机会员连接时，把自部署页面显示的 **URL、证书指纹、成员 token、TOTP secret** 填进手机连接页。
+4. 手机会员连接时，把自部署页面显示的 **URL、证书指纹、成员 token** 填进手机连接页；验证码用成员 secret 现场生成（见下一步）。
 
    - 手机需要先安装 APK：见第 2 节。
    - TOTP 验证码可以加到任意验证器 App（把 secret 手动录入），或在电脑上运行：
