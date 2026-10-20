@@ -27,7 +27,7 @@ pub trait SuperResolver: Send + Sync {
     fn name(&self) -> &'static str;
 }
 
-/// Something that turns a frame or crop into hits (rxing today).
+/// Something that turns a frame or crop into hits (zxing-cpp today).
 pub trait Decoder: Send + Sync {
     fn decode(&self, frame: &GrayFrame) -> Result<Vec<ScanHit>, ScanError>;
 

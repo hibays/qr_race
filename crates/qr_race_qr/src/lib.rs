@@ -1,13 +1,13 @@
-//! QR generation with rxing, aligned with rcrm's bridge:
+//! QR generation aligned with rcrm's bridge:
 //!
 //! - nominal **2048×2048** (2K) image, error correction **M**, UTF-8 payloads;
 //! - **lossless WebP (VP8L)**, quality 90 / method 4, L8 luma;
-//! - 0 = black module, 255 = white/quiet zone; rxing pads the quiet zone.
+//! - 0 = black module, 255 = white/quiet zone; the renderer pads four modules.
 //!
 //! The encoder runs in Rust and the client only displays bytes, so no Dart QR
 //! package is needed.
 
-use rxing::{BarcodeFormat, EncodeHints, MultiFormatWriter, Writer};
+use qrcode::{EcLevel, QrCode};
 use thiserror::Error;
 use zenwebp::{EncodeRequest, LosslessConfig, PixelLayout};
 
@@ -39,28 +39,26 @@ pub fn qr_webp(text: &str) -> Result<Vec<u8>, QrError> {
         return Err(QrError::EmptyPayload);
     }
 
-    let hints = EncodeHints {
-        ErrorCorrection: Some("M".to_string()),
-        ..EncodeHints::default()
-    };
-    let matrix = MultiFormatWriter
-        .encode_with_hints(
-            text,
-            &BarcodeFormat::QR_CODE,
-            QR_SIZE as i32,
-            QR_SIZE as i32,
-            &hints,
-        )
+    let code = QrCode::with_error_correction_level(text.as_bytes(), EcLevel::M)
         .map_err(|error| QrError::Encode(error.to_string()))?;
-
-    let width = matrix.getWidth();
-    let height = matrix.getHeight();
-    let mut luma = vec![0xffu8; (width as usize) * (height as usize)];
-    // rxing's check_in_bounds has inverted semantics: true means OUT of bounds.
-    for y in 0..height {
-        for x in 0..width {
-            if !matrix.check_in_bounds(x, y) && matrix.get(x, y) {
-                luma[(y * width + x) as usize] = 0;
+    let modules = code.width() as u32;
+    let total = modules + 8;
+    let scale = (QR_SIZE / total).max(1);
+    let side = total * scale;
+    let offset = (QR_SIZE - side) / 2;
+    let mut luma = vec![0xffu8; (QR_SIZE as usize) * (QR_SIZE as usize)];
+    let colors = code.to_colors();
+    for y in 0..modules {
+        for x in 0..modules {
+            if colors[(y * modules + x) as usize] != qrcode::Color::Dark {
+                continue;
+            }
+            for dy in 0..scale {
+                for dx in 0..scale {
+                    let px = offset + (x + 4) * scale + dx;
+                    let py = offset + (y + 4) * scale + dy;
+                    luma[(py * QR_SIZE + px) as usize] = 0;
+                }
             }
         }
     }
@@ -68,7 +66,7 @@ pub fn qr_webp(text: &str) -> Result<Vec<u8>, QrError> {
     let config = LosslessConfig::new()
         .with_quality(WEBP_QUALITY)
         .with_method(WEBP_METHOD);
-    EncodeRequest::lossless(&config, &luma, PixelLayout::L8, width, height)
+    EncodeRequest::lossless(&config, &luma, PixelLayout::L8, QR_SIZE, QR_SIZE)
         .encode()
         .map_err(|error| QrError::Webp(error.to_string()))
 }
@@ -91,12 +89,12 @@ pub fn webp_luma(bytes: &[u8]) -> Result<(Vec<u8>, u32, u32), QrError> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use qr_race_scan::{GrayFrame, RxingDecoder, ScanEngine};
+    use qr_race_scan::{GrayFrame, ScanEngine, ZxingDecoder};
 
     fn decode(bytes: &[u8]) -> String {
         let (luma, width, height) = webp_luma(bytes).expect("webp decodes");
         let frame = GrayFrame::new(width, height, luma).expect("frame builds");
-        let engine = ScanEngine::new(Box::new(RxingDecoder::new()));
+        let engine = ScanEngine::new(Box::new(ZxingDecoder::new()));
         let outcome = engine.scan(&frame).expect("scan runs");
         assert_eq!(outcome.hits.len(), 1, "exactly one symbol");
         outcome.hits[0].text.clone()

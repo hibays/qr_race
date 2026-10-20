@@ -14,7 +14,7 @@ use qr_race_api::AppState;
 use qr_race_core::UserId;
 use qr_race_hub::clock::{Clock, ManualClock};
 use qr_race_hub::totp;
-use qr_race_scan::{GrayFrame, RxingDecoder, ScanEngine};
+use qr_race_scan::{GrayFrame, ScanEngine, ZxingDecoder};
 use serde_json::{Value, json};
 use tokio::net::TcpListener;
 use tokio_tungstenite::connect_async;
@@ -75,7 +75,7 @@ async fn login(
 async fn a_scanned_code_travels_from_camera_to_member_screen() {
     // 1. "Camera": produce a frame containing one QR code and scan it.
     let frame = qr_frame(PAYLOAD, 4, 2);
-    let engine = ScanEngine::new(Box::new(RxingDecoder::new()));
+    let engine = ScanEngine::new(Box::new(ZxingDecoder::new()));
     let outcome = engine.scan(&frame).unwrap();
     assert_eq!(outcome.hits.len(), 1);
     let hit = &outcome.hits[0];

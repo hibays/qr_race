@@ -5,14 +5,14 @@
 ```
 Android Camera2 (Kotlin)            Desktop / Web
   ImageReader YUV_420_888             nokhwa / browser getUserMedia
-        │ Y plane only                       │
+        │ Y/U/V planes (color)               │
         ▼                                    ▼
   JNI nativePushFrame                 qr_race_capture / wasm
         │                                    │
         └──────────────┬─────────────────────┘
                        ▼
               qr_race_scan (Rust)
-        PyramidDetector → crop → rxing decode
+        PyramidDetector → crop → zxing-cpp decode
               (optional bilinear SR)
                        │
              hits / stats / preview
@@ -28,13 +28,15 @@ preview sequence) plus a low-rate JPEG preview.
 
 1. `CameraCapture.kt` opens the back camera with `ImageReader` at the requested
    size (default 1280×720) and YUV_420_888.
-2. On each image it copies **only the Y plane**, accounting for `rowStride`.
-3. `nativePushFrame(width, height, stride, sensorOrientation, luma)` crosses JNI
-   once. Rust copies the plane into a bounded `sync_channel(2)` queue. If the
-   worker is behind, the frame is dropped instead of queued.
-4. The Rust worker runs `ScanEngine` (pyramid detector + rxing). Frames are
-   **not rotated** here; QR detection is rotation-independent. Sensor rotation
-   is metadata used only when encoding the preview.
+2. On each image it copies **Y, U and V planes** (tightly packed, honoring `rowStride`/`pixelStride`).
+3. `nativePushFrame(width, height, rotation, y, u, v)` crosses JNI once. Rust
+   converts YUV to tightly packed RGB, keeps luma, and queues both in a bounded
+   `sync_channel(2)`. If the worker is behind, the frame is dropped instead of
+   queued.
+4. The Rust worker first decodes RGB with zxing-cpp. On a miss it runs
+   `ScanEngine` (pyramid detector + zxing-cpp on luma), then the CNN tiers.
+   Frames are **not rotated** here; QR detection is rotation-independent.
+   Sensor rotation is metadata used only when encoding the preview.
 5. The preview is downscaled to at most 480 px, rotated at that small size, and
    JPEG-encoded every 60 ms. Scanning never waits for the preview.
 6. `addImageAvailableListener` uses `acquireLatestImage()` and a busy flag, so
@@ -52,9 +54,8 @@ symbol in view produces one hit.
   Flutter's `Image.memory` needs an encoded image.
 - `qr_race_ffi` now builds `qr_race_scan` with `default-features = false`, so
   the scan crate's own PNG/BMP file decoders are gone.
-- A transitive `png` still appears through `rxing → imageproc`, but it is not
-  called by the camera path. Removing it would require patching rxing; it does
-  not affect per-frame work.
+- zxing-cpp is C++ and pulls no Rust `png`/`imageproc` path; the only Rust
+  image dependency is the preview JPEG encoder.
 
 ## Embedded server (Android self-host)
 
@@ -113,16 +114,16 @@ CJK SC` as `fontFamilyFallback` (the rcrm approach), fixing CJK tofu on Windows.
 `qr_race_wechat` is our copy of the WeChat pipeline; it does not depend on the
 registry `wxscan` crate. The algorithm modules (`detector`, `scale`,
 `decodermgr`, `wechat_qrcode`) live in the crate, with the upstream sources
-vendored under `crates/wxscan`, `crates/cvlite` and `crates/wxing` for study
+vendored under `crates/cvlite` only; wxscan/wxing were deleted after the zxing-cpp swap
 (see `docs/VENDORED.md`).
 
 The scan worker runs tiers:
 
-1. **fast** — rxing on the full frame; clear codes stay at ~3–6 ms on device and
+1. **fast** — zxing-cpp on the full frame (RGB color from Camera2, luma fallback); desktop synthetic suite is 10–13 ms, Android re-measure pending and
    the 30 fps path is never blocked by CNN work;
 2. **cnn** — only after a miss (every other frame), the WeChat detector at
    384×384, then each candidate is cropped from the **full-resolution** frame
-   and decoded by rxing;
+   and decoded by zxing-cpp;
 3. **cnn+sr** — when a crop is smaller than 120×120, pad to square, resize to
    the SR graph's fixed 224×224, run the ONNX super-resolution net, then decode;
 4. **tiled far-code pass** — every fourth CNN attempt, split the frame into
@@ -161,14 +162,18 @@ measured runs. 640×480 is available with
 
 `models/detect.onnx` and `models/sr.onnx` are loaded from `include_bytes!` by
 `qr_race_wechat`. The pipeline is real: prior decode/NMS, full-resolution crop,
-rxing decode, and on-demand SR run on device. It is **not** ONNX Runtime Mobile;
+zxing-cpp decode, and on-demand SR run on device. It is **not** ONNX Runtime Mobile;
 the current backend is tract, which is why the 384 detector costs ~23–34 ms and
-the 768 pass ~90 ms. The fast rxing path remains the 30 fps guarantee.
+the 768 pass ~90 ms. The fast zxing-cpp path remains the 30 fps target; color/Android timing is being re-measured.
 
 The next backend step is to replace `src/backend.rs` with an ORT session using
 the Android `libonnxruntime.so`, and to compare 384/768 schedules against the
 current tract implementation. TFLite/FFI upstream crates are vendored but not
 built. See `docs/MODELS.md` and `docs/VENDORED.md`.
+
+
+
+
 
 
 

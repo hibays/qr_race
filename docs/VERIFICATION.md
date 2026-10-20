@@ -10,22 +10,22 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **133 passed** |
+| Rust tests | `cargo test --workspace` | **134 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
 | Flutter tests | `flutter test` | **27 passed** |
 | Windows build | `flutter build windows --release` | built |
-| Web build | `pwsh -File scripts/build-wasm.ps1` then `flutter build web --release` | built |
+| Web build | `flutter build web --release` | built, but wasm scanner is excluded after the zxing-cpp swap |
 | Android build | `flutter build apk --debug` | built (arm64 Rust lib + Camera2 scanning + embedded server) |
 
 ### QR generation
 
-- rxing encodes room/relay codes as 2048×2048 **lossless WebP** (error
+- The pure-Rust `qrcode` crate encodes room/relay codes as 2048×2048 **lossless WebP** (error
   correction M, quality 90 / method 4, L8), the same parameters as rcrm's
   bridge. `qr_race_qr` tests decode the WebP back and scan it with the pipeline.
 - Native FFI: `dart run tool/qr_probe.dart` against the release DLL produced a
   2452-byte RIFF/VP8L file that Pillow reads as 2048×2048.
-- Web: the wasm export `qr_webp` produced the same 2048×2048 WebP in Node; the
-  Flutter web build uses it through `camera_scan.js`.
+- Web QR rendering used the old wasm export; after the zxing-cpp swap the wasm
+  crate is excluded and Web scanning/QR generation need an Emscripten rebuild.
 - The Flutter UI renders these bytes with `Image.memory` and
   `FilterQuality.none`; `qr_flutter` was removed.
 
@@ -33,10 +33,10 @@ finished product.
 
 - `qr_race_fixtures` generates ten deterministic scenes (texture, noise, blur,
   low contrast, gradient, rotation, perspective, small, multi-code, camera-like)
-  from rxing codes; tests assert every expected payload decodes.
-- `qr_bench --suite` reports per-scene timings; whole-frame multi-code is 44 ms
-  (over the 33 ms budget) while the pyramid pipeline is 7.6 ms. Table in
-  `docs/PERF.md`.
+  from `qrcode` symbols; tests assert every expected payload decodes.
+- `qr_bench --suite` with zxing-cpp: clean 10.4 ms, rotated 25.2 ms, multi
+  29.6 ms, camera-like 15.9 ms (1280×720, single thread). All 10 scenes still
+  decode; the benchmark is the whole-frame fast path, not CNN.
 
 ### Model conversion
 
@@ -70,22 +70,22 @@ finished product.
   the registry `wxscan` crate. ONNX weights load from `include_bytes!`; Android
   uses ORT, desktop tract. Tests cover the full pipeline, the tiered fast path
   and a small synthetic symbol through the CNN path.
-- Device (OnePlus PLF110) HUD with ORT: clear-code fast path 2.9–6.8 ms; CNN
+- Pre-migration device (OnePlus PLF110, rxing) HUD: clear-code fast path 2.9–6.8 ms; CNN
   384 5.5–15.9 ms; tiled far-code pass 21.4 ms (within the 60 ms budget).
   A live 11-vmin QR on the PC screen decoded
   `https://example.test/far-small-live`; the HUD showed fast 2.9 ms / CNN
   21.4 ms. Clear codes never trigger CNN.
-- Formal device benchmark (20 fast / 10 CNN / 5 tiled iterations): fast p50
+- Pre-migration rxing benchmark (20 fast / 10 CNN / 5 tiled iterations): fast p50
   6.8 ms, p95 6.9 ms; CNN 384 p50 5.5 ms, p95 6.9 ms; tiled far p50 21.4 ms,
   p95 21.8 ms.
-- Real camera run at 1280×720 (1075 frames, QR plus far/small QR): HUD p95
+- Pre-migration rxing real camera run at 1280×720 (1075 frames): HUD p95
   17.4 ms, last 14.6 ms, CNN 59.1 ms, dropped 5 frames; the far code
   `https://example.test/far-small-live` was decoded. This is one measured run,
   not a multi-device distribution.
   ![Real-camera far-code HUD](assets/android-far-p95.png)
-- The live far/small case is now reproduced with ORT and the 2×2 tiled pass
-  (real-camera p95 17.4 ms, CNN 59.1 ms, 5/1075 dropped). This is one run, not
-  a multi-device detection-rate curve.
+- The live far/small case was reproduced with the pre-swap rxing build (p95
+  17.4 ms, CNN 59.1 ms, 5/1075 dropped). It is one historical run, not a
+  multi-device detection-rate curve; the zxing-cpp/color build needs its own.
 - Deterministic fixture suite: 10/10 scenes fully decoded (clean/noise/blur/
   low-contrast/gradient/rotated/perspective/small/multi/camera-like), all on
   the fast path; the separate synthetic small-code test exercises CNN/SR.
@@ -94,9 +94,9 @@ finished product.
   fast path; 80–100 px with 1 px blur hit via CNN+SR; 50–60 px with blur, and
   ～120 px at 2 px blur, still miss. This is a distance proxy, not a field
   detection-rate claim.
-- Vendored sources (crates.io) are under `crates/wxscan`, `crates/cvlite`,
-  `crates/wxing`, `crates/wxscan-tflite`, `crates/wxscan-ffi`; only the first
-  three are built as path dependencies. See `docs/VENDORED.md`.
+- Vendored: `crates/cvlite` (WeChat pixel helpers) and `crates/zxing-cpp`
+  (Rust binding + C++ core). `wxscan`/`wxing`/TFLite crates were deleted. See
+  `docs/VENDORED.md`.
 
 ### Self-host and Android device
 
@@ -133,7 +133,7 @@ finished product.
   auto-publish keeps a published-text set, so identical results are sent once.
 - The FFI scan crate is built without `image-io` (no PNG/BMP decoders on the
   scan path). `image` remains only for the low-rate JPEG preview; `png` appears
-  transitively via `rxing → imageproc` and is never called by the camera loop.
+  transitively via `zxing-cpp → imageproc` and is never called by the camera loop.
 - Permission and links: CAMERA runtime dialog with Settings fallback;
   `MANAGE_EXTERNAL_STORAGE` request for arbitrary certificate paths; file picker
   copies into app cache. A `qrrace://connect?...` deep link filled server,
@@ -147,17 +147,17 @@ finished product.
 
 ### Scan pipeline
 
-- `docs/PERF.md`: whole-frame 1280×720 p50 4.629 ms; pyramid detect 2.331 ms with
-  decode 0.127 ms; pyramid + on-demand bilinear super-res 4.037 ms (super-res
-  1.319 ms). Stage timings come from the engine itself.
+- Current zxing-cpp fast path (1280×720 synthetic suite): clean 10.4 ms,
+  rotated 25.2 ms, multi 29.6 ms, camera-like 15.9 ms. Pre-migration rxing
+  numbers in `docs/PERF.md` are historical; Android color timing is pending.
 - Multi-code: generated 1280×720 scene with two symbols, pyramid pipeline returns
   both, byte-for-byte.
-- wasm: `node tools/wasm_scan_probe.cjs` reads a dumped frame, scans 1280×720 in
-  18–22 ms wall and prints the exact payload.
-- Browser fake camera: `pwsh -File scripts/browser-scan-probe.ps1` runs Edge headless with a
+- wasm: historical only. The zxing-cpp swap removed the wasm build from the
+  workspace; a Rust wasm build needs an Emscripten C++ toolchain.
+- Browser fake camera (pre-swap, historical): `pwsh -File scripts/browser-scan-probe.ps1` runs Edge headless with a
   fake camera (Y4M of a QR page) and reports
   `HIT:https://example.test/relay`, 640×480, `scan_ms` ≈ 1.6.
-- Browser real camera: `pwsh -File scripts/browser-scan-probe.ps1 -RealCamera`
+- Browser real camera (pre-swap, historical): `pwsh -File scripts/browser-scan-probe.ps1 -RealCamera`
   acquires 1280×720 from the PC camera and scans at ~3 ms; no QR was in view,
   so this proves the physical camera path, not a physical hit.
 - Real camera: camera access was enabled and the CLI scanned textured frames at
@@ -204,13 +204,14 @@ finished product.
 - Desktop FFI: C ABI state/preview and Dart binding; widget tests for the scan
   page.
 - Flutter: connect (including certificate fingerprint), lobby, room, host
-  actions, scan page; 30 tests at desktop and phone sizes.
+  actions, scan page; 27 tests at desktop and phone sizes.
 
 ## Known gaps
 
-1. **CNN speed is within the relaxed budget.** Synthetic p95: fast 6.9 ms,
-   CNN 6.9 ms, tiled far 21.8 ms. One real-camera run: p95 17.4 ms, CNN 59.1 ms,
-   5/1075 dropped, far code decoded. Multi-device/rate sweeps remain.
+1. **zxing-cpp + color camera needs a device re-run.** Desktop suite fast
+   10–13 ms; Android APK now sends Y/U/V and RGB-decodes, but the phone was
+   disconnected before a new p95/detection run. Pre-swap rxing numbers (fast
+   p95 6.9 ms, CNN 59.1 ms, 5/1075 dropped) are historical.
 2. **No Python modules.** Removed end-to-end (core/API/store/Flutter); only
    Rust extension seams remain.
 3. **Apple capture does not exist.** iOS/macOS cannot be built or verified on
@@ -227,10 +228,8 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 
-pwsh -File scripts/build-wasm.ps1
-node tools/wasm_scan_probe.cjs
-pwsh -File scripts/browser-scan-probe.ps1
-
+# Web wasm is intentionally not part of the zxing-cpp build yet.
+# A future build needs Emscripten + the zxing-cpp C++ core.
 cd crates/qr_race_gui
 flutter analyze
 flutter test
@@ -244,6 +243,11 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
+
+
+
+
 
 
 

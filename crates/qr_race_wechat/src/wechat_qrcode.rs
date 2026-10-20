@@ -20,17 +20,11 @@ use cvlite::color;
 
 /// The result of one recognition.
 pub struct QRCodeResult {
-    /// Raw bytes; the encoding is given by `charset`, and the fork performs no
-    /// conversion
+    /// Raw payload bytes exactly as encoded.
     pub bytes: Vec<u8>,
-    pub charset: String,
     /// Four corner points in source image coordinates: top-left, top-right,
     /// bottom-right, bottom-left
     pub points: [(f32, f32); 4],
-    pub qrcode_version: i32,
-    pub ec_level: String,
-    pub charset_mode: String,
-    pub binary_method: i32,
 }
 
 impl QRCodeResult {
@@ -201,7 +195,7 @@ impl<N: Net> WeChatQRCode<N> {
                 // frame with no code in it. Saying so is the difference
                 // between a bug that is found and one that is not.
                 Err(e) => eprintln!(
-                    "wxscan: the detector failed on a {detect_width}x{detect_height} input: {e}"
+                    "wechat pipeline: the detector failed on a {detect_width}x{detect_height} input: {e}"
                 ),
             }
             return Vec::new();
@@ -265,17 +259,11 @@ impl<N: Net> WeChatQRCode<N> {
                     None => continue,
                 };
 
-                // The original pushes the text into decode_results inside
-                // decodeImage
-                let base = decode_results.len();
                 let mut quads: Vec<[(f32, f32); 4]> = Vec::new();
-                for (result, pts) in decoded {
-                    if pts.len() < 4 {
-                        continue;
-                    }
-                    let scaled_back: Vec<(f32, f32)> = pts[..4]
+                for (bytes, quad) in decoded {
+                    let scaled_back: Vec<(f32, f32)> = quad
                         .iter()
-                        .map(|p| (p.x / cur_scale, p.y / cur_scale))
+                        .map(|(x, y)| (x / cur_scale, y / cur_scale))
                         .collect();
                     let mapped = if self.use_nn_detector {
                         aligner.warp_back(&scaled_back)
@@ -285,13 +273,8 @@ impl<N: Net> WeChatQRCode<N> {
                     let quad: [(f32, f32); 4] = [mapped[0], mapped[1], mapped[2], mapped[3]];
                     quads.push(quad);
                     decode_results.push(QRCodeResult {
-                        bytes: result.text,
-                        charset: result.charset,
+                        bytes,
                         points: quad,
-                        qrcode_version: result.qrcode_version,
-                        ec_level: result.ec_level,
-                        charset_mode: result.charset_mode,
-                        binary_method: result.binary_method,
                     });
                 }
 
@@ -310,7 +293,6 @@ impl<N: Net> WeChatQRCode<N> {
                         check_points.push(*quad);
                     }
                 }
-                let _ = base;
                 break; // this candidate decoded; skip the remaining scales
             }
         }
@@ -321,7 +303,7 @@ impl<N: Net> WeChatQRCode<N> {
 /// Builds a [`WeChatQRCode`] with the networks named rather than positional.
 ///
 /// ```no_run
-/// # use wxscan::{WeChatQRCode, net::NoNet};
+/// # use qr_race_wechat::{WeChatQRCode, net::NoNet};
 /// let scanner = WeChatQRCode::<NoNet>::builder()
 ///     .confidence_threshold(0.15)
 ///     .build();

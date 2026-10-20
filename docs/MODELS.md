@@ -3,7 +3,7 @@
 ## Why we convert Caffe ourselves
 
 The brief asks for the WeChat-style backend: a CNN detector, an on-demand CNN
-super-resolver, then rxing decode. The weights available to us are Caffe
+super-resolver, then zxing-cpp decode. The weights available to us are Caffe
 (`detect.prototxt/.caffemodel`, `sr.prototxt/.caffemodel`, Apache-2.0). There is
 no prebuilt ONNX for them, so `tools/caffe_to_onnx.py` parses the prototxt and
 caffemodel with generated Caffe protobuf bindings and emits ONNX itself. The
@@ -65,5 +65,6 @@ ONNX Runtime 1.31 (MIT) is not linked into the Rust static library; the Android
 build packages `jniLibs/arm64-v8a/libonnxruntime.so` from
 `com.microsoft.onnxruntime:onnxruntime-android:1.31.0`, and `ort` loads it with
 `load-dynamic`. Desktop uses tract instead, so no ORT DLL is shipped there.
+
 
 

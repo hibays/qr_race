@@ -4,7 +4,7 @@ import 'package:flutter/material.dart';
 
 import '../native/qr_renderer.dart';
 
-/// Renders a QR code through the native/wasm rxing encoder and shows the WebP
+/// Renders a QR code through the native encoder and shows the WebP
 /// bytes with nearest-neighbour scaling. The module edges stay crisp because
 /// the encoder is lossless and the filter is `FilterQuality.none`.
 class QrImage extends StatefulWidget {
@@ -79,3 +79,4 @@ class _QrImageState extends State<QrImage> {
     );
   }
 }
+

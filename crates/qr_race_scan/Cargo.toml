@@ -8,12 +8,9 @@ license.workspace = true
 default = ["image-io", "timing"]
 # File/bytes loading for native tools. The wasm build turns this off so the
 # browser artifacts don't drag in image decoders and their wasm-bindgen imports.
-image-io = ["dep:image", "rxing/image", "rxing/image_formats"]
+image-io = ["dep:image"]
 # Real clocks. Disabled on wasm32-unknown-unknown, where Instant::now panics.
 timing = []
-# rxing's timestamp path needs a JS clock on wasm; this enables chrono's
-# wasmbind. The browser must supply the small wasm-bindgen import shim.
-rxing-wasm = ["rxing/wasm_support"]
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = [
@@ -22,12 +19,10 @@ image = { version = "0.25", default-features = false, features = [
     "bmp",
 ], optional = true }
 thiserror.workspace = true
-rxing = { version = "0.9.3", default-features = false, features = [
-    "qrcode",
-    "decoders",
-    "multi_barcode_readers",
-    "encoding_rs",
-] }
+zxing-cpp.workspace = true
 
 [dev-dependencies]
 qrcode = "0.14"
+
+
+

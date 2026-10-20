@@ -141,40 +141,44 @@ class CameraCapture(private val context: Context) {
             return
         }
         try {
-            val plane = image.planes[0]
-            val buffer = plane.buffer
-            val rowStride = plane.rowStride
-            val pixelStride = plane.pixelStride
             val width = image.width
             val height = image.height
-            val luma = ByteArray(width * height)
-            if (pixelStride == 1 && rowStride >= width) {
-                val row = ByteArray(rowStride)
-                for (y in 0 until height) {
-                    val remaining = buffer.remaining()
-                    if (remaining <= 0) break
-                    val toRead = minOf(rowStride, remaining)
-                    buffer.get(row, 0, toRead)
-                    System.arraycopy(row, 0, luma, y * width, minOf(width, toRead))
-                }
-            } else {
-                var index = 0
-                for (y in 0 until height) {
-                    for (x in 0 until width) {
-                        luma[index++] = buffer.get(y * rowStride + x * pixelStride)
-                    }
-                }
-            }
+            val y = copyPlane(image.planes[0], width, height)
+            val chromaWidth = width / 2
+            val chromaHeight = height / 2
+            val u = copyPlane(image.planes[1], chromaWidth, chromaHeight)
+            val v = copyPlane(image.planes[2], chromaWidth, chromaHeight)
             // Scanning is rotation-independent; send rotation metadata and let
             // Flutter rotate the low-rate preview on the GPU instead of copying
             // ~1 MB of pixels per frame here.
-            nativePushFrame(width, height, width, sensorOrientation, luma)
+            nativePushFrame(width, height, sensorOrientation, y, u, v)
         } catch (error: Exception) {
             Log.e(TAG, "frame copy failed", error)
         } finally {
             busy.set(false)
             image.close()
         }
+    }
+
+    /** Copies one plane into a tightly packed array, honoring its strides. */
+    private fun copyPlane(
+        plane: android.media.Image.Plane,
+        width: Int,
+        height: Int,
+    ): ByteArray {
+        val buffer = plane.buffer
+        val rowStride = plane.rowStride
+        val pixelStride = plane.pixelStride
+        val out = ByteArray(width * height)
+        for (row in 0 until height) {
+            for (col in 0 until width) {
+                val index = row * rowStride + col * pixelStride
+                if (index < buffer.limit()) {
+                    out[row * width + col] = buffer.get(index)
+                }
+            }
+        }
+        return out
     }
 
         private fun chooseBackCamera(manager: CameraManager): String? {
@@ -197,7 +201,14 @@ class CameraCapture(private val context: Context) {
             ?: Size(width, height)
     }
 
-    private external fun nativePushFrame(width: Int, height: Int, stride: Int, rotation: Int, data: ByteArray)
+    private external fun nativePushFrame(
+        width: Int,
+        height: Int,
+        rotation: Int,
+        y: ByteArray,
+        u: ByteArray,
+        v: ByteArray,
+    )
 
     private external fun nativeFrameDropped()
 
@@ -213,4 +224,5 @@ class CameraCapture(private val context: Context) {
         }
     }
 }
+
 

@@ -14,7 +14,7 @@ use percent_encoding::{NON_ALPHANUMERIC, utf8_percent_encode};
 use qr_race_capture::{CaptureConfig, CaptureSession};
 use qr_race_capture_desktop::{CameraConfig, CameraSource, list_cameras};
 use qr_race_core::PayloadKind;
-use qr_race_scan::{RxingDecoder, ScanEngine, ScanHit, load_gray_file};
+use qr_race_scan::{ScanEngine, ScanHit, ZxingDecoder, load_gray_file};
 use serde_json::{Value, json};
 
 #[derive(Parser)]
@@ -186,7 +186,7 @@ async fn run(cli: Cli) -> Result<(), String> {
 
 fn scan_image(path: &PathBuf) -> Result<Vec<ScanHit>, String> {
     let frame = load_gray_file(path).map_err(|error| error.to_string())?;
-    let engine = ScanEngine::new(Box::new(RxingDecoder::new()));
+    let engine = ScanEngine::new(Box::new(ZxingDecoder::new()));
     let outcome = engine.scan(&frame).map_err(|error| error.to_string())?;
     println!(
         "scanned image {}x{} in {:.2} ms, {} hit(s)",
@@ -212,7 +212,7 @@ fn scan_camera(
     let (width, height) = source.resolution();
     let config = CaptureConfig::new(width, height, 30).map_err(|error| error.to_string())?;
     let mut session = CaptureSession::new(source, config).map_err(|error| error.to_string())?;
-    let engine = ScanEngine::new(Box::new(RxingDecoder::new()));
+    let engine = ScanEngine::new(Box::new(ZxingDecoder::new()));
     let started = std::time::Instant::now();
 
     let mut hits = Vec::new();

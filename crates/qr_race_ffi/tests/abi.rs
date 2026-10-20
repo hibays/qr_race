@@ -56,7 +56,7 @@ fn qr_webp_bytes_decode_back() {
 
     let (luma, width, height) = qr_race_qr::webp_luma(&buffer).expect("WebP decodes");
     let frame = qr_race_scan::GrayFrame::new(width, height, luma).expect("frame builds");
-    let engine = qr_race_scan::ScanEngine::new(Box::new(qr_race_scan::RxingDecoder::new()));
+    let engine = qr_race_scan::ScanEngine::new(Box::new(qr_race_scan::ZxingDecoder::new()));
     let outcome = engine.scan(&frame).expect("scan runs");
     assert_eq!(outcome.hits[0].text, payload);
 }

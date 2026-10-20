@@ -6,7 +6,7 @@
 //! decoding. Both sit behind the engine's traits, so a CNN backend replaces
 //! them without touching the orchestration.
 
-use crate::decoder::RxingDecoder;
+use crate::decoder::ZxingDecoder;
 use crate::engine::{Decoder, Detection, Detector, ScanEngine, SuperResolver};
 use crate::error::ScanError;
 use crate::frame::GrayFrame;
@@ -24,7 +24,7 @@ impl PyramidDetector {
         Self {
             scale: scale.max(2),
             padding: 4,
-            detector_decoder: Box::new(RxingDecoder::new()),
+            detector_decoder: Box::new(ZxingDecoder::new()),
         }
     }
 
@@ -128,7 +128,7 @@ impl SuperResolver for BilinearSuperResolver {
 
 /// Convenience: the whole coarse-to-fine pipeline with one call.
 pub fn pyramid_engine(scale: u32, super_res_min_area: u64) -> ScanEngine {
-    ScanEngine::new(Box::new(RxingDecoder::new()))
+    ScanEngine::new(Box::new(ZxingDecoder::new()))
         .with_detector(Box::new(PyramidDetector::new(scale)))
         .with_super_resolver(Box::new(BilinearSuperResolver::new(2)), super_res_min_area)
 }

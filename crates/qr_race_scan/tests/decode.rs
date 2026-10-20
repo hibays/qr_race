@@ -1,6 +1,6 @@
 //! End-to-end decode tests over generated symbols. No fixtures to rot.
 
-use qr_race_scan::{GrayFrame, RxingDecoder, ScanEngine};
+use qr_race_scan::{GrayFrame, ScanEngine, ZxingDecoder};
 
 fn qr_frame(text: &str, scale: u32, quiet: u32) -> GrayFrame {
     let code = qrcode::QrCode::new(text.as_bytes()).expect("payload fits a QR symbol");
@@ -58,7 +58,7 @@ fn blit(dst: &mut [u8], dst_width: u32, src: &GrayFrame, ox: u32, oy: u32) {
 }
 
 fn engine() -> ScanEngine {
-    ScanEngine::new(Box::new(RxingDecoder::new()))
+    ScanEngine::new(Box::new(ZxingDecoder::new()))
 }
 
 #[test]
@@ -77,6 +77,20 @@ fn decodes_a_rotated_symbol() {
     let outcome = engine().scan(&frame).unwrap();
     assert_eq!(outcome.hits.len(), 1);
     assert_eq!(outcome.hits[0].text, "东京A区1B级103房");
+}
+
+#[test]
+fn decodes_rgb_color_frames() {
+    let frame = qr_frame("https://example.test/color", 4, 2);
+    let mut rgb = Vec::with_capacity((frame.width() * frame.height() * 3) as usize);
+    for pixel in frame.data() {
+        rgb.extend_from_slice(&[*pixel, *pixel, *pixel]);
+    }
+    let hits = ZxingDecoder::new()
+        .decode_rgb(&rgb, frame.width(), frame.height())
+        .unwrap();
+    assert_eq!(hits.len(), 1);
+    assert_eq!(hits[0].text, "https://example.test/color");
 }
 
 #[test]

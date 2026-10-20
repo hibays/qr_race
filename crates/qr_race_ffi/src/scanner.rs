@@ -8,7 +8,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use data_encoding::BASE64;
 use qr_race_capture::{CaptureConfig, CaptureSession, CaptureSource, GrayFrame};
-use qr_race_scan::{RxingDecoder, ScanEngine};
+use qr_race_scan::{ScanEngine, ZxingDecoder};
 use serde::Serialize;
 
 const PREVIEW_INTERVAL: Duration = Duration::from_millis(90);
@@ -123,7 +123,7 @@ pub fn run_source<S: CaptureSource>(
             return;
         }
     };
-    let engine = ScanEngine::new(Box::new(RxingDecoder::new()));
+    let engine = ScanEngine::new(Box::new(ZxingDecoder::new()));
     let mut last_preview: Option<Instant> = None;
 
     {

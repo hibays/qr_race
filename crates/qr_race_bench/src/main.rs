@@ -14,7 +14,7 @@ use std::process::ExitCode;
 
 use qr_race_fixtures::scenes;
 use qr_race_scan::{
-    BilinearSuperResolver, PyramidDetector, RxingDecoder, ScanEngine, load_gray_file,
+    BilinearSuperResolver, PyramidDetector, ScanEngine, ZxingDecoder, load_gray_file,
 };
 
 struct Args {
@@ -421,7 +421,7 @@ fn run_bench(args: &Args) -> ExitCode {
 }
 
 fn build_engine(args: &Args) -> ScanEngine {
-    let mut engine = ScanEngine::new(Box::new(RxingDecoder::new().try_harder(args.try_harder)));
+    let mut engine = ScanEngine::new(Box::new(ZxingDecoder::new().try_harder(args.try_harder)));
     if args.detector == "pyramid" {
         engine = engine.with_detector(Box::new(PyramidDetector::new(args.pyramid_scale)));
     }

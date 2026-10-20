@@ -1,6 +1,6 @@
 //! The scan pipeline: detect → on-demand super-resolution → decode.
 //!
-//! Decoding is rxing. The detector and super-resolver are traits because the
+//! Decoding is zxing-cpp. The detector and super-resolver are traits because the
 //! WeChat-style CNN stages are per-platform backends; the engine must not change
 //! shape when they slot in. Frames arrive as grayscale and never leave native.
 
@@ -13,7 +13,7 @@ mod frame;
 mod image_io;
 mod timing;
 
-pub use decoder::{RxingDecoder, ScanHit};
+pub use decoder::{ScanHit, ZxingDecoder};
 pub use detector::{BilinearSuperResolver, PyramidDetector, pyramid_engine};
 pub use engine::{
     Decoder, Detection, Detector, ScanEngine, ScanOutcome, ScanTimings, SuperResolver,

@@ -6,7 +6,7 @@ import 'package:ffi/ffi.dart';
 
 import 'ffi_library.dart';
 
-/// Renders QR codes with rxing through the native C ABI: 2048×2048 lossless
+/// Renders QR codes with qrcode through the native C ABI: 2048×2048 lossless
 /// WebP, quality 90 / method 4 — the same parameters as rcrm's bridge.
 class NativeQrRenderer {
   NativeQrRenderer() : _library = openQrRaceFfi() {
@@ -53,3 +53,4 @@ final NativeQrRenderer _renderer = NativeQrRenderer();
 
 Future<Uint8List> renderQrWebp(String text) =>
     Future.sync(() => _renderer.render(text));
+

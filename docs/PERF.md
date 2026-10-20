@@ -17,7 +17,7 @@ cargo run --release -p qr_race_cli -- --camera 0 --frames 30 `
 
 Machine: Windows x64 (MSVC toolchain), integrated webcam ("Integrated Webcam",
 MediaFoundation). Scan numbers are `--release`, from the same `ScanEngine`
-(rxing multi-symbol reader, no CNN detector yet).
+(zxing-cpp multi-symbol reader, no CNN detector yet).
 
 ## Still images (scan only, release)
 
@@ -76,28 +76,13 @@ because the engine now decodes only the crop. Super-resolution adds ~1.3 ms and
 runs only when the detection box is below the area threshold — exactly the
 "on demand, not every frame" rule.
 
-## wasm scan core (Node 24, release)
+## wasm scan core
 
-`node tools/wasm_scan_probe.cjs` scans a dumped 1280×720 grayscale scene through
-the wasm build, including the JS↔wasm copies:
-
-| run | wall time | hits |
-|---|---|---|
-| 1 | 21.74 ms | 1 |
-| 2 | 18.28 ms | 1 |
-
-This is the scan core only. A browser adds the RGBA→gray loop and canvas
-readback; the web camera path has not been measured in a real browser yet.
-
-**Update:** the browser camera path now has a headless check
-(`scripts/browser-scan-probe.ps1`): Edge + fake camera at 640×480, QR detected
-on the third frame, `scan_ms` **1.8 ms** for the wasm scan. That is the whole
-`getUserMedia` → canvas → grayscale → wasm path, with the caveat that the
-"camera" is a Y4M file.
-
+Removed with the zxing-cpp migration; zxing-cpp is C++ and needs an Emscripten
+toolchain for wasm. Native/Android use zxing-cpp directly.
 ## Perturbed texture suite (programmatic, release)
 
-Ten deterministic scenes are generated in code (`qr_race_fixtures`) from rxing
+Ten deterministic scenes are generated in code (`qr_race_fixtures`) from zxing-cpp
 QR codes: clean, noise, blur, low contrast, illumination gradient, rotation,
 perspective, a small code, two codes, and a camera-like mix (texture + noise +
 blur + gradient + rotation).
@@ -141,3 +126,5 @@ payloads.
 4. **Cropping is what buys headroom.** The pyramid pass already pays for itself on
    a single-code 720p frame; with more codes the decode side stays cheap per crop
    while the detection pass stays flat.
+
+

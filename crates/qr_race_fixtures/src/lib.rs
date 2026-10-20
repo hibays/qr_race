@@ -1,7 +1,7 @@
 //! Deterministic, programmatically perturbed scan fixtures.
 //!
 //! Real camera input has texture, noise, blur, lighting gradients and geometry.
-//! These scenes are generated from rxing QR codes (the same encoder the client
+//! These scenes are generated from our qrcode/WebP encoder (the same encoder the client
 //! uses) so performance and decode tests do not depend on a hand-made PNG or a
 //! physical camera. Everything is seeded, so a failure is reproducible.
 
@@ -369,11 +369,11 @@ fn camera_like() -> Scene {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use qr_race_scan::{RxingDecoder, ScanEngine};
+    use qr_race_scan::{ScanEngine, ZxingDecoder};
 
     #[test]
     fn every_scene_decodes_its_expected_payloads() {
-        let engine = ScanEngine::new(Box::new(RxingDecoder::new()));
+        let engine = ScanEngine::new(Box::new(ZxingDecoder::new()));
         for scene in scenes() {
             let outcome = engine.scan(&scene.frame).expect("scan runs");
             let mut actual: Vec<String> = outcome.hits.into_iter().map(|hit| hit.text).collect();

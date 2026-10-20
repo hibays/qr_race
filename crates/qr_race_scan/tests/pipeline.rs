@@ -3,8 +3,8 @@
 //! boxes, and parallel decoding of the crops.
 
 use qr_race_scan::{
-    BilinearSuperResolver, Detection, Detector, GrayFrame, PyramidDetector, RxingDecoder,
-    ScanEngine, ScanError,
+    BilinearSuperResolver, Detection, Detector, GrayFrame, PyramidDetector, ScanEngine, ScanError,
+    ZxingDecoder,
 };
 
 fn qr_frame(text: &str, scale: u32, quiet: u32) -> GrayFrame {
@@ -62,7 +62,7 @@ fn the_pyramid_pipeline_finds_two_codes_in_a_wide_frame() {
     let right = qr_frame("https://example.test/right", 4, 2);
     let canvas = compose(1280, 720, &[(&left, 120, 420), (&right, 760, 120)]);
 
-    let engine = ScanEngine::new(Box::new(RxingDecoder::new()))
+    let engine = ScanEngine::new(Box::new(ZxingDecoder::new()))
         .with_detector(Box::new(PyramidDetector::new(2)));
 
     let outcome = engine.scan(&canvas).unwrap();
@@ -90,7 +90,7 @@ fn super_resolution_runs_on_small_boxes_before_decoding() {
         confidence: 0.9,
     };
 
-    let engine = ScanEngine::new(Box::new(RxingDecoder::new()))
+    let engine = ScanEngine::new(Box::new(ZxingDecoder::new()))
         .with_detector(Box::new(FixedDetector {
             detections: vec![detection],
         }))
@@ -126,11 +126,11 @@ fn parallel_and_serial_decoding_agree() {
         ],
     };
 
-    let parallel = ScanEngine::new(Box::new(RxingDecoder::new()))
+    let parallel = ScanEngine::new(Box::new(ZxingDecoder::new()))
         .with_detector(Box::new(detector))
         .scan(&canvas)
         .unwrap();
-    let serial = ScanEngine::new(Box::new(RxingDecoder::new()))
+    let serial = ScanEngine::new(Box::new(ZxingDecoder::new()))
         .with_detector(Box::new(FixedDetector {
             detections: vec![
                 Detection {

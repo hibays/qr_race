@@ -6,11 +6,11 @@
 //!
 //! The pipeline modules (`detector`, `scale`, `decodermgr`, `wechat_qrcode`)
 //! are a studied port of OpenCV contrib's `wechat_qrcode` and the Apache-2.0
-//! `wxscan` Rust port; vendored reference sources live under `crates/wxscan`,
-//! `crates/cvlite` and `crates/wxing`. Keeping the pipeline here lets us swap
-//! the inference backend without depending on a registry crate.
+//! WeChat QR pipeline, derived from the wxscan Rust port. Only cvlite remains
+//! vendored; the wxscan/wxing sources were deleted. Keeping the pipeline here
+//! lets us swap the inference backend without depending on a registry crate.
 //!
-//! The rest of the project keeps rxing as the fallback decoder. The FFI worker
+//! The rest of the project uses zxing-cpp as the fallback decoder. The FFI worker
 //! can run either or both.
 
 mod backend;
@@ -26,7 +26,7 @@ use std::time::Instant;
 
 use backend::DefaultNet;
 use detector::ssd_detector::{QuadPoints, SSDDetector};
-use qr_race_scan::{Decoder, GrayFrame, RxingDecoder, ScanHit};
+use qr_race_scan::{Decoder, GrayFrame, ScanHit, ZxingDecoder};
 use scale::super_scale::SuperScale;
 use wechat_qrcode::WeChatQRCode;
 
@@ -100,17 +100,17 @@ pub struct TieredOutcome {
 
 /// Tiered WeChat pipeline:
 ///
-/// 1. rxing on the full frame (fast path, most frames with a clear code);
+/// 1. zxing-cpp on the full frame (fast path, most frames with a clear code);
 /// 2. only if that misses, the WeChat CNN detector on a 384x384 view;
-/// 3. crop each candidate at **full resolution** and decode with rxing;
+/// 3. crop each candidate at **full resolution** and decode with zxing-cpp;
 /// 4. for small crops, run the super-resolution network before decoding.
 ///
-/// This keeps the 30 fps path at rxing speed while spending CNN work only on
+/// This keeps the 30 fps path at zxing-cpp speed while spending CNN work only on
 /// frames where the fast decoder failed — exactly the far/small-code case.
 pub struct TieredScanner {
     detector: SSDDetector<DefaultNet>,
     sr: SuperScale<DefaultNet>,
-    rxing: RxingDecoder,
+    decoder: ZxingDecoder,
 }
 
 impl TieredScanner {
@@ -120,13 +120,13 @@ impl TieredScanner {
         Ok(Self {
             detector: SSDDetector::new(detector),
             sr: SuperScale::new(Some(sr)),
-            rxing: RxingDecoder::new(),
+            decoder: ZxingDecoder::new(),
         })
     }
 
     pub fn scan(&self, frame: &GrayFrame) -> TieredOutcome {
         let started = Instant::now();
-        let fast = self.rxing.decode(frame).unwrap_or_default();
+        let fast = self.decoder.decode(frame).unwrap_or_default();
         if !fast.is_empty() {
             return TieredOutcome {
                 hits: dedup(fast),
@@ -227,7 +227,7 @@ impl TieredScanner {
         let Ok(frame) = GrayFrame::new(width as u32, height as u32, data.to_vec()) else {
             return Vec::new();
         };
-        self.rxing.decode(&frame).unwrap_or_default()
+        self.decoder.decode(&frame).unwrap_or_default()
     }
 
     fn decode_with_sr(&self, data: &[u8], width: usize, height: usize) -> Option<Vec<ScanHit>> {
@@ -328,7 +328,7 @@ mod tests {
 
     #[test]
     fn loads_both_models_and_decodes_a_symbol() {
-        let scanner = WeChatScanner::new().expect("wxscan loads");
+        let scanner = WeChatScanner::new().expect("pipeline loads");
         assert!(scanner.has_models());
         let frame = qr_frame("https://example.test/wechat-cnn", 720);
         let outcome = scanner.scan(&frame);
@@ -388,7 +388,7 @@ mod tests {
 
     #[test]
     fn repeated_frames_keep_working() {
-        let scanner = WeChatScanner::new().expect("wxscan loads");
+        let scanner = WeChatScanner::new().expect("pipeline loads");
         let frame = qr_frame("https://example.test/repeat", 720);
         for _ in 0..2 {
             let outcome = scanner.scan(&frame);

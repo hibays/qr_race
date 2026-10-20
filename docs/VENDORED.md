@@ -1,27 +1,26 @@
-# Vendored WeChat scanner crates
+# Vendored dependencies
 
-Upstream: <https://github.com/wilinz/wxscan-rs> (Apache-2.0), plus
-<https://github.com/wilinz/cvlite> and <https://github.com/wilinz/wxing>.
-Downloaded from crates.io:
+Only two upstream trees are vendored now; the old wxscan/wxing/TFLite copies
+were deleted when zxing-cpp replaced both `rxing` and `wxing`.
 
-| Local crate | Upstream | Version | Built in workspace |
+| Local crate | Upstream | Version | Purpose |
 |---|---|---|---|
-| `crates/cvlite` | cvlite | 0.1.0 | yes |
-| `crates/wxing` | wxing | 0.1.0 | yes |
-| `crates/wxscan` | wxscan | 0.1.1 | yes (`tract` backend) |
-| `crates/wxscan-tflite` | wxscan-tflite | 0.1.1 | no (needs `TFLITE_LIB_DIR`) |
-| `crates/wxscan-ffi` | wxscan-ffi | 0.1.1 | no (C ABI reference) |
+| `crates/cvlite` | <https://github.com/wilinz/cvlite> | 0.1.0 | WeChat pipeline resize/color helpers (Apache-2.0) |
+| `crates/zxing-cpp` | <https://github.com/zxing-cpp/zxing-cpp> | 0.5.3 | Rust binding + bundled C++ barcode reader/writer (Apache-2.0) |
 
-The upstream `Cargo.toml` files are normalized registry manifests; path
-dependencies have been changed to the local siblings. `Cargo.toml.orig` and
-`version.txt` are kept for provenance. Licenses are in each crate directory.
+`crates/zxing-cpp` is normally a crates.io package; it is vendored so three
+build issues could be fixed locally:
 
-`qr_race_wechat` uses `crates/wxscan`'s algorithm and `Net` trait, with a
-pure-Rust tract backend over our `models/detect.onnx` and `models/sr.onnx`.
-The TFLite/FFI crates are kept as reference for the next backend comparison;
-they are not workspace members because their build scripts need external
-LiteRT libraries.
+- the C++ link-map flag must be `-Wl,-Map=...` on non-MSVC toolchains;
+- MSVC debug builds use the release CRT to match Rust's `/MD` link (otherwise
+  `__imp__CrtDbgReport` is unresolved);
+- Android links a prebuilt NDK `libZXing.so` instead of invoking CMake, because
+  the crate's CMake call passes a conflicting generic `--target`.
 
-The long-term plan is to replace the borrowed `TractNet` adapter with our own
-`qr_race_infer` backend (ORT/st-zrt/Candle candidates) and keep the pipeline
-in `qr_race_wechat` rather than depending on a registry crate.
+Desktop targets build the bundled C++ with CMake. Android builds are driven by
+`scripts/build-android-ffi.ps1`, which configures the NDK toolchain and packages
+`libZXing.so` plus `libc++_shared.so` into `jniLibs/arm64-v8a/`.
+
+`qr_race_wechat` still uses `cvlite` for resizing; its decoder now calls
+zxing-cpp directly. No `wxing`, `wxscan`, TFLite, `rxing`, or `rustpython`
+dependency remains in the workspace.

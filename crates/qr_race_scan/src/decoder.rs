@@ -1,8 +1,6 @@
-//! rxing-backed decoding. The engine sees only hits; the crate stays here.
+//! zxing-cpp-backed decoding. The engine sees only hits; the crate stays here.
 
-use std::collections::HashSet;
-
-use rxing::{BarcodeFormat, DecodeHints, Exceptions, RXingResult};
+use zxingcpp::{Barcode, BarcodeFormat, ImageFormat, ImageView};
 
 use crate::engine::Decoder;
 use crate::error::ScanError;
@@ -21,31 +19,41 @@ pub struct ScanHit {
     pub points: Vec<[f32; 2]>,
 }
 
-impl From<RXingResult> for ScanHit {
-    fn from(result: RXingResult) -> Self {
+impl From<Barcode> for ScanHit {
+    fn from(result: Barcode) -> Self {
+        let position = result.position();
+        let points = [
+            position.top_left,
+            position.top_right,
+            position.bottom_right,
+            position.bottom_left,
+        ]
+        .into_iter()
+        .map(|p| [p.x as f32, p.y as f32])
+        .collect();
         Self {
-            text: result.getText().to_string(),
-            format: format!("{:?}", result.getBarcodeFormat()),
-            raw: result.getRawBytes().to_vec(),
-            points: result.getPoints().iter().map(|p| [p.x, p.y]).collect(),
+            text: result.text(),
+            format: format!("{:?}", result.format()),
+            raw: result.bytes(),
+            points,
         }
     }
 }
 
-/// Decodes QR symbols from a whole frame with rxing's multi-symbol reader.
+/// Decodes QR symbols from a whole frame with zxing-cpp.
 #[derive(Debug, Clone)]
-pub struct RxingDecoder {
+pub struct ZxingDecoder {
     qr_only: bool,
     try_harder: bool,
 }
 
-impl Default for RxingDecoder {
+impl Default for ZxingDecoder {
     fn default() -> Self {
         Self::new()
     }
 }
 
-impl RxingDecoder {
+impl ZxingDecoder {
     pub fn new() -> Self {
         Self {
             qr_only: true,
@@ -65,35 +73,57 @@ impl RxingDecoder {
         self
     }
 
-    fn hints(&self) -> DecodeHints {
-        DecodeHints {
-            TryHarder: Some(self.try_harder),
-            PossibleFormats: self
-                .qr_only
-                .then(|| HashSet::from([BarcodeFormat::QR_CODE])),
-            ..DecodeHints::default()
+    fn reader(&self) -> zxingcpp::BarcodeReader {
+        let reader = zxingcpp::read()
+            .try_harder(self.try_harder)
+            .try_rotate(false)
+            .try_downscale(false)
+            .max_number_of_symbols(8);
+        if self.qr_only {
+            reader.formats([BarcodeFormat::QRCode])
+        } else {
+            reader
+        }
+    }
+
+    /// Decodes a tightly packed RGB frame, preserving chroma for the detector.
+    pub fn decode_rgb(
+        &self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+    ) -> Result<Vec<ScanHit>, ScanError> {
+        let expected = (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(3);
+        if data.len() < expected {
+            return Err(ScanError::Decode("short RGB frame".into()));
+        }
+        let view = ImageView::from_slice(&data[..expected], width, height, ImageFormat::RGB)
+            .map_err(|error| ScanError::Decode(error.to_string()))?;
+        match self.reader().from(&view) {
+            Ok(results) => Ok(results.into_iter().map(ScanHit::from).collect()),
+            Err(error) => Err(ScanError::Decode(error.to_string())),
         }
     }
 }
 
-impl Decoder for RxingDecoder {
+impl Decoder for ZxingDecoder {
     fn decode(&self, frame: &GrayFrame) -> Result<Vec<ScanHit>, ScanError> {
-        let mut hints = self.hints();
-        let results = rxing::helpers::detect_multiple_in_luma_with_hints(
-            frame.data().to_vec(),
+        let view = ImageView::from_slice(
+            frame.data(),
             frame.width(),
             frame.height(),
-            &mut hints,
-        );
-        match results {
+            ImageFormat::Lum,
+        )
+        .map_err(|error| ScanError::Decode(error.to_string()))?;
+        match self.reader().from(&view) {
             Ok(results) => Ok(results.into_iter().map(ScanHit::from).collect()),
-            // "Nothing here" is a normal frame, not a failure.
-            Err(Exceptions::NotFoundException(_)) => Ok(Vec::new()),
-            Err(err) => Err(ScanError::Decode(err.to_string())),
+            Err(error) => Err(ScanError::Decode(error.to_string())),
         }
     }
 
     fn name(&self) -> &'static str {
-        "rxing"
+        "zxing-cpp"
     }
 }

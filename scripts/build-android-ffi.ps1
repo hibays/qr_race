@@ -21,11 +21,11 @@ $target = switch ($Abi) {
     default { throw "unsupported ABI $Abi" }
 }
 $toolchain = Join-Path $ndk.FullName "toolchains\llvm\prebuilt\windows-x86_64\bin"
-$clang = Join-Path $toolchain "aarch64-linux-android21-clang.cmd"
+$clang = Join-Path $toolchain "aarch64-linux-android24-clang.cmd"
 if ($target -ne "aarch64-linux-android") {
     $prefix = switch ($target) {
-        "armv7-linux-androideabi" { "armv7a-linux-androideabi21-clang.cmd" }
-        "x86_64-linux-android" { "x86_64-linux-android21-clang.cmd" }
+        "armv7-linux-androideabi" { "armv7a-linux-androideabi24-clang.cmd" }
+        "x86_64-linux-android" { "x86_64-linux-android24-clang.cmd" }
     }
     $clang = Join-Path $toolchain $prefix
 }
@@ -42,6 +42,23 @@ if ($target -eq "aarch64-linux-android") {
     $env:CARGO_TARGET_AARCH64_LINUX_ANDROID_LINKER = $clang
 }
 
+# zxing-cpp is a C++ static/readers library; build it with the NDK CMake
+# toolchain once, then link the Rust cdylib against it.
+$zxingBuild = Join-Path $root ".refs\zxing-android-$Abi"
+$zxingLib = Join-Path $zxingBuild "libZXing.so"
+if (-not (Test-Path $zxingLib)) {
+    $toolchainFile = Join-Path $ndk.FullName "build\cmake\android.toolchain.cmake"
+    & cmake -S (Join-Path $root "crates/zxing-cpp/core") -B $zxingBuild -G Ninja `
+        "-DCMAKE_TOOLCHAIN_FILE=$toolchainFile" "-DANDROID_ABI=$Abi" `
+        "-DANDROID_PLATFORM=android-24" "-DBUILD_SHARED_LIBS=ON" `
+        "-DZXING_READERS=ON" "-DZXING_WRITERS=ON" "-DZXING_C_API=ON" `
+        "-DZXING_USE_BUNDLED_ZINT=ON" "-DCMAKE_BUILD_TYPE=Release"
+    if ($LASTEXITCODE -ne 0) { throw "zxing-cpp cmake configure failed" }
+    & cmake --build $zxingBuild -j 8
+    if ($LASTEXITCODE -ne 0) { throw "zxing-cpp build failed" }
+}
+$env:ZXING_CPP_LIB_DIR = $zxingBuild
+
 Write-Host "building qr_race_ffi for $target ($Abi)..." -ForegroundColor Cyan
 Push-Location $root
 try {
@@ -56,4 +73,8 @@ if (-not (Test-Path $source)) { throw "missing $source" }
 $dest = Join-Path $root "crates\qr_race_gui\android\app\src\main\jniLibs\$Abi"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 Copy-Item $source $dest -Force
-Write-Host "packaged $dest\libqr_race_ffi.so" -ForegroundColor Green
+Copy-Item $zxingLib $dest -Force
+$cxx = Join-Path $ndk.FullName "toolchains\llvm\prebuilt\windows-x86_64\sysroot\usr\lib\$target\libc++_shared.so"
+if (Test-Path $cxx) { Copy-Item $cxx $dest -Force }
+Write-Host "packaged $dest\libqr_race_ffi.so, libZXing.so, libc++_shared.so" -ForegroundColor Green
+

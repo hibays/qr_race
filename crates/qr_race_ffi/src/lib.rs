@@ -1,7 +1,7 @@
 //! C ABI for the Flutter client.
 //!
 //! Desktop builds include the camera scanner (frames never cross the boundary;
-//! Dart polls hits, stats and a low-rate JPEG preview) and rxing QR rendering.
+//! Dart polls hits, stats and a low-rate JPEG preview) and native QR rendering.
 //! Android builds currently include QR rendering plus a scanner stub; the
 //! native camera backend for mobile is still pending.
 
@@ -247,7 +247,7 @@ pub extern "C" fn qr_server_stop() {
     }
 }
 
-/// Renders a 2048×2048 lossless WebP QR with rxing. Returns the WebP length
+/// Renders a 2048×2048 lossless WebP QR with qrcode. Returns the WebP length
 /// written to `out`, a negative needed length when the buffer is too small, or
 /// -1 on bad input.
 ///

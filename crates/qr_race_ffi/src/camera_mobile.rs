@@ -1,6 +1,7 @@
-//! Android scanner session: Kotlin's Camera2 ImageReader pushes Y-plane bytes
-//! through JNI, Rust scans them on a dedicated thread. Frames never enter Dart;
-//! Dart only polls hits, stats and the low-rate JPEG preview.
+//! Android scanner session: Kotlin's Camera2 ImageReader pushes YUV_420_888
+//! planes through JNI, Rust converts them to RGB (and keeps luma for CNN/preview)
+//! and scans on a dedicated thread. Frames never enter Dart; Dart only polls
+//! hits, stats and the low-rate JPEG preview.
 
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{SyncSender, sync_channel};
@@ -9,7 +10,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use data_encoding::BASE64;
 use qr_race_capture::GrayFrame;
-use qr_race_scan::{RxingDecoder, ScanEngine};
+use qr_race_scan::{ScanEngine, ZxingDecoder};
 use qr_race_wechat::TieredScanner;
 use serde::Serialize;
 
@@ -49,6 +50,8 @@ struct Frame {
     width: u32,
     height: u32,
     data: Vec<u8>,
+    /// Tightly packed RGB, kept so zxing-cpp can use chroma as well as luma.
+    color: Option<Vec<u8>>,
     rotation: i32,
 }
 
@@ -89,7 +92,8 @@ pub fn start(width: u32, height: u32) -> i32 {
     let join = match std::thread::Builder::new()
         .name("qr-scanner-android".to_string())
         .spawn(move || {
-            let engine = ScanEngine::new(Box::new(RxingDecoder::new()));
+            let decoder = ZxingDecoder::new();
+            let engine = ScanEngine::new(Box::new(decoder.clone()));
             let tiered = TieredScanner::new().ok();
             let mut frame_seq: u64 = 0;
             let mut last_preview: Option<Instant> = None;
@@ -99,7 +103,22 @@ pub fn start(width: u32, height: u32) -> i32 {
                 };
                 let started = Instant::now();
                 frame_seq += 1;
-                match engine.scan(&gray) {
+                // The fast path gets RGB from Camera2; fall back to luma only
+                // when the color read finds nothing.
+                let color_hits = frame
+                    .color
+                    .as_deref()
+                    .and_then(|rgb| decoder.decode_rgb(rgb, frame.width, frame.height).ok())
+                    .unwrap_or_default();
+                let outcome = if color_hits.is_empty() {
+                    engine.scan(&gray)
+                } else {
+                    Ok(qr_race_scan::ScanOutcome {
+                        hits: color_hits,
+                        ..Default::default()
+                    })
+                };
+                match outcome {
                     Ok(outcome) => {
                         let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
                         let mut hits: Vec<(String, Vec<u8>)> = outcome
@@ -107,7 +126,7 @@ pub fn start(width: u32, height: u32) -> i32 {
                             .into_iter()
                             .map(|hit| (hit.text, hit.raw))
                             .collect();
-                        // Tiered fallback: rxing is the 30 fps fast path; only a
+                        // Tiered fallback: zxing-cpp is the 30 fps fast path; only a
                         // miss (about every other frame) wakes the CNN detector.
                         if hits.is_empty() && frame_seq % 2 == 0 {
                             if let Some(tiered) = &tiered {
@@ -200,48 +219,6 @@ pub fn stop() {
     if let Some(session) = session {
         drop(session.tx);
         let _ = session.join.join();
-    }
-}
-
-/// Copies the Y plane (already extracted by Kotlin) and queues it. Dropping the
-/// frame when the worker is behind is intentional: the camera must stay live.
-pub fn push_gray(width: u32, height: u32, stride: u32, rotation: i32, data: &[u8]) -> i32 {
-    if width == 0 || height == 0 {
-        return -1;
-    }
-    let stride = stride.max(width);
-    let needed = stride as usize * height as usize;
-    if data.len() < needed {
-        return -1;
-    }
-    let mut plane = Vec::with_capacity((width * height) as usize);
-    if stride == width {
-        plane.extend_from_slice(&data[..needed]);
-    } else {
-        for row in 0..height as usize {
-            let start = row * stride as usize;
-            plane.extend_from_slice(&data[start..start + width as usize]);
-        }
-    }
-    let session = match SESSION.lock() {
-        Ok(slot) => slot.as_ref().map(|session| session.tx.clone()),
-        Err(_) => return -2,
-    };
-    let Some(tx) = session else {
-        return -1;
-    };
-    match tx.try_send(Frame {
-        width,
-        height,
-        data: plane,
-        rotation,
-    }) {
-        Ok(()) => 0,
-        Err(std::sync::mpsc::TrySendError::Full(_)) => {
-            DROPPED.fetch_add(1, Ordering::Relaxed);
-            0
-        }
-        Err(_) => -1,
     }
 }
 
@@ -356,6 +333,59 @@ fn preview_jpeg(frame: &GrayFrame, max_width: u32, rotation: i32) -> Option<Vec<
     Some(buffer)
 }
 
+/// Pushes one Camera2 YUV_420_888 frame. The U/V planes are tightly packed
+/// half-resolution chroma; Rust converts to RGB for zxing-cpp and keeps luma
+/// for the CNN tier and the preview.
+pub fn push_yuv(width: u32, height: u32, rotation: i32, y: &[u8], u: &[u8], v: &[u8]) -> i32 {
+    if width == 0 || height == 0 || width % 2 != 0 || height % 2 != 0 {
+        return -1;
+    }
+    let luma_len = (width * height) as usize;
+    let chroma_w = (width / 2) as usize;
+    let chroma_h = (height / 2) as usize;
+    let chroma_len = chroma_w * chroma_h;
+    if y.len() < luma_len || u.len() < chroma_len || v.len() < chroma_len {
+        return -1;
+    }
+    let mut rgb = Vec::with_capacity(luma_len * 3);
+    for row in 0..height as usize {
+        let chroma_row = row / 2 * chroma_w;
+        for col in 0..width as usize {
+            let luma = y[row * width as usize + col] as i32;
+            let chroma_col = chroma_row + col / 2;
+            let u = u[chroma_col] as i32 - 128;
+            let v = v[chroma_col] as i32 - 128;
+            let r = (luma + ((91874 * v) >> 16)).clamp(0, 255);
+            let g = (luma - ((22554 * u + 46802 * v) >> 16)).clamp(0, 255);
+            let b = (luma + ((116130 * u) >> 16)).clamp(0, 255);
+            rgb.push(r as u8);
+            rgb.push(g as u8);
+            rgb.push(b as u8);
+        }
+    }
+    let session = match SESSION.lock() {
+        Ok(slot) => slot.as_ref().map(|session| session.tx.clone()),
+        Err(_) => return -2,
+    };
+    let Some(tx) = session else {
+        return -1;
+    };
+    match tx.try_send(Frame {
+        width,
+        height,
+        data: y[..luma_len].to_vec(),
+        color: Some(rgb),
+        rotation,
+    }) {
+        Ok(()) => 0,
+        Err(std::sync::mpsc::TrySendError::Full(_)) => {
+            DROPPED.fetch_add(1, Ordering::Relaxed);
+            0
+        }
+        Err(std::sync::mpsc::TrySendError::Disconnected(_)) => -1,
+    }
+}
+
 fn rotate_luma(data: Vec<u8>, width: u32, height: u32, rotation: i32) -> (Vec<u8>, u32, u32) {
     let normalized = ((rotation % 360) + 360) % 360;
     if normalized == 0 {
@@ -397,20 +427,30 @@ fn rotate_luma(data: Vec<u8>, width: u32, height: u32, rotation: i32) -> (Vec<u8
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativePushFrame(
-    env: jni::JNIEnv,
+    mut env: jni::JNIEnv,
     _class: jni::objects::JClass,
     width: jni::sys::jint,
     height: jni::sys::jint,
-    stride: jni::sys::jint,
     rotation: jni::sys::jint,
-    data: jni::objects::JByteArray,
+    y: jni::objects::JByteArray,
+    u: jni::objects::JByteArray,
+    v: jni::objects::JByteArray,
 ) {
-    let Ok(bytes) = env.convert_byte_array(data) else {
+    let (Ok(y), Ok(u), Ok(v)) = (
+        env.convert_byte_array(y),
+        env.convert_byte_array(u),
+        env.convert_byte_array(v),
+    ) else {
         return;
     };
-    // SAFETY: `i8` and `u8` have identical layout; we only read the slice.
-    let bytes: &[u8] = unsafe { std::slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len()) };
-    let _ = push_gray(width as u32, height as u32, stride as u32, rotation, bytes);
+    let _ = push_yuv(
+        width.max(0) as u32,
+        height.max(0) as u32,
+        rotation,
+        &y,
+        &u,
+        &v,
+    );
 }
 
 #[cfg(target_os = "android")]
