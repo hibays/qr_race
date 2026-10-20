@@ -347,6 +347,29 @@ fn preview_jpeg(frame: &GrayFrame, max_width: u32, rotation: i32) -> Option<Vec<
 /// Pushes one Camera2 YUV_420_888 frame. The U/V planes are tightly packed
 /// half-resolution chroma; Rust converts to RGB for zxing-cpp and keeps luma
 /// for the CNN tier and the preview.
+/// Converts tightly packed YUV_420_888 planes to RGB. BT.601 full-range
+/// integer coefficients keep this cheap enough for a 1280×720 frame.
+fn yuv_to_rgb(y: &[u8], u: &[u8], v: &[u8], width: usize, height: usize) -> Vec<u8> {
+    let chroma_w = width / 2;
+    let mut rgb = Vec::with_capacity(width * height * 3);
+    for row in 0..height {
+        let chroma_row = row / 2 * chroma_w;
+        for col in 0..width {
+            let luma = i32::from(y[row * width + col]);
+            let chroma_col = chroma_row + col / 2;
+            let u = i32::from(u[chroma_col]) - 128;
+            let v = i32::from(v[chroma_col]) - 128;
+            let r = (luma + ((91874 * v) >> 16)).clamp(0, 255);
+            let g = (luma - ((22554 * u + 46802 * v) >> 16)).clamp(0, 255);
+            let b = (luma + ((116130 * u) >> 16)).clamp(0, 255);
+            rgb.push(r as u8);
+            rgb.push(g as u8);
+            rgb.push(b as u8);
+        }
+    }
+    rgb
+}
+
 pub fn push_yuv(width: u32, height: u32, rotation: i32, y: &[u8], u: &[u8], v: &[u8]) -> i32 {
     if width == 0 || height == 0 || width % 2 != 0 || height % 2 != 0 {
         return -1;
@@ -358,22 +381,7 @@ pub fn push_yuv(width: u32, height: u32, rotation: i32, y: &[u8], u: &[u8], v: &
     if y.len() < luma_len || u.len() < chroma_len || v.len() < chroma_len {
         return -1;
     }
-    let mut rgb = Vec::with_capacity(luma_len * 3);
-    for row in 0..height as usize {
-        let chroma_row = row / 2 * chroma_w;
-        for col in 0..width as usize {
-            let luma = y[row * width as usize + col] as i32;
-            let chroma_col = chroma_row + col / 2;
-            let u = u[chroma_col] as i32 - 128;
-            let v = v[chroma_col] as i32 - 128;
-            let r = (luma + ((91874 * v) >> 16)).clamp(0, 255);
-            let g = (luma - ((22554 * u + 46802 * v) >> 16)).clamp(0, 255);
-            let b = (luma + ((116130 * u) >> 16)).clamp(0, 255);
-            rgb.push(r as u8);
-            rgb.push(g as u8);
-            rgb.push(b as u8);
-        }
-    }
+    let rgb = yuv_to_rgb(y, u, v, width as usize, height as usize);
     let session = match SESSION.lock() {
         Ok(slot) => slot.as_ref().map(|session| session.tx.clone()),
         Err(_) => return -2,
@@ -500,4 +508,23 @@ pub unsafe extern "C" fn qr_scanner_preview(out: *mut u8, capacity: usize) -> i3
         return -1;
     }
     crate::write_out(&preview, out, capacity)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::yuv_to_rgb;
+
+    #[test]
+    fn yuv_red_white_and_black_convert_to_rgb() {
+        let red = yuv_to_rgb(&[76], &[84], &[255], 2, 2);
+        assert!(red[0] > 240, "red channel: {red:?}");
+        assert!(red[1] < 24, "green channel: {red:?}");
+        assert!(red[2] < 24, "blue channel: {red:?}");
+
+        let white = yuv_to_rgb(&[235], &[128], &[128], 2, 2);
+        assert_eq!(&white[..3], &[235, 235, 235]);
+
+        let black = yuv_to_rgb(&[16], &[128], &[128], 2, 2);
+        assert_eq!(&black[..3], &[16, 16, 16]);
+    }
 }

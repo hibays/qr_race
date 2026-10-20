@@ -170,18 +170,29 @@ class CameraCapture(private val context: Context) {
         val rowStride = plane.rowStride
         val pixelStride = plane.pixelStride
         val out = ByteArray(width * height)
-        for (row in 0 until height) {
-            for (col in 0 until width) {
-                val index = row * rowStride + col * pixelStride
-                if (index < buffer.limit()) {
-                    out[row * width + col] = buffer.get(index)
+        val row = ByteArray(rowStride)
+        val limit = buffer.limit()
+        for (r in 0 until height) {
+            val start = r * rowStride
+            if (start >= limit) break
+            val available = minOf(rowStride, limit - start)
+            buffer.position(start)
+            buffer.get(row, 0, available)
+            if (pixelStride == 1 && available >= width) {
+                System.arraycopy(row, 0, out, r * width, width)
+            } else {
+                for (col in 0 until width) {
+                    val index = col * pixelStride
+                    if (index < available) {
+                        out[r * width + col] = row[index]
+                    }
                 }
             }
         }
         return out
     }
 
-        private fun chooseBackCamera(manager: CameraManager): String? {
+    private fun chooseBackCamera(manager: CameraManager): String? {
         for (id in manager.cameraIdList) {
             val facing = manager.getCameraCharacteristics(id)
                 .get(CameraCharacteristics.LENS_FACING)
@@ -224,5 +235,6 @@ class CameraCapture(private val context: Context) {
         }
     }
 }
+
 
 
