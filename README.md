@@ -6,7 +6,7 @@
 
 ## 现在有什么（M0–M26）
 
-工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/模组面板/管理员上传）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建、可运行的 wasm 扫描内核与 Web 相机接入、内置自签名 HTTPS、浏览器相机→wasm 扫码端到端验证、模组上传/分发、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android debug APK 构建、rxing 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）都已落地并通过测试；模组执行、移动/Apple 原生采集、CNN 推理接入与真实二维码入镜尚未完成。
+工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/模组面板/管理员上传/桌面一键自部署）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建、可运行的 wasm 扫描内核与 Web 相机接入、内置自签名 HTTPS、浏览器相机→wasm 扫码端到端验证、模组上传/分发、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android debug APK（arm64 Rust 库 + 二维码显示 + 相机权限/设置引导）、rxing 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）都已落地并通过测试；模组执行、Android 相机采集、Apple 采集、CNN 推理接入与真实二维码入镜尚未完成。
 
 ```
 crates/
@@ -24,7 +24,8 @@ crates/
 ├── qr_race_cli/               扫描客户端（bin: qr_scan）：图片或相机 → 登录 → 发布接力
 ├── qr_race_gui/               Flutter 客户端：连接、大厅、房间接力墙、扫码页（手机/桌面同套界面）
 └── qr_race_bench/             基准 CLI：生成 fixture、跑耗时分布、输出 JSON
-src/                           唯一的 server 二进制：serve / provision
+src/                           唯一的 server 二进制：serve / provision / totp
+DEPLOY.md                      部署与真机测试：一键自部署、USB/Wi-Fi、权限、排错
 docs/API.md                    客户端契约（端点、状态码、事件、WS ticket）
 docs/PERF.md                   实测与解读（含相机采集数据）
 docs/MODULES.md                模组契约与 RustPython 试验记录（当前受阻）
@@ -67,10 +68,10 @@ tools/qr_bench.html            手工双码测试台（浏览器打开，用手�
 |---|---|---|
 | Windows 桌面 | 可用（含原生相机 + FFI 扫码） | `flutter build windows --release` |
 | Web | 可用；扫码走 wasm + 浏览器相机（需 HTTPS/localhost） | `pwsh -File scripts/build-wasm.ps1` 后 `flutter build web --release` |
-| Android | **debug APK 可构建**；原生相机与 Rust 扫描库尚未接入 | `flutter build apk --debug` |
+| Android | **debug APK 可构建**；arm64 Rust 库已打包（二维码显示），相机采集未接入；权限申请 + 设置引导已接 | `pwsh -File scripts/android-deploy.ps1` |
 | iOS / macOS | 未验证（需要 macOS 与 Xcode） | — |
 
-Android 构建需要接受 SDK licenses（`flutter doctor --android-licenses`）。若公司网络对 HTTPS 做 TLS 拦截，Gradle wrapper 可能报 PKIX 错误：可把 `distributionUrl` 临时指向本地 Gradle 分发包，构建后还原。APK 里目前没有 `libqr_race_ffi.so`，因此安卓上扫码页会提示扫描器未加载——移动采集后端是下一项工作。
+Android 构建需要接受 SDK licenses（`flutter doctor --android-licenses`）。若公司网络对 HTTPS 做 TLS 拦截，Gradle wrapper 可能报 PKIX 错误：`scripts/android-deploy.ps1` 会自动临时改用 `.refs/gradle-9.3.1-bin.zip`，构建后还原；手动构建也可照做。APK 内含 arm64 `libqr_race_ffi.so`，因此房间里的二维码能正常显示；相机采集尚无 Android 后端，扫码页会提示不可用——这是下一项工作。真机部署步骤见 [DEPLOY.md](DEPLOY.md)。
 
 ## 持久化
 
@@ -219,10 +220,11 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M24 二维码生成改用 rxing：2048² 无损 WebP（q90/m4），FFI 与 wasm 两路，移除 qr_flutter
 - [x] M25 程序化扰动纹理套件：10 个场景（噪声/模糊/低对比/梯度/旋转/透视/小码/多码/相机混合），bench --suite 与测试共用
 - [x] M26 Caffe→ONNX：自行转换 SR/检测器；SR 与独立 NumPy 前向最大误差 5.5e-06，检测器输出 raw heads（decode/NMS 待接入）
+- [x] M27 桌面客户端一键自部署：自动 provision 两个账号、写 TLS/SQLite 配置、启动服务器、展示 URL/指纹/token/secret，并可直接用主机账号连接
+- [x] M28 Android 真机：arm64 Rust 库打包（rxing 二维码显示）、相机权限弹窗 + 拒绝后“去设置”引导、adb reverse 下 TLS 指纹登录成功
 - [ ] CNN 推理接入：ONNX Runtime 后端 + 检测器后处理 + 按需 SR
 - [ ] 模组执行（RustPython 阻塞，见 docs/MODULES.md）
 - [ ] 物理相机实拍；Web 预览流
-- [ ] 移动 / Apple 采集后端
-- [ ] CNN 检测 + CNN 超分（模型权重仍待解决，接口已就位）
+- [ ] Android 相机采集后端（Camera2/CameraX → Rust）；Apple 采集
 - [ ] 模组层：RustPython 0.6 在 Windows 初始化失败，暂缓（见 [docs/MODULES.md](docs/MODULES.md)）
 - [ ] Web/wasm 实时采集扫码

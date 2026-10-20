@@ -4,14 +4,20 @@ version.workspace = true
 edition.workspace = true
 license.workspace = true
 
+[features]
+default = ["desktop-camera"]
+# Camera capture is desktop-only today. Android builds disable it so the same
+# library still provides rxing QR rendering; the scanner ABI is a stub there.
+desktop-camera = ["dep:qr_race_capture", "dep:qr_race_capture_desktop"]
+
 [lib]
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 data-encoding.workspace = true
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
-qr_race_capture.workspace = true
-qr_race_capture_desktop.workspace = true
+qr_race_capture = { workspace = true, optional = true }
+qr_race_capture_desktop = { workspace = true, optional = true }
 qr_race_qr.workspace = true
 qr_race_scan.workspace = true
 serde.workspace = true

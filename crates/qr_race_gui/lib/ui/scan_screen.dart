@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../native/camera_permission.dart';
 import '../native/scanner_backend.dart';
 import '../state/app_state.dart';
 import '../state/scan_controller.dart';
@@ -11,13 +12,16 @@ class ScanScreen extends StatefulWidget {
     required this.state,
     required this.address,
     this.backend,
+    this.permission,
   });
 
   final AppState state;
   final String address;
 
-  /// Tests inject a fake; the app opens the native session.
+  /// Tests inject fakes; the app opens the native session and the platform
+  /// camera permission gateway.
   final ScannerBackend? backend;
+  final CameraPermission? permission;
 
   @override
   State<ScanScreen> createState() => _ScanScreenState();
@@ -25,19 +29,82 @@ class ScanScreen extends StatefulWidget {
 
 class _ScanScreenState extends State<ScanScreen> {
   ScanController? _controller;
+  late final CameraPermission _permission;
+  CameraPermissionStatus? _denied;
   String? _initError;
+  String? _permissionError;
+  bool _requesting = true;
 
   @override
   void initState() {
     super.initState();
+    _permission = widget.permission ?? createCameraPermission();
+    _requestPermission();
+  }
+
+  Future<void> _requestPermission() async {
+    setState(() {
+      _requesting = true;
+      _permissionError = null;
+    });
+    CameraPermissionStatus status;
+    try {
+      status = await _permission.request();
+    } catch (error) {
+      _permissionError = error.toString();
+      status = CameraPermissionStatus.denied;
+    }
+    if (!mounted) return;
+    setState(() {
+      _requesting = false;
+      _denied = status == CameraPermissionStatus.granted ? null : status;
+    });
+    if (status == CameraPermissionStatus.granted) {
+      _startScanner();
+      return;
+    }
+    await _showPermissionDialog(status);
+  }
+
+  void _startScanner() {
     try {
       final controller = ScanController(
         backend: widget.backend ?? createScannerBackend(),
       );
       _controller = controller;
       controller.start();
+      setState(() {});
     } catch (error) {
-      _initError = error.toString();
+      setState(() => _initError = error.toString());
+    }
+  }
+
+  Future<void> _showPermissionDialog(CameraPermissionStatus status) async {
+    if (!mounted) return;
+    final goSettings = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        title: const Text('需要相机权限'),
+        content: Text(
+          status == CameraPermissionStatus.permanentlyDenied
+              ? '相机权限已被永久拒绝。请到系统设置 → 应用 → qr_race → 权限 中手动打开相机。'
+              : '扫码需要使用相机。请允许相机权限；如果弹窗不再出现，请到系统设置中手动打开。',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('去设置'),
+          ),
+        ],
+      ),
+    );
+    if (goSettings == true) {
+      await _permission.openSettings();
     }
   }
 
@@ -74,22 +141,104 @@ class _ScanScreenState extends State<ScanScreen> {
           ],
         ),
       ),
-      body: controller == null
-          ? _InitError(message: _initError ?? '原生扫描器不可用')
-          : ListenableBuilder(
-              listenable: controller,
-              builder: (context, _) {
-                if (controller.snapshot == null &&
-                    controller.fatalError != null) {
-                  return _InitError(message: controller.fatalError!);
-                }
-                return _Body(
-                  controller: controller,
-                  canPublish: widget.state.api != null,
-                  onPublish: _publish,
-                );
-              },
-            ),
+      body: _requesting
+          ? const Center(
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 14),
+                  Text('正在申请相机权限…', style: TextStyle(color: muted, fontSize: 12.5)),
+                ],
+              ),
+            )
+          : _denied != null
+              ? _PermissionBlocked(
+                  status: _denied!,
+                  error: _permissionError,
+                  onRetry: _requestPermission,
+                  onSettings: _permission.openSettings,
+                )
+              : controller == null
+                  ? _InitError(message: _initError ?? '原生扫描器不可用')
+                  : ListenableBuilder(
+                      listenable: controller,
+                      builder: (context, _) {
+                        if (controller.snapshot == null &&
+                            controller.fatalError != null) {
+                          return _InitError(message: controller.fatalError!);
+                        }
+                        return _Body(
+                          controller: controller,
+                          canPublish: widget.state.api != null,
+                          onPublish: _publish,
+                        );
+                      },
+                    ),
+    );
+  }
+}
+
+class _PermissionBlocked extends StatelessWidget {
+  const _PermissionBlocked({
+    required this.status,
+    required this.error,
+    required this.onRetry,
+    required this.onSettings,
+  });
+
+  final CameraPermissionStatus status;
+  final String? error;
+  final Future<void> Function() onRetry;
+  final Future<void> Function() onSettings;
+
+  @override
+  Widget build(BuildContext context) {
+    final message = status == CameraPermissionStatus.permanentlyDenied
+        ? '相机权限已被永久拒绝。请在系统设置 → 应用 → qr_race → 权限 中打开相机，然后回到这里重试。'
+        : '扫码需要相机权限。你可以再次申请，或到系统设置中手动打开。';
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 460),
+        child: Padding(
+          padding: const EdgeInsets.all(28),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.no_photography_outlined, color: warn, size: 42),
+              const SizedBox(height: 14),
+              const Text(
+                '需要相机权限',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                message,
+                textAlign: TextAlign.center,
+                style: const TextStyle(color: muted, height: 1.5, fontSize: 13),
+              ),
+              if (error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  error!,
+                  textAlign: TextAlign.center,
+                  style: const TextStyle(color: danger, fontSize: 12, height: 1.4),
+                ),
+              ],
+              const SizedBox(height: 18),
+              FilledButton(
+                onPressed: onRetry,
+                child: const Text('重新申请'),
+              ),
+              const SizedBox(height: 8),
+              OutlinedButton(
+                onPressed: onSettings,
+                child: const Text('打开系统设置'),
+              ),
+            ],
+          ),
+        ),
+      ),
     );
   }
 }

@@ -6,6 +6,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:http/http.dart' as http;
 import 'package:http/testing.dart';
 import 'package:qr_race_gui/api/api_client.dart';
+import 'package:qr_race_gui/native/camera_permission.dart';
 import 'package:qr_race_gui/native/scanner_backend.dart';
 import 'package:qr_race_gui/state/app_state.dart';
 import 'package:qr_race_gui/state/scan_controller.dart';
@@ -98,6 +99,7 @@ void main() {
           backend: FakeScannerBackend(
             snapshots: [fakeSnapshot(hits: [hit])],
           ),
+          permission: const GrantedCameraPermission(),
         ),
       ),
     );
@@ -128,12 +130,42 @@ void main() {
           state: state,
           address: '东京A区1B级103房',
           backend: FailingBackend(),
+          permission: const GrantedCameraPermission(),
         ),
       ),
     );
     await tester.pump();
+    await tester.pump();
     expect(find.text('原生扫描器没有加载'), findsOneWidget);
     expect(find.textContaining('boom'), findsOneWidget);
+  });
+
+  testWidgets('a denied camera permission offers Settings and retry', (tester) async {
+    final permission = _DeniedPermission();
+    await tester.pumpWidget(
+      MaterialApp(
+        theme: buildTheme(),
+        home: ScanScreen(
+          state: AppState.demo(),
+          address: '东京A区1B级103房',
+          backend: FailingBackend(),
+          permission: permission,
+        ),
+      ),
+    );
+    await tester.pump();
+    await tester.pump(const Duration(milliseconds: 50));
+
+    expect(find.textContaining('永久拒绝'), findsWidgets);
+
+    await tester.tap(find.text('去设置'));
+    await tester.pumpAndSettle();
+    expect(permission.settingsOpened, isTrue);
+    expect(find.text('打开系统设置'), findsOneWidget);
+
+    await tester.tap(find.text('重新申请'));
+    await tester.pump();
+    expect(permission.requests, 2);
   });
 }
 
@@ -156,4 +188,20 @@ class FailingBackend implements ScannerBackend {
 
   @override
   void dispose() {}
+}
+
+class _DeniedPermission implements CameraPermission {
+  int requests = 0;
+  bool settingsOpened = false;
+
+  @override
+  Future<CameraPermissionStatus> request() async {
+    requests++;
+    return CameraPermissionStatus.permanentlyDenied;
+  }
+
+  @override
+  Future<void> openSettings() async {
+    settingsOpened = true;
+  }
 }

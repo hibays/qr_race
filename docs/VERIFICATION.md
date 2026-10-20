@@ -12,10 +12,10 @@ finished product.
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
 | Rust tests | `cargo test --workspace` | **127 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
-| Flutter tests | `flutter test` | **23 passed** |
+| Flutter tests | `flutter test` | **26 passed** |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `pwsh -File scripts/build-wasm.ps1` then `flutter build web --release` | built |
-| Android build | `flutter build apk --debug` | built (151 MB debug APK) |
+| Android build | `flutter build apk --debug` | built (arm64 `libqr_race_ffi.so` packaged) |
 
 ### QR generation
 
@@ -51,6 +51,28 @@ finished product.
   `mbox_priorbox [1,2,27648]`; softmax sums to 1. `DetectionOutput` is omitted;
   decode/NMS is the next step. No Caffe runtime was available for detector
   numeric parity (OpenCV 5 removed `readNetFromCaffe`).
+
+### Self-host and Android device
+
+- Desktop self-host (`SelfHostScreen` + `ProcessServerLauncher`) provisions two
+  accounts, writes TLS/SQLite config, starts the real `qr_race_server`, reads the
+  printed certificate fingerprint, and authenticates with a computed TOTP.
+  `dart run tool/selfhost_probe.dart` completed this against the release binary:
+  `https://<lan>:18470`, certificate fingerprint `b258ac…580f`, authenticated as
+  `host`, empty lobby, then stopped the server.
+- Real Android device (OnePlus PLF110, `3B163Q00LSK00000`): debug APK installed
+  via adb. With `adb reverse tcp:18471 tcp:18471`, the app connected to a server
+  started by `scripts/deploy-server.ps1` using
+  `https://127.0.0.1:18471`, the printed certificate fingerprint, a host token,
+  and a TOTP code; the lobby rendered as `host`.
+- The arm64 FFI library is packaged in the APK; the room screen renders relay
+  QR codes through rxing (screenshots in `DEPLOY.md`).
+- Opening the scan page triggers the Android CAMERA runtime dialog. Denying it
+  lands on a page with “重新申请 / 打开系统设置”; `MainActivity` maps a
+  non-rationale denial to `permanentlyDenied` and opens
+  `ACTION_APPLICATION_DETAILS_SETTINGS`. **The Android camera capture backend
+  itself is still a stub** (`qr_scanner_start` returns a mobile placeholder), so
+  the scan page reports that camera capture is unavailable.
 
 ## Feature evidence
 
@@ -126,9 +148,11 @@ finished product.
    initialization on this Windows host (`essential initialization failed`, or a
    `codecs` recursion with the frozen stdlib); 0.5 is incompatible with the 0.6
    stdlib. Distribution works; execution does not. See `docs/MODULES.md`.
-3. **Mobile/Apple capture does not exist.** The Android APK builds but contains
-   no native camera or Rust scanner; iOS/macOS cannot be built or verified on
-   Windows.
+3. **Android camera capture does not exist yet.** The APK packages the arm64
+   Rust library (QR rendering works) and asks for the camera permission with a
+   Settings fallback, but the FFI scanner is a stub and there is no Camera2/
+   CameraX frame source; scanning must use the Windows/Web client. iOS/macOS
+   cannot be built or verified on Windows.
 4. **No live QR symbol in view.** Real textured frames were captured and scanned
    (1080p/720p numbers above), but no QR was in front of the camera, so a live
    symbol was never decoded. The web probe uses a fake camera file.
@@ -154,4 +178,10 @@ flutter test
 flutter build web --release
 flutter build windows --release
 flutter build apk --debug
+
+# self-host launcher (starts a real server, authenticates, stops it)
+dart run tool/selfhost_probe.dart
+
+# Android device (builds, adb reverse, installs, launches)
+pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```

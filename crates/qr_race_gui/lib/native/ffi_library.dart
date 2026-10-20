@@ -1,11 +1,23 @@
 import 'dart:ffi';
 import 'dart:io';
 
-/// Locates and opens `qr_race_ffi` on desktop platforms. Shared by the scanner
+/// Locates and opens `qr_race_ffi` on native platforms. Shared by the scanner
 /// session and the QR renderer so both use the same library lookup rules.
 DynamicLibrary openQrRaceFfi({String? libraryPath}) {
+  if (Platform.isAndroid) {
+    // Packaged as jniLibs/<abi>/libqr_race_ffi.so; the Android linker resolves
+    // the soname directly from the APK.
+    try {
+      return DynamicLibrary.open(_platformName());
+    } catch (error) {
+      throw StateError(
+        'libqr_race_ffi.so is not packaged for this ABI '
+        '(${Platform.version.split(' ').first}): $error',
+      );
+    }
+  }
   if (!Platform.isWindows && !Platform.isLinux && !Platform.isMacOS) {
-    throw UnsupportedError('the native qr_race library is desktop-only for now');
+    throw UnsupportedError('the native qr_race library is not available here');
   }
   final candidates = <String>[
     ?libraryPath,

@@ -211,6 +211,7 @@ void main() {
     expect(find.text('连接'), findsOneWidget);
     expect(find.byType(TextFormField), findsNWidgets(4));
     expect(find.text('证书指纹（可选）'), findsOneWidget);
+    expect(find.text('自部署服务器（本机）'), findsOneWidget);
 
     await tester.tap(find.text('连接'));
     await tester.pump();

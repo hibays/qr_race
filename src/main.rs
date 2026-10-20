@@ -38,6 +38,16 @@ enum Command {
         #[arg(long)]
         admin: bool,
     },
+    /// Print the current TOTP code for a base32 secret (for manual testing).
+    Totp {
+        #[arg(long)]
+        secret: String,
+        /// Unix time in seconds to use instead of now.
+        #[arg(long)]
+        at: Option<u64>,
+        #[arg(long, default_value_t = qr_race_hub::DEFAULT_DIGITS)]
+        digits: u32,
+    },
 }
 
 #[derive(Debug, Deserialize)]
@@ -92,6 +102,26 @@ async fn main() -> ExitCode {
         Command::Provision { user, admin } => {
             print_provision(&user, admin);
             ExitCode::SUCCESS
+        }
+        Command::Totp { secret, at, digits } => {
+            let now_ms = at
+                .map(|seconds| seconds.saturating_mul(1000))
+                .unwrap_or_else(|| {
+                    std::time::SystemTime::now()
+                        .duration_since(std::time::UNIX_EPOCH)
+                        .map(|elapsed| elapsed.as_millis() as u64)
+                        .unwrap_or(0)
+                });
+            match qr_race_hub::totp::current_code(&secret, now_ms, digits) {
+                Some(code) => {
+                    println!("{code}");
+                    ExitCode::SUCCESS
+                }
+                None => {
+                    eprintln!("qr_race_server: invalid base32 secret or digits");
+                    ExitCode::FAILURE
+                }
+            }
         }
         Command::Serve { config } => match serve(&config).await {
             Ok(()) => ExitCode::SUCCESS,

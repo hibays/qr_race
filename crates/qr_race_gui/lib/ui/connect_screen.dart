@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../api/cert_fingerprint.dart';
 import '../state/app_state.dart';
 import 'lobby_screen.dart';
+import 'self_host_screen.dart';
 import 'theme.dart';
 
 class ConnectScreen extends StatefulWidget {
@@ -148,6 +149,16 @@ class _ConnectScreenState extends State<ConnectScreen> {
                         const SizedBox(height: 16),
                         _ErrorLine(message: state.error!),
                       ],
+                      const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => SelfHostScreen(state: widget.state),
+                          ),
+                        ),
+                        icon: const Icon(Icons.dns_outlined, size: 18),
+                        label: const Text('自部署服务器（本机）'),
+                      ),
                       const SizedBox(height: 28),
                       const Text(
                         'token 与 TOTP 由运营方发放。自签名 HTTPS 时把服务端打印的证书指纹填进上方，浏览器端则接受一次证书警告。',
