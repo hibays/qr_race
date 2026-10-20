@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
 import '../native/scanner_backend.dart';
+import 'relay_slot.dart';
 
 /// Owns the native scanner session and turns its polls into UI state.
 class ScanController extends ChangeNotifier {
@@ -27,9 +28,25 @@ class ScanController extends ChangeNotifier {
   String? fatalError;
   String? publishError;
   final Set<String> _published = {};
+  final Map<String, String> _lastBySlot = {};
+  final Map<String, DateTime> _retryAt = {};
+  final Set<String> _queuedSlots = {};
+  final List<_PendingRelay> _queue = [];
   Timer? _timer;
+  ApiClient? _api;
+  String? _address;
+  bool _draining = false;
 
   bool isPublished(ScanHit hit) => _published.contains(hit.key);
+
+  bool get autoPublishEnabled => _api != null;
+
+  /// Publishes new/changed prefixed payloads automatically. Scanning a code
+  /// whose prefix was seen before with different bytes updates that slot.
+  void enableAutoPublish(ApiClient api, String address) {
+    _api = api;
+    _address = address;
+  }
 
   void start() {
     try {
@@ -51,6 +68,7 @@ class ScanController extends ChangeNotifier {
       final next = backend.poll();
       snapshot = next;
       fatalError = null;
+      _collect(next);
     } catch (error) {
       fatalError = error.toString();
       _timer?.cancel();
@@ -59,22 +77,49 @@ class ScanController extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Publishes one hit's exact bytes as a relay. Returns the relay id.
-  Future<String?> publish(
-    ApiClient api,
-    String address,
-    ScanHit hit,
-  ) async {
-    publishError = null;
+  void _collect(ScannerSnapshot snapshot) {
+    final api = _api;
+    final address = _address;
+    if (api == null || address == null) return;
+    for (final hit in snapshot.hits) {
+      final slot = relaySlot(hit.text);
+      if (_lastBySlot[slot] == hit.text) continue;
+      if (_queuedSlots.contains(slot)) continue;
+      final retry = _retryAt[slot];
+      if (retry != null && DateTime.now().isBefore(retry)) continue;
+      _queuedSlots.add(slot);
+      _queue.add(_PendingRelay(api, address, slot, hit));
+    }
+    unawaited(_drain());
+  }
+
+  Future<void> _drain() async {
+    if (_draining) return;
+    _draining = true;
     try {
-      final relay = await api.publishRelay(address, payload: hit.raw);
-      _published.add(hit.key);
-      notifyListeners();
-      return relay.id;
-    } catch (error) {
-      publishError = error is ApiException ? error.message : error.toString();
-      notifyListeners();
-      return null;
+      while (_queue.isNotEmpty) {
+        final pending = _queue.removeAt(0);
+        try {
+          await pending.api.publishRelay(
+            pending.address,
+            payload: pending.hit.raw,
+          );
+          _lastBySlot[pending.slot] = pending.hit.text;
+          _retryAt.remove(pending.slot);
+          _published.add(pending.hit.key);
+          publishError = null;
+        } catch (error) {
+          publishError =
+              error is ApiException ? error.message : error.toString();
+          // Back off this slot; another code may still publish fine.
+          _retryAt[pending.slot] = DateTime.now().add(const Duration(seconds: 2));
+        } finally {
+          _queuedSlots.remove(pending.slot);
+        }
+        notifyListeners();
+      }
+    } finally {
+      _draining = false;
     }
   }
 
@@ -86,6 +131,15 @@ class ScanController extends ChangeNotifier {
     backend.dispose();
     super.dispose();
   }
+}
+
+class _PendingRelay {
+  _PendingRelay(this.api, this.address, this.slot, this.hit);
+
+  final ApiClient api;
+  final String address;
+  final String slot;
+  final ScanHit hit;
 }
 
 /// Test/demo backend: hand it snapshots, no native library involved.

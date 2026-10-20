@@ -3,6 +3,31 @@ import 'dart:typed_data';
 
 import 'package:crypto/crypto.dart';
 
+/// TLS choice for a self-hosted server.
+enum SelfHostTls { none, selfSigned, files }
+
+class TlsOptions {
+  const TlsOptions.selfSigned({this.directory})
+      : mode = SelfHostTls.selfSigned,
+        certPath = null,
+        keyPath = null;
+
+  const TlsOptions.none()
+      : mode = SelfHostTls.none,
+        directory = null,
+        certPath = null,
+        keyPath = null;
+
+  const TlsOptions.files({required this.certPath, required this.keyPath})
+      : mode = SelfHostTls.files,
+        directory = null;
+
+  final SelfHostTls mode;
+  final String? directory;
+  final String? certPath;
+  final String? keyPath;
+}
+
 /// One running self-hosted server and the credentials it was provisioned with.
 class SelfHostInfo {
   const SelfHostInfo({
@@ -26,7 +51,10 @@ class SelfHostInfo {
 
 /// Starts and stops a server binary on the local machine.
 abstract class ServerLauncher {
-  Future<SelfHostInfo> start({int port = 8443});
+  Future<SelfHostInfo> start({
+    int port = 8443,
+    TlsOptions tls = const TlsOptions.selfSigned(),
+  });
 
   Future<void> stop();
 }

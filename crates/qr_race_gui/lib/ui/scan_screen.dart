@@ -3,7 +3,9 @@ import 'package:flutter/material.dart';
 import '../native/camera_permission.dart';
 import '../native/scanner_backend.dart';
 import '../state/app_state.dart';
+import '../state/relay_slot.dart';
 import '../state/scan_controller.dart';
+import 'open_link_sheet.dart';
 import 'theme.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -73,6 +75,10 @@ class _ScanScreenState extends State<ScanScreen> {
       );
       _controller = controller;
       controller.start();
+      final api = widget.state.api;
+      if (api != null) {
+        controller.enableAutoPublish(api, widget.address);
+      }
       setState(() {});
     } catch (error) {
       setState(() => _initError = error.toString());
@@ -114,20 +120,6 @@ class _ScanScreenState extends State<ScanScreen> {
     super.dispose();
   }
 
-  Future<void> _publish(ScanHit hit) async {
-    final controller = _controller;
-    final api = widget.state.api;
-    if (controller == null || api == null) return;
-
-    final id = await controller.publish(api, widget.address, hit);
-    if (!mounted) return;
-    final message = id != null
-        ? '已发布接力 $id'
-        : (controller.publishError ?? '发布失败');
-    ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(message)));
-    if (id != null) widget.state.refreshRoom();
-  }
-
   @override
   Widget build(BuildContext context) {
     final controller = _controller;
@@ -136,7 +128,7 @@ class _ScanScreenState extends State<ScanScreen> {
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            const Text('扫码发布', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
+            const Text('自动扫码', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             Text(widget.address, style: const TextStyle(fontSize: 12, color: muted)),
           ],
         ),
@@ -168,11 +160,7 @@ class _ScanScreenState extends State<ScanScreen> {
                             controller.fatalError != null) {
                           return _InitError(message: controller.fatalError!);
                         }
-                        return _Body(
-                          controller: controller,
-                          canPublish: widget.state.api != null,
-                          onPublish: _publish,
-                        );
+                        return _Body(controller: controller);
                       },
                     ),
     );
@@ -244,15 +232,9 @@ class _PermissionBlocked extends StatelessWidget {
 }
 
 class _Body extends StatelessWidget {
-  const _Body({
-    required this.controller,
-    required this.canPublish,
-    required this.onPublish,
-  });
+  const _Body({required this.controller});
 
   final ScanController controller;
-  final bool canPublish;
-  final Future<void> Function(ScanHit hit) onPublish;
 
   @override
   Widget build(BuildContext context) {
@@ -280,7 +262,7 @@ class _Body extends StatelessWidget {
                     if (preview != null)
                       Image.memory(
                         preview,
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
                         gaplessPlayback: true,
                       )
                     else
@@ -318,7 +300,7 @@ class _Body extends StatelessWidget {
               child: Row(
                 children: [
                   Text(
-                    '识别结果',
+                    '识别结果 · 自动发布',
                     style: TextStyle(
                       fontSize: 12,
                       letterSpacing: 1.2,
@@ -342,8 +324,7 @@ class _Body extends StatelessWidget {
                         return _HitTile(
                           hit: hit,
                           published: controller.isPublished(hit),
-                          enabled: canPublish,
-                          onPublish: () => onPublish(hit),
+                          autoPublish: controller.autoPublishEnabled,
                         );
                       },
                     ),
@@ -384,18 +365,18 @@ class _HitTile extends StatelessWidget {
   const _HitTile({
     required this.hit,
     required this.published,
-    required this.enabled,
-    required this.onPublish,
+    required this.autoPublish,
   });
 
   final ScanHit hit;
   final bool published;
-  final bool enabled;
-  final VoidCallback onPublish;
+  final bool autoPublish;
 
   @override
   Widget build(BuildContext context) {
     final label = hit.text.isEmpty ? '（二进制内容）' : hit.text;
+    final slot = relaySlot(hit.text);
+    final hasPrefix = slot != hit.text;
     return Container(
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
@@ -409,6 +390,23 @@ class _HitTile extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                if (hasPrefix)
+                  Container(
+                    margin: const EdgeInsets.only(bottom: 4),
+                    padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: 0.14),
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                    child: Text(
+                      slot,
+                      style: const TextStyle(
+                        color: accent,
+                        fontSize: 10.5,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
                 Text(
                   label,
                   maxLines: 2,
@@ -417,21 +415,31 @@ class _HitTile extends StatelessWidget {
                 ),
                 const SizedBox(height: 4),
                 Text(
-                  '${hit.raw.length} 字节 · ${_timeLabel(hit.atMs)}',
-                  style: const TextStyle(fontSize: 11.5, color: muted),
+                  '${hit.raw.length} 字节 · ${_timeLabel(hit.atMs)} · '
+                  '${autoPublish ? (published ? '已自动发布' : '等待自动发布') : '离线，不发布'}',
+                  style: TextStyle(
+                    fontSize: 11.5,
+                    color: published ? accent : muted,
+                  ),
                 ),
               ],
             ),
           ),
-          const SizedBox(width: 12),
-          OutlinedButton(
-            onPressed: published || !enabled ? null : onPublish,
-            style: OutlinedButton.styleFrom(
-              minimumSize: const Size(84, 38),
-              foregroundColor: published ? accent : ink,
-              side: BorderSide(color: published ? accent : line),
-            ),
-            child: Text(published ? '已发布' : '发布'),
+          const SizedBox(width: 8),
+          IconButton(
+            tooltip: '打开链接',
+            visualDensity: VisualDensity.compact,
+            onPressed: () => showOpenLinkSheet(context, hit.text),
+            icon: const Icon(Icons.open_in_new, size: 20),
+          ),
+          Icon(
+            published
+                ? Icons.cloud_done_outlined
+                : autoPublish
+                    ? Icons.cloud_upload_outlined
+                    : Icons.cloud_off_outlined,
+            color: published ? accent : muted,
+            size: 22,
           ),
         ],
       ),
@@ -470,7 +478,7 @@ class _NoHits extends StatelessWidget {
                 ),
                 SizedBox(height: 6),
                 Text(
-                  '识别到的内容会出现在这里，点“发布”后全房间都能接力。',
+                  '把二维码对准摄像头，识别后会自动发布；同一前缀的新内容会更新该槽位。',
                   textAlign: TextAlign.center,
                   style: TextStyle(color: muted, height: 1.5, fontSize: 12.5),
                 ),

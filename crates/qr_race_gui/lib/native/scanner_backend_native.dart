@@ -1,8 +1,9 @@
 import 'dart:convert';
 import 'dart:ffi';
-import 'dart:typed_data';
+import 'dart:io';
 
 import 'package:ffi/ffi.dart';
+import 'package:flutter/services.dart';
 
 import 'ffi_library.dart';
 import 'scanner_types.dart';
@@ -29,6 +30,8 @@ class FfiScannerBackend implements ScannerBackend {
     _capacity = _initialCapacity;
   }
 
+  static const _channel = MethodChannel('app.qrrace.qr_race_gui/camera');
+
   static const int _initialCapacity = 128 * 1024;
 
   final DynamicLibrary _library;
@@ -39,6 +42,7 @@ class FfiScannerBackend implements ScannerBackend {
   late Pointer<Uint8> _buffer;
   late int _capacity;
   int _lastPreviewSeq = 0;
+  Uint8List? _lastPreview;
   bool _started = false;
 
   @override
@@ -53,13 +57,37 @@ class FfiScannerBackend implements ScannerBackend {
       throw StateError('qr_scanner_start returned $code');
     }
     _started = true;
+    if (Platform.isAndroid) {
+      _startAndroidCapture(width, height, fps);
+    }
+  }
+
+  Future<void> _startAndroidCapture(int width, int height, int fps) async {
+    try {
+      await _channel.invokeMethod<void>('startCapture', {
+        'width': width,
+        'height': height,
+        'fps': fps,
+      });
+    } catch (_) {
+      // The FFI state will report the failure; the UI stays usable.
+    }
   }
 
   @override
   void stop() {
     if (!_started) return;
+    if (Platform.isAndroid) {
+      _stopAndroidCapture();
+    }
     _stop();
     _started = false;
+  }
+
+  Future<void> _stopAndroidCapture() async {
+    try {
+      await _channel.invokeMethod<void>('stopCapture');
+    } catch (_) {}
   }
 
   @override
@@ -71,11 +99,14 @@ class FfiScannerBackend implements ScannerBackend {
     final json = jsonDecode(utf8.decode(_buffer.asTypedList(length)))
         as Map<String, dynamic>;
     final seq = json['preview_seq'] as int? ?? 0;
-    Uint8List? preview;
+    // Keep the last frame between preview updates. Returning null here makes
+    // Image.memory tear down its layer, which the eye sees as black flicker.
+    Uint8List? preview = _lastPreview;
     if (seq != _lastPreviewSeq) {
       final bytes = _preview(_buffer, _capacity);
       if (bytes > 0) {
         preview = Uint8List.fromList(_buffer.asTypedList(bytes));
+        _lastPreview = preview;
         _lastPreviewSeq = seq;
       }
     }
@@ -90,3 +121,5 @@ class FfiScannerBackend implements ScannerBackend {
 }
 
 ScannerBackend createScannerBackend() => FfiScannerBackend();
+
+

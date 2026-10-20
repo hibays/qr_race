@@ -1,6 +1,7 @@
 param(
     [int]$Port = 8443,
     [switch]$SkipBuild,
+    [switch]$SkipRust,
     [switch]$Demo
 )
 
@@ -37,6 +38,10 @@ Write-Host "adb reverse tcp:$Port -> tcp:$Port (phone can use https://127.0.0.1:
 
 $apk = Join-Path $gui "build\app\outputs\flutter-apk\app-debug.apk"
 if (-not $SkipBuild) {
+    if (-not $SkipRust) {
+        & pwsh -NoProfile -File (Join-Path $root "scripts\build-android-ffi.ps1")
+        if ($LASTEXITCODE -ne 0) { throw "Android Rust library build failed" }
+    }
     $props = Join-Path $gui "android\gradle\wrapper\gradle-wrapper.properties"
     $backup = "$props.qrrace-backup"
     Copy-Item $props $backup -Force
@@ -75,5 +80,5 @@ Write-Host "In the app connect screen use:"
 Write-Host "  server:    https://127.0.0.1:$Port"
 Write-Host "  fingerprint / tokens / TOTP: see the desktop self-host screen or deploy-server output"
 Write-Host ""
-Write-Host "Android currently renders QR codes but native camera capture is not wired yet;"
-Write-Host "use the Windows/Web client for scanning and publishing."
+Write-Host "Android can self-host: 连接页 -> 自部署服务器（本机），默认端口 18443。"
+Write-Host "Or connect to a desktop/server URL and scan/publish automatically."

@@ -44,42 +44,14 @@ void main() {
     expect(backend.disposed, isTrue);
   });
 
-  test('publishing sends the exact bytes and remembers the hit', () async {
+  testWidgets('the scan screen auto-publishes prefixed hits', (tester) async {
+    final hit = _hit('cam1:https://example.test/scan');
     final calls = <http.Request>[];
-    final client = MockClient((request) async {
-      calls.add(request);
-      return _json({
-        'id': 'r-9',
-        'publisher': 'host-a',
-        'kind': 'text',
-        'payload_b64': 'aGVsbG8=',
-        'created_at_ms': 1700000000000,
-      });
-    });
-    final api = ApiClient(baseUrl: 'http://example.test', httpClient: client);
-    final hit = _hit('hello');
-    final controller = ScanController(backend: FakeScannerBackend());
-
-    final id = await controller.publish(api, '东京A区1B级103房', hit);
-
-    expect(id, 'r-9');
-    expect(calls.single.url.path, '/v1/room/relay');
-    expect(
-      calls.single.url.queryParameters['address'],
-      '东京A区1B级103房',
-    );
-    final body = jsonDecode(calls.single.body) as Map<String, dynamic>;
-    expect(body['payload_b64'], base64Encode(hit.raw));
-    expect(controller.isPublished(hit), isTrue);
-    controller.dispose();
-  });
-
-  testWidgets('the scan screen lists hits and publishes one', (tester) async {
-    final hit = _hit('https://example.test/scan');
     final state = AppState.demo();
     state.api = ApiClient(
       baseUrl: 'http://example.test',
       httpClient: MockClient((request) async {
+        calls.add(request);
         return _json({
           'id': 'r-9',
           'publisher': 'host-a',
@@ -105,17 +77,17 @@ void main() {
     );
 
     await tester.pump(const Duration(milliseconds: 200));
+    await tester.pump(const Duration(milliseconds: 100));
 
-    expect(find.text('识别结果'), findsOneWidget);
-    expect(find.text('https://example.test/scan'), findsOneWidget);
-    expect(find.text('发布'), findsOneWidget);
-
-    await tester.tap(find.text('发布'));
-    await tester.pump();
-    await tester.pump(const Duration(milliseconds: 50));
-
-    expect(find.text('已发布'), findsOneWidget);
-    expect(find.textContaining('已发布接力 r-9'), findsOneWidget);
+    expect(find.text('识别结果 · 自动发布'), findsOneWidget);
+    expect(find.textContaining('cam1'), findsWidgets);
+    expect(find.textContaining('已自动发布'), findsWidgets);
+    expect(find.text('发布'), findsNothing);
+    expect(calls, hasLength(1));
+    expect(calls.single.url.path, '/v1/room/relay');
+    expect(calls.single.url.queryParameters['address'], '东京A区1B级103房');
+    final body = jsonDecode(calls.single.body) as Map<String, dynamic>;
+    expect(body['payload_b64'], base64Encode(hit.raw));
 
     // Dispose the screen so its periodic poll timer is cancelled.
     await tester.pumpWidget(const SizedBox());

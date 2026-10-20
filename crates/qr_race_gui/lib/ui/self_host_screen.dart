@@ -1,13 +1,17 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
-import '../state/app_state.dart';
+import '../api/connect_link.dart';
+import '../native/storage_access.dart';
 import '../selfhost/self_host_launcher.dart';
+import '../state/app_state.dart';
 import 'lobby_screen.dart';
 import 'theme.dart';
 
-/// Desktop-only one-click server: provision accounts, write config, start
-/// `qr_race_server`, show URL/fingerprint/credentials and connect.
+/// One-click server: provision accounts, choose HTTP/self-signed/custom TLS,
+/// start `qr_race_server` (desktop) or the in-process server (Android), show
+/// URL/fingerprint/credentials and connect.
 class SelfHostScreen extends StatefulWidget {
   const SelfHostScreen({super.key, required this.state, this.launcher});
 
@@ -18,25 +22,66 @@ class SelfHostScreen extends StatefulWidget {
   State<SelfHostScreen> createState() => _SelfHostScreenState();
 }
 
-class _SelfHostScreenState extends State<SelfHostScreen> {
+class _SelfHostScreenState extends State<SelfHostScreen>
+    with WidgetsBindingObserver {
   final _port = TextEditingController(text: '8443');
+  final _cert = TextEditingController();
+  final _key = TextEditingController();
   ServerLauncher? _launcher;
   SelfHostInfo? _info;
+  SelfHostTls _tlsMode = SelfHostTls.selfSigned;
   String? _error;
   bool _busy = false;
+  bool _allFiles = false;
+
+  bool get _isAndroid => defaultTargetPlatform == TargetPlatform.android;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     if (selfHostSupported) {
       _launcher = widget.launcher ?? createServerLauncher();
+    }
+    if (_isAndroid) {
+      // 8443 is often taken on Android (VPN/other tools); pick a quieter default
+      // while keeping the port editable.
+      if (_port.text == '8443') _port.text = '18443';
+      _refreshAllFiles();
     }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _port.dispose();
+    _cert.dispose();
+    _key.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && _isAndroid) {
+      _refreshAllFiles();
+    }
+  }
+
+  Future<void> _refreshAllFiles() async {
+    final granted = await StorageAccess.hasAllFilesAccess();
+    if (mounted) setState(() => _allFiles = granted);
+  }
+
+  Future<void> _requestAllFiles() async {
+    await StorageAccess.requestAllFilesAccess();
+    await _refreshAllFiles();
+  }
+
+  Future<void> _pickFile(TextEditingController controller) async {
+    final path = await StorageAccess.pickFile();
+    if (path != null && mounted) {
+      setState(() => controller.text = path);
+    }
   }
 
   Future<void> _start() async {
@@ -47,12 +92,27 @@ class _SelfHostScreenState extends State<SelfHostScreen> {
       setState(() => _error = '端口需要在 1024–65535 之间');
       return;
     }
+    final TlsOptions tls;
+    switch (_tlsMode) {
+      case SelfHostTls.none:
+        tls = const TlsOptions.none();
+      case SelfHostTls.selfSigned:
+        tls = const TlsOptions.selfSigned();
+      case SelfHostTls.files:
+        final cert = _cert.text.trim();
+        final key = _key.text.trim();
+        if (cert.isEmpty || key.isEmpty) {
+          setState(() => _error = '请选择或填写证书和私钥文件');
+          return;
+        }
+        tls = TlsOptions.files(certPath: cert, keyPath: key);
+    }
     setState(() {
       _busy = true;
       _error = null;
     });
     try {
-      final info = await launcher.start(port: port);
+      final info = await launcher.start(port: port, tls: tls);
       if (!mounted) return;
       setState(() => _info = info);
     } catch (error) {
@@ -83,7 +143,7 @@ class _SelfHostScreenState extends State<SelfHostScreen> {
       server: info.url,
       token: info.hostToken,
       code: code,
-      fingerprint: info.fingerprint,
+      fingerprint: info.fingerprint.isEmpty ? null : info.fingerprint,
     );
     if (!mounted) return;
     if (!ok) {
@@ -104,7 +164,7 @@ class _SelfHostScreenState extends State<SelfHostScreen> {
           children: [
             Text('自部署服务器', style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700)),
             Text(
-              '在本机启动 qr_race_server（桌面版）',
+              '在本机启动 qr_race_server（仅监听 127.0.0.1）',
               style: TextStyle(fontSize: 12, color: muted),
             ),
           ],
@@ -124,7 +184,7 @@ class _SelfHostScreenState extends State<SelfHostScreen> {
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
         const _Note(
-          '手机与 Web 版本不能托管服务器（服务端是 Rust 二进制，需要桌面系统）。',
+          'Web 版本不能托管服务端（浏览器里没有 Rust 进程）。请用桌面版或 Android App 自部署。',
         ),
         const SizedBox(height: 16),
         const Text('在电脑上自部署', style: TextStyle(fontWeight: FontWeight.w700)),
@@ -147,7 +207,7 @@ class _SelfHostScreenState extends State<SelfHostScreen> {
     final info = _info;
     return [
       const _Note(
-        '一键完成：生成两个账号 → 写 TLS 配置 → 启动服务器。'
+        '一键完成：生成两个账号 → 配置 TLS/监听 → 启动服务器。'
         '服务器保持运行，直到你在这里点“停止”。',
       ),
       const SizedBox(height: 14),
@@ -181,6 +241,110 @@ class _SelfHostScreenState extends State<SelfHostScreen> {
         const SizedBox(height: 12),
         Text(_error!, style: const TextStyle(color: danger, fontSize: 12.5, height: 1.4)),
       ],
+      const SizedBox(height: 18),
+      const Text('连接方式', style: TextStyle(fontWeight: FontWeight.w600)),
+      const SizedBox(height: 8),
+      SegmentedButton<SelfHostTls>(
+        segments: const [
+          ButtonSegment(
+            value: SelfHostTls.selfSigned,
+            label: Text('自签名'),
+            icon: Icon(Icons.auto_awesome_outlined, size: 16),
+          ),
+          ButtonSegment(
+            value: SelfHostTls.files,
+            label: Text('已有证书'),
+            icon: Icon(Icons.folder_outlined, size: 16),
+          ),
+          ButtonSegment(
+            value: SelfHostTls.none,
+            label: Text('仅 HTTP'),
+            icon: Icon(Icons.lan_outlined, size: 16),
+          ),
+        ],
+        selected: {_tlsMode},
+        onSelectionChanged: info == null && !_busy
+            ? (selection) => setState(() => _tlsMode = selection.first)
+            : null,
+      ),
+      if (_tlsMode == SelfHostTls.files) ...[
+        const SizedBox(height: 10),
+        TextField(
+          controller: _cert,
+          enabled: info == null && !_busy,
+          decoration: InputDecoration(
+            labelText: '证书 PEM 路径',
+            suffixIcon: _isAndroid
+                ? IconButton(
+                    tooltip: '选择证书',
+                    onPressed: () => _pickFile(_cert),
+                    icon: const Icon(Icons.folder_open_outlined),
+                  )
+                : null,
+          ),
+        ),
+        const SizedBox(height: 8),
+        TextField(
+          controller: _key,
+          enabled: info == null && !_busy,
+          decoration: InputDecoration(
+            labelText: '私钥 PEM 路径',
+            suffixIcon: _isAndroid
+                ? IconButton(
+                    tooltip: '选择私钥',
+                    onPressed: () => _pickFile(_key),
+                    icon: const Icon(Icons.folder_open_outlined),
+                  )
+                : null,
+          ),
+        ),
+        const SizedBox(height: 6),
+        const Text(
+          '证书必须包含客户端实际使用的地址（本机自部署通常用 127.0.0.1）。',
+          style: TextStyle(color: muted, fontSize: 11.5, height: 1.4),
+        ),
+      ],
+      if (_isAndroid && _tlsMode != SelfHostTls.none) ...[
+        const SizedBox(height: 10),
+        Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: surface,
+            border: Border.all(color: line),
+            borderRadius: BorderRadius.circular(10),
+          ),
+          child: Row(
+            children: [
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Text(
+                      '所有文件访问权限',
+                      style: TextStyle(fontWeight: FontWeight.w600, fontSize: 13),
+                    ),
+                    Text(
+                      _allFiles ? '已授权，可选任意目录的证书' : '未授权；文件选择器会复制到应用缓存',
+                      style: const TextStyle(color: muted, fontSize: 11.5),
+                    ),
+                  ],
+                ),
+              ),
+              TextButton(
+                onPressed: _allFiles ? null : _requestAllFiles,
+                child: Text(_allFiles ? '已授权' : '去申请'),
+              ),
+            ],
+          ),
+        ),
+      ],
+      if (_tlsMode == SelfHostTls.none) ...[
+        const SizedBox(height: 6),
+        const Text(
+          'HTTP 只建议用于 127.0.0.1 本机调试；局域网/生产请用 HTTPS。',
+          style: TextStyle(color: warn, fontSize: 11.5, height: 1.4),
+        ),
+      ],
       if (info != null) ...[
         const SizedBox(height: 18),
         _InfoCard(info: info),
@@ -190,12 +354,22 @@ class _SelfHostScreenState extends State<SelfHostScreen> {
           token: info.hostToken,
           secret: info.hostSecret,
           onConnect: _connectAsHost,
+          link: buildConnectLink(
+            server: info.url,
+            fingerprint: info.fingerprint,
+            token: info.hostToken,
+          ),
         ),
         const SizedBox(height: 8),
         _AccountCard(
           title: '成员账号',
           token: info.memberToken,
           secret: info.memberSecret,
+          link: buildConnectLink(
+            server: info.url,
+            fingerprint: info.fingerprint,
+            token: info.memberToken,
+          ),
         ),
         const SizedBox(height: 16),
         OutlinedButton.icon(
@@ -250,7 +424,8 @@ class _InfoCard extends StatelessWidget {
           const Text('服务器已启动', style: TextStyle(fontWeight: FontWeight.w700)),
           const SizedBox(height: 8),
           _CopyRow(label: 'URL', value: info.url),
-          _CopyRow(label: '证书指纹', value: info.fingerprint),
+          if (info.fingerprint.isNotEmpty)
+            _CopyRow(label: '证书指纹', value: info.fingerprint),
           _CopyRow(label: '数据目录', value: info.dataDirectory),
         ],
       ),
@@ -299,12 +474,14 @@ class _AccountCard extends StatelessWidget {
     required this.token,
     required this.secret,
     this.onConnect,
+    this.link,
   });
 
   final String title;
   final String token;
   final String secret;
   final Future<void> Function()? onConnect;
+  final String? link;
 
   @override
   Widget build(BuildContext context) {
@@ -332,6 +509,15 @@ class _AccountCard extends StatelessWidget {
           ),
           _CopyRow(label: 'token', value: token),
           _CopyRow(label: 'TOTP secret', value: secret),
+          if (link != null)
+            Align(
+              alignment: Alignment.centerLeft,
+              child: TextButton.icon(
+                onPressed: () => Clipboard.setData(ClipboardData(text: link!)),
+                icon: const Icon(Icons.link_outlined, size: 18),
+                label: const Text('复制连接链接'),
+              ),
+            ),
         ],
       ),
     );

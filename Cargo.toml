@@ -12,6 +12,7 @@ members = [
     "crates/qr_race_store",
     "crates/qr_race_tls",
     "crates/qr_race_api",
+    "crates/qr_race_embedded",
     "crates/qr_race_cli",
     "crates/qr_race_bench",
 ]
@@ -35,6 +36,7 @@ qr_race_hub = { path = "crates/qr_race_hub" }
 qr_race_store = { path = "crates/qr_race_store" }
 qr_race_tls = { path = "crates/qr_race_tls" }
 qr_race_api = { path = "crates/qr_race_api" }
+qr_race_embedded = { path = "crates/qr_race_embedded" }
 qr_race_cli = { path = "crates/qr_race_cli" }
 clap = { version = "4", features = ["derive"] }
 data-encoding = "2"

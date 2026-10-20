@@ -1,12 +1,18 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:ffi';
 import 'dart:io';
 
+import 'package:ffi/ffi.dart';
+
+import '../native/ffi_library.dart';
 import 'self_host_types.dart';
 
 final bool selfHostSupported = true;
 
-ServerLauncher createServerLauncher() => ProcessServerLauncher();
+ServerLauncher createServerLauncher() => Platform.isAndroid
+    ? EmbeddedServerLauncher()
+    : ProcessServerLauncher();
 
 /// Starts `qr_race_server` with a freshly generated config, then reads the
 /// printed certificate fingerprint. The server process stays alive until
@@ -15,7 +21,10 @@ class ProcessServerLauncher implements ServerLauncher {
   Process? _process;
 
   @override
-  Future<SelfHostInfo> start({int port = 8443}) async {
+  Future<SelfHostInfo> start({
+    int port = 8443,
+    TlsOptions tls = const TlsOptions.selfSigned(),
+  }) async {
     await stop();
     final binary = _findServerBinary();
     final stamp = DateTime.now().millisecondsSinceEpoch;
@@ -32,19 +41,35 @@ class ProcessServerLauncher implements ServerLauncher {
       '127.0.0.1',
       ?lan,
     ];
+    final useTls = tls.mode != SelfHostTls.none;
     final config = <String, Object>{
       'listen': '0.0.0.0:$port',
       'database': '${dataDirectory.path}${Platform.pathSeparator}qr_race.db',
-      'tls': {
+      'accounts': [host.account, member.account],
+    };
+    if (tls.mode == SelfHostTls.selfSigned) {
+      config['tls'] = {
         'cert': '${dataDirectory.path}${Platform.pathSeparator}cert.pem',
         'key': '${dataDirectory.path}${Platform.pathSeparator}key.pem',
         'hosts': hosts,
-      },
-      'accounts': [host.account, member.account],
-    };
+      };
+    } else if (tls.mode == SelfHostTls.files) {
+      final cert = tls.certPath;
+      final key = tls.keyPath;
+      if (cert == null || key == null) {
+        throw StateError('certificate and key paths are required');
+      }
+      config['tls'] = {
+        'cert': File(cert).absolute.path,
+        'key': File(key).absolute.path,
+        'hosts': hosts,
+      };
+    }
     final configFile =
         File('${dataDirectory.path}${Platform.pathSeparator}config.json');
-    await configFile.writeAsString(const JsonEncoder.withIndent('  ').convert(config));
+    await configFile.writeAsString(
+      const JsonEncoder.withIndent('  ').convert(config),
+    );
 
     final process = await Process.start(
       binary,
@@ -53,38 +78,46 @@ class ProcessServerLauncher implements ServerLauncher {
     );
     _process = process;
 
-    final fingerprint = Completer<String>();
+    // null means HTTP is listening; a string is the TLS fingerprint.
+    final ready = Completer<String?>();
     final stderr = StringBuffer();
     process.stdout
         .transform(utf8.decoder)
         .transform(const LineSplitter())
         .listen((line) {
       final marker = 'certificate SHA-256:';
-      if (line.contains(marker) && !fingerprint.isCompleted) {
-        fingerprint.complete(line.substring(line.indexOf(marker) + marker.length).trim());
+      if (line.contains(marker) && !ready.isCompleted) {
+        ready.complete(
+          line.substring(line.indexOf(marker) + marker.length).trim(),
+        );
+      } else if (!useTls &&
+          line.contains('listening on http') &&
+          !ready.isCompleted) {
+        ready.complete(null);
       }
     });
     process.stderr.transform(utf8.decoder).listen(stderr.write);
     unawaited(process.exitCode.then((code) {
-      if (!fingerprint.isCompleted) {
-        fingerprint.completeError(
-          StateError('server exited with $code before printing its certificate\n$stderr'),
+      if (!ready.isCompleted) {
+        ready.completeError(
+          StateError('server exited with $code before becoming ready\n$stderr'),
         );
       }
     }));
 
-    final print = await fingerprint.future.timeout(
+    final fingerprint = await ready.future.timeout(
       const Duration(seconds: 25),
       onTimeout: () {
         process.kill();
-        throw StateError('server did not print a certificate in time\n$stderr');
+        throw StateError('server did not become ready in time\n$stderr');
       },
     );
 
     final address = lan ?? '127.0.0.1';
+    final scheme = useTls ? 'https' : 'http';
     return SelfHostInfo(
-      url: 'https://$address:$port',
-      fingerprint: print,
+      url: '$scheme://$address:$port',
+      fingerprint: fingerprint ?? '',
       dataDirectory: dataDirectory.path,
       hostToken: host.token,
       hostSecret: host.totpSecret,
@@ -219,5 +252,113 @@ class _ProvisionedAccount {
 
   String get token => account['token'] as String;
   String get totpSecret => account['totp_secret'] as String;
+}
+
+/// Android: the server is compiled into `libqr_race_ffi.so` and runs on a Rust
+/// thread inside the app. It binds 127.0.0.1 only and keeps state in memory.
+class EmbeddedServerLauncher implements ServerLauncher {
+  DynamicLibrary? _library;
+  int Function(Pointer<Uint8>, int)? _start;
+  int Function(Pointer<Uint8>, int)? _info;
+  int Function(Pointer<Uint8>, int)? _lastError;
+  void Function()? _stop;
+
+  void _load() {
+    if (_library != null) return;
+    final library = openQrRaceFfi();
+    _library = library;
+    _start = library.lookupFunction<
+        Int32 Function(Pointer<Uint8>, IntPtr),
+        int Function(Pointer<Uint8>, int)>('qr_server_start_config');
+    _info = library.lookupFunction<
+        Int32 Function(Pointer<Uint8>, IntPtr),
+        int Function(Pointer<Uint8>, int)>('qr_server_info');
+    _lastError = library.lookupFunction<
+        Int32 Function(Pointer<Uint8>, IntPtr),
+        int Function(Pointer<Uint8>, int)>('qr_server_last_error');
+    _stop = library.lookupFunction<Void Function(), void Function()>(
+      'qr_server_stop',
+    );
+  }
+
+  @override
+  Future<SelfHostInfo> start({
+    int port = 8443,
+    TlsOptions tls = const TlsOptions.selfSigned(),
+  }) async {
+    _load();
+    final certificateDir = Directory(
+      '${Directory.systemTemp.path}${Platform.pathSeparator}qr_race_selfhost_certs',
+    );
+    await certificateDir.create(recursive: true);
+    final tlsConfig = switch (tls.mode) {
+      SelfHostTls.none => {'mode': 'none'},
+      SelfHostTls.selfSigned => {
+          'mode': 'self-signed',
+          'dir': certificateDir.path,
+        },
+      SelfHostTls.files => () {
+          if (tls.certPath == null || tls.keyPath == null) {
+            throw StateError('请选择证书和私钥文件');
+          }
+          return {
+            'mode': 'files',
+            'cert': tls.certPath,
+            'key': tls.keyPath,
+          };
+        }(),
+    };
+    final config = utf8.encode(
+      jsonEncode({'port': port, 'tls': tlsConfig}),
+    );
+    final pointer = calloc<Uint8>(config.length);
+    try {
+      pointer.asTypedList(config.length).setAll(0, config);
+      final code = _start!(pointer, config.length);
+      if (code != 0) {
+        final errorBuffer = calloc<Uint8>(8 * 1024);
+        try {
+          final length = _lastError!(errorBuffer, 8 * 1024);
+          final message = length > 0
+              ? utf8.decode(errorBuffer.asTypedList(length))
+              : 'unknown error';
+          throw StateError('qr_server_start failed: $message');
+        } finally {
+          calloc.free(errorBuffer);
+        }
+      }
+    } finally {
+      calloc.free(pointer);
+    }
+
+    final buffer = calloc<Uint8>(64 * 1024);
+    try {
+      final length = _info!(buffer, 64 * 1024);
+      if (length <= 0) {
+        _stop!();
+        throw StateError('qr_server_info returned $length');
+      }
+      final json = jsonDecode(utf8.decode(buffer.asTypedList(length)))
+          as Map<String, dynamic>;
+      return SelfHostInfo(
+        url: json['url'] as String,
+        fingerprint: json['fingerprint'] as String? ?? '',
+        dataDirectory: tls.mode == SelfHostTls.none
+            ? 'Android 进程内（HTTP · 内存存储）'
+            : certificateDir.path,
+        hostToken: json['host_token'] as String,
+        hostSecret: json['host_secret'] as String,
+        memberToken: json['member_token'] as String,
+        memberSecret: json['member_secret'] as String,
+      );
+    } finally {
+      calloc.free(buffer);
+    }
+  }
+
+  @override
+  Future<void> stop() async {
+    _stop?.call();
+  }
 }
 

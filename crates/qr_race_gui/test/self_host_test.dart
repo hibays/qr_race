@@ -9,7 +9,11 @@ class _FakeLauncher implements ServerLauncher {
   bool stopped = false;
 
   @override
-  Future<SelfHostInfo> start({int port = 8443}) async => SelfHostInfo(
+  Future<SelfHostInfo> start({
+    int port = 8443,
+    TlsOptions tls = const TlsOptions.selfSigned(),
+  }) async =>
+      SelfHostInfo(
         url: 'https://192.168.1.9:$port',
         fingerprint: List.filled(64, 'a').join(),
         dataDirectory: r'C:\tmp\selfhost',
@@ -35,7 +39,7 @@ void main() {
   });
 
   testWidgets('self-host starts a server and shows connection material', (tester) async {
-    tester.view.physicalSize = const Size(1100, 1600);
+    tester.view.physicalSize = const Size(1200, 2600);
     tester.view.devicePixelRatio = 1.0;
     addTearDown(tester.view.reset);
 
@@ -51,7 +55,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('服务器已启动'), findsOneWidget);
-    expect(find.textContaining('192.168.1.9:8443'), findsOneWidget);
+    expect(find.textContaining('192.168.1.9:'), findsOneWidget);
     expect(find.text('房主账号'), findsOneWidget);
     expect(find.text('成员账号'), findsOneWidget);
     expect(find.text('用此账号连接'), findsOneWidget);

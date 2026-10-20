@@ -5,6 +5,7 @@
 //! axum has no TLS of its own, so the accept loop is hyper-util driven:
 //! accept → `tokio-rustls` handshake → hyper auto (HTTP/1.1 or HTTP/2) → axum.
 
+use std::future::Future;
 use std::net::{IpAddr, TcpListener};
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
@@ -164,6 +165,43 @@ fn server_config(material: &TlsMaterial) -> Result<ServerConfig, TlsError> {
         .with_no_client_auth()
         .with_single_cert(certificates, key)
         .map_err(|error| TlsError::Config(error.to_string()))
+}
+
+/// Like [`serve_tls`], but stops accepting when `shutdown` resolves. Used by
+/// the in-process mobile server so the UI can stop it.
+pub async fn serve_tls_until<F>(
+    router: Router,
+    listener: tokio::net::TcpListener,
+    material: &TlsMaterial,
+    shutdown: F,
+) -> Result<(), TlsError>
+where
+    F: Future<Output = ()>,
+{
+    install_crypto_provider();
+
+    let acceptor = TlsAcceptor::from(Arc::new(server_config(material)?));
+    tokio::pin!(shutdown);
+    loop {
+        tokio::select! {
+            _ = &mut shutdown => break,
+            accepted = listener.accept() => {
+                let (stream, _) = accepted?;
+                let acceptor = acceptor.clone();
+                let service = TowerToHyperService::new(router.clone());
+                tokio::spawn(async move {
+                    let Ok(tls) = acceptor.accept(stream).await else {
+                        return;
+                    };
+                    let io = TokioIo::new(tls);
+                    let _ = ConnectionBuilder::new(TokioExecutor::new())
+                        .serve_connection_with_upgrades(io, service)
+                        .await;
+                });
+            }
+        }
+    }
+    Ok(())
 }
 
 /// Serves `router` over TLS on an already-bound listener until the process ends

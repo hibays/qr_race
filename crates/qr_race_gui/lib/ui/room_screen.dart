@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../state/app_state.dart';
+import '../state/relay_slot.dart';
+import 'open_link_sheet.dart';
 import 'qr_image.dart';
 import 'scan_screen.dart';
 import 'theme.dart';
@@ -51,7 +53,7 @@ class _RoomScreenState extends State<RoomScreen> {
                 Text(
                   room == null
                       ? '进入中…'
-                      : '${room.members.length} 人 · ${room.relays.length} 条接力',
+                      : '${room.members.length} 人 · ${room.relays.map((relay) => relaySlot(relay.text)).toSet().length} 个动态码',
                   style: const TextStyle(fontSize: 12, color: muted),
                 ),
               ],
@@ -169,7 +171,14 @@ class _RoomBody extends StatelessWidget {
     return LayoutBuilder(
       builder: (context, constraints) {
         final wide = constraints.maxWidth >= 900;
-        final relays = room.relays;
+        // Dynamic codes share an ownership prefix; only the newest relay for a
+        // prefix is shown, so a changing code updates in place instead of
+        // filling the wall with history.
+        final bySlot = <String, Relay>{};
+        for (final relay in room.relays) {
+          bySlot.putIfAbsent(relaySlot(relay.text), () => relay);
+        }
+        final relays = bySlot.values.toList();
         final relayArea = relays.isEmpty
             ? const _EmptyRelays()
             : GridView.builder(
@@ -281,6 +290,23 @@ class _RelayCard extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
+          if (relaySlot(relay.text) != relay.text)
+            Container(
+              margin: const EdgeInsets.only(bottom: 4),
+              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+              decoration: BoxDecoration(
+                color: accent.withValues(alpha: 0.14),
+                borderRadius: BorderRadius.circular(4),
+              ),
+              child: Text(
+                relaySlot(relay.text),
+                style: const TextStyle(
+                  color: accent,
+                  fontSize: 10.5,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ),
           Text(
             relay.text,
             maxLines: 2,
@@ -288,9 +314,21 @@ class _RelayCard extends StatelessWidget {
             style: const TextStyle(fontSize: 12.5, height: 1.35),
           ),
           const SizedBox(height: 6),
-          Text(
-            '${relay.publisher} · ${relay.timeLabel}',
-            style: const TextStyle(fontSize: 11.5, color: muted),
+          Row(
+            children: [
+              Expanded(
+                child: Text(
+                  '${relay.publisher} · ${relay.timeLabel}',
+                  style: const TextStyle(fontSize: 11.5, color: muted),
+                ),
+              ),
+              IconButton(
+                tooltip: '打开链接',
+                visualDensity: VisualDensity.compact,
+                onPressed: () => showOpenLinkSheet(context, relay.text),
+                icon: const Icon(Icons.open_in_new, size: 18),
+              ),
+            ],
           ),
         ],
       ),
@@ -332,6 +370,15 @@ class _RelayCard extends StatelessWidget {
                 Text(
                   '${relay.publisher} · ${relay.timeLabel}',
                   style: const TextStyle(fontSize: 12, color: muted),
+                ),
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton.icon(
+                    onPressed: () => showOpenLinkSheet(context, relay.text),
+                    icon: const Icon(Icons.open_in_new, size: 18),
+                    label: const Text('打开链接'),
+                  ),
                 ),
               ],
             ),

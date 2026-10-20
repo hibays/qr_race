@@ -1,15 +1,21 @@
 import 'package:flutter/material.dart';
 
+import '../api/app_links.dart';
 import '../api/cert_fingerprint.dart';
+import '../api/connect_link.dart';
 import '../state/app_state.dart';
 import 'lobby_screen.dart';
 import 'self_host_screen.dart';
 import 'theme.dart';
 
 class ConnectScreen extends StatefulWidget {
-  const ConnectScreen({super.key, required this.state});
+  const ConnectScreen({super.key, required this.state, this.initialLink});
 
   final AppState state;
+
+  /// Tests can inject a `qrrace://connect?...` link; Android passes the intent
+  /// through the `app.qrrace.qr_race_gui/links` channel.
+  final String? initialLink;
 
   @override
   State<ConnectScreen> createState() => _ConnectScreenState();
@@ -21,6 +27,74 @@ class _ConnectScreenState extends State<ConnectScreen> {
   final _fingerprint = TextEditingController();
   final _token = TextEditingController();
   final _code = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    final initial = widget.initialLink;
+    if (initial != null) {
+      _applyLink(initial);
+    } else {
+      AppLinks.initial().then((link) {
+        if (link != null && mounted) _applyLink(link);
+      });
+    }
+  }
+
+  void _applyLink(String raw) {
+    final link = parseConnectLink(raw);
+    if (link == null) return;
+    setState(() {
+      _server.text = link.server;
+      if (link.fingerprint != null) _fingerprint.text = link.fingerprint!;
+      if (link.token != null) _token.text = link.token!;
+    });
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('已从连接链接填充，请输入 TOTP 验证码')),
+      );
+    });
+  }
+
+  Future<void> _askLink() async {
+    final controller = TextEditingController();
+    final raw = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('从连接链接填充'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          minLines: 1,
+          maxLines: 4,
+          decoration: const InputDecoration(
+            labelText: 'qrrace://connect?...',
+            hintText: '粘贴服务器、指纹和 token',
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('取消'),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.pop(context, controller.text),
+            child: const Text('填充'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (raw == null || !mounted) return;
+    if (parseConnectLink(raw) == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('无法识别这个连接链接')),
+      );
+      return;
+    }
+    _applyLink(raw);
+  }
 
   @override
   void dispose() {
@@ -150,6 +224,11 @@ class _ConnectScreenState extends State<ConnectScreen> {
                         _ErrorLine(message: state.error!),
                       ],
                       const SizedBox(height: 12),
+                      TextButton.icon(
+                        onPressed: _askLink,
+                        icon: const Icon(Icons.link_outlined, size: 18),
+                        label: const Text('从连接链接填充'),
+                      ),
                       TextButton.icon(
                         onPressed: () => Navigator.of(context).push(
                           MaterialPageRoute(

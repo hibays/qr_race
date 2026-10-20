@@ -10,12 +10,12 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **127 passed** |
+| Rust tests | `cargo test --workspace` | **129 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
-| Flutter tests | `flutter test` | **26 passed** |
+| Flutter tests | `flutter test` | **28 passed** |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `pwsh -File scripts/build-wasm.ps1` then `flutter build web --release` | built |
-| Android build | `flutter build apk --debug` | built (arm64 `libqr_race_ffi.so` packaged) |
+| Android build | `flutter build apk --debug` | built (arm64 Rust lib + Camera2 scanning + embedded server) |
 
 ### QR generation
 
@@ -65,14 +65,23 @@ finished product.
   started by `scripts/deploy-server.ps1` using
   `https://127.0.0.1:18471`, the printed certificate fingerprint, a host token,
   and a TOTP code; the lobby rendered as `host`.
-- The arm64 FFI library is packaged in the APK; the room screen renders relay
-  QR codes through rxing (screenshots in `DEPLOY.md`).
-- Opening the scan page triggers the Android CAMERA runtime dialog. Denying it
-  lands on a page with “重新申请 / 打开系统设置”; `MainActivity` maps a
-  non-rationale denial to `permanentlyDenied` and opens
-  `ACTION_APPLICATION_DETAILS_SETTINGS`. **The Android camera capture backend
-  itself is still a stub** (`qr_scanner_start` returns a mobile placeholder), so
-  the scan page reports that camera capture is unavailable.
+- Android self-host: `qr_race_embedded` is compiled into
+  `libqr_race_ffi.so`. Starting from the UI on port 18443 generated a
+  self-signed certificate, reported `https://127.0.0.1:18443` plus fingerprint,
+  and “用此账号连接” authenticated over pinned TLS into the lobby. 8443 was
+  already in use on this device, which is why the UI exposes the port.
+- Android camera: Camera2 YUV frames are rotated and pushed through JNI into
+  Rust; the preview is 720×1280, scan time ~6.2 ms on device, and a live QR
+  (`https://example.test/camera-hit`) was decoded from the screen. The preview
+  keeps the previous frame between updates, removing the black flicker.
+- Permission and links: CAMERA runtime dialog with Settings fallback;
+  `MANAGE_EXTERNAL_STORAGE` request for arbitrary certificate paths; file picker
+  copies into app cache. A `qrrace://connect?...` deep link filled server,
+  fingerprint and token in the connect form.
+- Auto-publish: scan hits are published without a button; payloads with the same
+  prefix (`A:...`, `cam1|...`) update one room slot, different prefixes coexist.
+  External links use the Android chooser (WeChat/WeCom/browser) with a copy
+  fallback.
 
 ## Feature evidence
 
@@ -148,18 +157,12 @@ finished product.
    initialization on this Windows host (`essential initialization failed`, or a
    `codecs` recursion with the frozen stdlib); 0.5 is incompatible with the 0.6
    stdlib. Distribution works; execution does not. See `docs/MODULES.md`.
-3. **Android camera capture does not exist yet.** The APK packages the arm64
-   Rust library (QR rendering works) and asks for the camera permission with a
-   Settings fallback, but the FFI scanner is a stub and there is no Camera2/
-   CameraX frame source; scanning must use the Windows/Web client. iOS/macOS
-   cannot be built or verified on Windows.
-4. **No live QR symbol in view.** Real textured frames were captured and scanned
-   (1080p/720p numbers above), but no QR was in front of the camera, so a live
-   symbol was never decoded. The web probe uses a fake camera file.
-5. **No browser UI run.** Edge headless drove the scan probe page, but the Flutter
+3. **Apple capture does not exist.** iOS/macOS cannot be built or verified on
+   Windows; Android now has its own Camera2 capture and in-process server.
+4. **No browser UI run.** Edge headless drove the scan probe page, but the Flutter
    web UI itself was not manually exercised in a browser.
-6. **No remote or CI.** History is the initial scaffold plus one implementation
-   commit from this session; nothing has been pushed and no CI ran.
+5. **No remote or CI.** History is the initial scaffold plus implementation
+   commits from this session; nothing has been pushed and no CI ran.
 
 ## Reproduce
 

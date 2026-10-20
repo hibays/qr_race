@@ -11,7 +11,7 @@ use qr_race_capture::{CaptureConfig, CaptureSession, CaptureSource, GrayFrame};
 use qr_race_scan::{RxingDecoder, ScanEngine};
 use serde::Serialize;
 
-const PREVIEW_INTERVAL: Duration = Duration::from_millis(150);
+const PREVIEW_INTERVAL: Duration = Duration::from_millis(90);
 const PREVIEW_MAX_WIDTH: u32 = 480;
 const MAX_HITS: usize = 8;
 
