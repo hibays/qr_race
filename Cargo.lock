@@ -2246,6 +2246,7 @@ name = "qr_race_bench"
 version = "0.1.0"
 dependencies = [
  "image",
+ "qr_race_fixtures",
  "qr_race_scan",
  "qrcode",
  "serde_json",
@@ -2309,6 +2310,14 @@ dependencies = [
  "qrcode",
  "serde",
  "serde_json",
+]
+
+[[package]]
+name = "qr_race_fixtures"
+version = "0.1.0"
+dependencies = [
+ "qr_race_qr",
+ "qr_race_scan",
 ]
 
 [[package]]

@@ -215,6 +215,7 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M22 Flutter Android debug APK 构建通过（原生采集/Rust 扫描库尚未打包）
 - [x] M23 真实相机帧验证：1080p 6.01ms / 720p 2.89ms，采集约 24–28fps（无码入镜）
 - [x] M24 二维码生成改用 rxing：2048² 无损 WebP（q90/m4），FFI 与 wasm 两路，移除 qr_flutter
+- [x] M25 程序化扰动纹理套件：10 个场景（噪声/模糊/低对比/梯度/旋转/透视/小码/多码/相机混合），bench --suite 与测试共用
 - [ ] 模组执行（RustPython 阻塞，见 docs/MODULES.md）
 - [ ] 物理相机实拍；Web 预览流
 - [ ] 移动 / Apple 采集后端

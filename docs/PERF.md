@@ -95,6 +95,37 @@ on the third frame, `scan_ms` **1.8 ms** for the wasm scan. That is the whole
 `getUserMedia` → canvas → grayscale → wasm path, with the caveat that the
 "camera" is a Y4M file.
 
+## Perturbed texture suite (programmatic, release)
+
+Ten deterministic scenes are generated in code (`qr_race_fixtures`) from rxing
+QR codes: clean, noise, blur, low contrast, illumination gradient, rotation,
+perspective, a small code, two codes, and a camera-like mix (texture + noise +
+blur + gradient + rotation).
+
+```powershell
+cargo run --release -p qr_race_bench -- --suite --iterations 30 --warmup 3
+cargo run --release -p qr_race_bench -- --suite --iterations 30 --warmup 3 `
+  --detector pyramid
+```
+
+| scene | whole-frame p50 | pyramid p50 | hits |
+|---|---|---|---|
+| clean | 4.495 ms | 2.618 ms | 1/1 |
+| noise | 5.534 ms | 3.007 ms | 1/1 |
+| blur | 4.641 ms | 2.611 ms | 1/1 |
+| low_contrast | 4.569 ms | 2.613 ms | 1/1 |
+| gradient | 4.585 ms | 2.534 ms | 1/1 |
+| rotated | 20.184 ms | 4.848 ms | 1/1 |
+| perspective | 4.639 ms | 2.675 ms | 1/1 |
+| small | 5.343 ms | 2.562 ms | 1/1 |
+| multi (2 codes) | **44.249 ms** | **7.631 ms** | 2/2 |
+| camera_like | 6.534 ms | 3.353 ms | 1/1 |
+
+All scenes decode with both engines, but whole-frame multi-code (44 ms) misses the
+33 ms budget while the pyramid pipeline does not (7.6 ms). This is the measurable
+case for crop decoding. `cargo test -p qr_race_fixtures` asserts every scene's
+payloads.
+
 ## What this means
 
 1. **Whole-frame decoding is not the budget problem at these sizes.** Real

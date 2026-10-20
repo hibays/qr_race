@@ -6,6 +6,7 @@ license.workspace = true
 
 [dependencies]
 image = { version = "0.25", default-features = false, features = ["png"] }
+qr_race_fixtures.workspace = true
 qr_race_scan.workspace = true
 qrcode = "0.14"
 serde_json.workspace = true

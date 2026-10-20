@@ -10,7 +10,7 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **125 passed** |
+| Rust tests | `cargo test --workspace` | **127 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
 | Flutter tests | `flutter test` | **23 passed** |
 | Windows build | `flutter build windows --release` | built |
@@ -28,6 +28,15 @@ finished product.
   Flutter web build uses it through `camera_scan.js`.
 - The Flutter UI renders these bytes with `Image.memory` and
   `FilterQuality.none`; `qr_flutter` was removed.
+
+### Perturbed fixtures
+
+- `qr_race_fixtures` generates ten deterministic scenes (texture, noise, blur,
+  low contrast, gradient, rotation, perspective, small, multi-code, camera-like)
+  from rxing codes; tests assert every expected payload decodes.
+- `qr_bench --suite` reports per-scene timings; whole-frame multi-code is 44 ms
+  (over the 33 ms budget) while the pyramid pipeline is 7.6 ms. Table in
+  `docs/PERF.md`.
 
 ## Feature evidence
 

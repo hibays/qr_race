@@ -4,6 +4,7 @@ members = [
     "crates/qr_race_scan",
     "crates/qr_race_scan_wasm",
     "crates/qr_race_qr",
+    "crates/qr_race_fixtures",
     "crates/qr_race_capture",
     "crates/qr_race_capture_desktop",
     "crates/qr_race_ffi",
@@ -26,6 +27,7 @@ rust-version = "1.85"
 qr_race_core = { path = "crates/qr_race_core" }
 qr_race_scan = { path = "crates/qr_race_scan" }
 qr_race_qr = { path = "crates/qr_race_qr" }
+qr_race_fixtures = { path = "crates/qr_race_fixtures" }
 qr_race_capture = { path = "crates/qr_race_capture" }
 qr_race_capture_desktop = { path = "crates/qr_race_capture_desktop" }
 qr_race_ffi = { path = "crates/qr_race_ffi" }

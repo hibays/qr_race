@@ -12,6 +12,7 @@
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+use qr_race_fixtures::scenes;
 use qr_race_scan::{
     BilinearSuperResolver, PyramidDetector, RxingDecoder, ScanEngine, load_gray_file,
 };
@@ -29,6 +30,7 @@ struct Args {
     super_res: String,
     super_res_min_area: u64,
     dump_gray: Option<PathBuf>,
+    suite: bool,
     scene: bool,
     width: u32,
     height: u32,
@@ -51,6 +53,7 @@ impl Default for Args {
             super_res: "none".to_string(),
             super_res_min_area: 0,
             dump_gray: None,
+            suite: false,
             scene: false,
             width: 1280,
             height: 720,
@@ -95,6 +98,10 @@ fn main() -> ExitCode {
         };
     }
 
+    if args.suite {
+        return run_suite(&args);
+    }
+
     run_bench(&args)
 }
 
@@ -103,6 +110,8 @@ usage:
   qr_bench --input <image> [--iterations N] [--warmup N] [--json] [--try-harder]
            [--detector none|pyramid [--pyramid-scale 2]]
            [--sr none|bilinear [--sr-min-area N]] [--dump-gray <frame.gray>]
+  qr_bench --suite [--iterations N] [--warmup N] [--json]
+           [--detector none|pyramid] [--sr none|bilinear [--sr-min-area N]]
   qr_bench --generate <image.png> [--text <payload>]
   qr_bench --generate <scene.png> --scene [--width 1280] [--height 720]
            [--qr-size 160] [--rotate 0] [--text <payload>]";
@@ -161,6 +170,7 @@ fn parse_args() -> Result<Option<Args>, String> {
                     iter.next().ok_or("--dump-gray needs a path")?,
                 ));
             }
+            "--suite" => args.suite = true,
             "--scene" => args.scene = true,
             "--json" => args.json = true,
             "--try-harder" => args.try_harder = true,
@@ -172,7 +182,7 @@ fn parse_args() -> Result<Option<Args>, String> {
         }
     }
 
-    if args.input.is_none() && args.generate.is_none() {
+    if !args.suite && args.input.is_none() && args.generate.is_none() {
         return Err("one of --input or --generate is required".into());
     }
     if args.width == 0 || args.height == 0 || args.qr_size == 0 {
@@ -314,16 +324,7 @@ fn run_bench(args: &Args) -> ExitCode {
         };
     }
 
-    let mut engine = ScanEngine::new(Box::new(RxingDecoder::new().try_harder(args.try_harder)));
-    if args.detector == "pyramid" {
-        engine = engine.with_detector(Box::new(PyramidDetector::new(args.pyramid_scale)));
-    }
-    if args.super_res == "bilinear" {
-        engine = engine.with_super_resolver(
-            Box::new(BilinearSuperResolver::new(2)),
-            args.super_res_min_area,
-        );
-    }
+    let engine = build_engine(args);
 
     for _ in 0..args.warmup {
         if let Err(err) = engine.scan(&frame) {
@@ -417,6 +418,93 @@ fn run_bench(args: &Args) -> ExitCode {
     }
 
     ExitCode::SUCCESS
+}
+
+fn build_engine(args: &Args) -> ScanEngine {
+    let mut engine = ScanEngine::new(Box::new(RxingDecoder::new().try_harder(args.try_harder)));
+    if args.detector == "pyramid" {
+        engine = engine.with_detector(Box::new(PyramidDetector::new(args.pyramid_scale)));
+    }
+    if args.super_res == "bilinear" {
+        engine = engine.with_super_resolver(
+            Box::new(BilinearSuperResolver::new(2)),
+            args.super_res_min_area,
+        );
+    }
+    engine
+}
+
+/// Runs the deterministic perturbed-texture suite: texture, noise, blur, low
+/// contrast, gradients, rotation, perspective, a small code and multiple codes.
+fn run_suite(args: &Args) -> ExitCode {
+    let engine = build_engine(args);
+    let mut reports = Vec::new();
+    let mut complete = true;
+
+    for scene in scenes() {
+        for _ in 0..args.warmup {
+            if let Err(error) = engine.scan(&scene.frame) {
+                eprintln!("qr_bench: {} warmup failed: {error}", scene.name);
+                return ExitCode::FAILURE;
+            }
+        }
+
+        let mut total_us = Vec::with_capacity(args.iterations as usize);
+        let mut hits = 0usize;
+        for _ in 0..args.iterations {
+            match engine.scan(&scene.frame) {
+                Ok(outcome) => {
+                    hits = outcome.hits.len();
+                    total_us.push(outcome.timings.total.as_micros() as u64);
+                }
+                Err(error) => {
+                    eprintln!("qr_bench: {} scan failed: {error}", scene.name);
+                    return ExitCode::FAILURE;
+                }
+            }
+        }
+
+        let stats = Stats::from(total_us);
+        let fps = if stats.p50 > 0.0 {
+            1_000_000.0 / stats.p50
+        } else {
+            0.0
+        };
+        let expected = scene.expected.len();
+        if hits < expected {
+            complete = false;
+        }
+
+        if args.json {
+            reports.push(serde_json::json!({
+                "scene": scene.name,
+                "hits": hits,
+                "expected": expected,
+                "p50_ms": stats.p50 / 1000.0,
+                "p95_ms": stats.p95 / 1000.0,
+                "fps_from_p50": fps,
+            }));
+        } else {
+            println!(
+                "{:<14} hits {}/{}  p50 {:>7.3} ms  p95 {:>7.3} ms  {:>7.1} fps",
+                scene.name,
+                hits,
+                expected,
+                stats.p50 / 1000.0,
+                stats.p95 / 1000.0,
+                fps
+            );
+        }
+    }
+
+    if args.json {
+        println!("{}", serde_json::json!({ "suite": reports }));
+    }
+    if complete {
+        ExitCode::SUCCESS
+    } else {
+        ExitCode::FAILURE
+    }
 }
 
 #[derive(Debug, Clone, Copy, Default)]
