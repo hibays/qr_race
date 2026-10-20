@@ -10,8 +10,8 @@ use axum::http::header;
 use axum::http::request::Parts;
 use data_encoding::BASE64;
 use qr_race_core::{CoreError, ModuleManifest, RelayEntry, RoomAddress, UserId};
-use qr_race_hub::{RelayRequest, RoomEvent};
-use serde::Deserialize;
+use qr_race_hub::{RelayRequest, RoomEvent, generate_token, generate_totp_secret_base32};
+use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::dto::{
@@ -126,6 +126,41 @@ pub async fn join(
     };
     state.publish(&address, &events);
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize)]
+pub struct GuestResponse {
+    user_id: String,
+    token: String,
+    totp_secret: String,
+}
+
+/// Mints a fresh member identity for one room. The caller must be that room's
+/// host; the guest account is not tied to any other room.
+pub async fn guest(
+    State(state): State<Arc<AppState>>,
+    Authed(user): Authed,
+    Query(query): Query<RoomQuery>,
+) -> Result<Json<GuestResponse>, ApiError> {
+    let address = query.address()?;
+    {
+        let hub = state.hub.lock().expect("hub lock");
+        let view = hub.view(&user, &address)?;
+        if view.host != user {
+            return Err(ApiError::Forbidden(
+                "only the room host can invite a member".to_string(),
+            ));
+        }
+    }
+    let token = generate_token();
+    let secret = generate_totp_secret_base32();
+    let guest = UserId(format!("guest-{}", &token[..12]));
+    state.provision(guest.clone(), &token, &secret)?;
+    Ok(Json(GuestResponse {
+        user_id: guest.0,
+        token,
+        totp_secret: secret,
+    }))
 }
 
 pub async fn leave(

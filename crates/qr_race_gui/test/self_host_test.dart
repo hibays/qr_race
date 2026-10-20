@@ -56,8 +56,7 @@ void main() {
 
     expect(find.text('服务器已启动'), findsOneWidget);
     expect(find.textContaining('192.168.1.9:'), findsOneWidget);
-    expect(find.text('房主账号'), findsOneWidget);
-    expect(find.text('成员账号'), findsOneWidget);
+    expect(find.text('服务器账号'), findsOneWidget);
     expect(find.text('用此账号连接'), findsOneWidget);
 
     await tester.tap(find.text('停止服务器'));

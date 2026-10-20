@@ -164,13 +164,10 @@ class CameraCapture(private val context: Context) {
                     }
                 }
             }
-            val rotated = rotateLuma(luma, width, height, sensorOrientation)
-            nativePushFrame(
-                rotated.width,
-                rotated.height,
-                rotated.width,
-                rotated.luma,
-            )
+            // Scanning is rotation-independent; send rotation metadata and let
+            // Flutter rotate the low-rate preview on the GPU instead of copying
+            // ~1 MB of pixels per frame here.
+            nativePushFrame(width, height, width, sensorOrientation, luma)
         } catch (error: Exception) {
             Log.e(TAG, "frame copy failed", error)
         } finally {
@@ -179,52 +176,7 @@ class CameraCapture(private val context: Context) {
         }
     }
 
-    private fun rotateLuma(
-        source: ByteArray,
-        width: Int,
-        height: Int,
-        degrees: Int,
-    ): RotatedLuma {
-        val normalized = ((degrees % 360) + 360) % 360
-        if (normalized == 0) return RotatedLuma(source, width, height)
-        val output = ByteArray(width * height)
-        when (normalized) {
-            90 -> {
-                for (y in 0 until height) {
-                    for (x in 0 until width) {
-                        output[x * height + (height - 1 - y)] = source[y * width + x]
-                    }
-                }
-                return RotatedLuma(output, height, width)
-            }
-            180 -> {
-                for (y in 0 until height) {
-                    for (x in 0 until width) {
-                        output[(height - 1 - y) * width + (width - 1 - x)] =
-                            source[y * width + x]
-                    }
-                }
-                return RotatedLuma(output, width, height)
-            }
-            270 -> {
-                for (y in 0 until height) {
-                    for (x in 0 until width) {
-                        output[(width - 1 - x) * height + y] = source[y * width + x]
-                    }
-                }
-                return RotatedLuma(output, height, width)
-            }
-        }
-        return RotatedLuma(source, width, height)
-    }
-
-    private data class RotatedLuma(
-        val luma: ByteArray,
-        val width: Int,
-        val height: Int,
-    )
-
-    private fun chooseBackCamera(manager: CameraManager): String? {
+        private fun chooseBackCamera(manager: CameraManager): String? {
         for (id in manager.cameraIdList) {
             val facing = manager.getCameraCharacteristics(id)
                 .get(CameraCharacteristics.LENS_FACING)
@@ -244,7 +196,7 @@ class CameraCapture(private val context: Context) {
             ?: Size(width, height)
     }
 
-    private external fun nativePushFrame(width: Int, height: Int, stride: Int, data: ByteArray)
+    private external fun nativePushFrame(width: Int, height: Int, stride: Int, rotation: Int, data: ByteArray)
 
     companion object {
         private const val TAG = "qr_race_camera"
@@ -258,3 +210,4 @@ class CameraCapture(private val context: Context) {
         }
     }
 }
+

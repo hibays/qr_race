@@ -2,7 +2,9 @@ param(
     [int]$Port = 8443,
     [switch]$SkipBuild,
     [switch]$SkipRust,
-    [switch]$Demo
+    [switch]$Demo,
+    [int]$ScanWidth = 0,
+    [int]$ScanHeight = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -57,6 +59,8 @@ if (-not $SkipBuild) {
         try {
             $arguments = @("build", "apk", "--debug")
             if ($Demo) { $arguments += "--dart-define=DEMO=true" }
+            if ($ScanWidth -gt 0) { $arguments += "--dart-define=SCAN_WIDTH=$ScanWidth" }
+            if ($ScanHeight -gt 0) { $arguments += "--dart-define=SCAN_HEIGHT=$ScanHeight" }
             & flutter @arguments
             if ($LASTEXITCODE -ne 0) { throw "flutter build apk failed" }
         } finally {

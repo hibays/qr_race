@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../api/api_client.dart';
+import '../api/connect_link.dart';
 import '../state/app_state.dart';
 import '../state/relay_slot.dart';
 import 'open_link_sheet.dart';
@@ -71,6 +73,12 @@ class _RoomScreenState extends State<RoomScreen> {
                   onPressed: () => _openScanner(room.label),
                   icon: const Icon(Icons.qr_code_scanner),
                 ),
+              if (room != null && me?.role == 'host')
+                IconButton(
+                  tooltip: '邀请成员',
+                  onPressed: () => _invite(room),
+                  icon: const Icon(Icons.person_add_alt_1_outlined),
+                ),
               IconButton(
                 tooltip: '刷新',
                 onPressed: state.refreshRoom,
@@ -119,6 +127,72 @@ class _RoomScreenState extends State<RoomScreen> {
         builder: (_) => ScanScreen(state: widget.state, address: address),
       ),
     );
+  }
+
+  Future<void> _invite(RoomView room) async {
+    final api = widget.state.api;
+    if (api == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('演示模式没有服务器，不能邀请')),
+      );
+      return;
+    }
+    try {
+      final guest = await api.createGuest(room.label);
+      if (!mounted) return;
+      final link = buildConnectLink(
+        server: api.baseUrl,
+        fingerprint: api.fingerprint,
+        token: guest.token,
+        secret: guest.totpSecret,
+        room: room.label,
+      );
+      await showDialog<void>(
+        context: context,
+        builder: (dialogContext) => AlertDialog(
+          title: const Text('邀请成员'),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const Text(
+                '这是一个只属于本房间的临时成员身份；打开链接会自动登录并进入房间。',
+                style: TextStyle(fontSize: 12.5, height: 1.45),
+              ),
+              const SizedBox(height: 10),
+              SelectableText(link, style: const TextStyle(fontSize: 12)),
+              const SizedBox(height: 10),
+              const Text(
+                '链接含 token 和 TOTP secret，等同密码，只发给该成员。',
+                style: TextStyle(fontSize: 11.5, color: muted),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () {
+                Clipboard.setData(ClipboardData(text: link));
+                Navigator.pop(dialogContext);
+                if (!mounted) return;
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(content: Text('邀请链接已复制')),
+                );
+              },
+              child: const Text('复制链接'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext),
+              child: const Text('关闭'),
+            ),
+          ],
+        ),
+      );
+    } on ApiException catch (error) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(error.message)),
+      );
+    }
   }
 
   Future<void> _configureModules(RoomView room) async {
@@ -559,7 +633,7 @@ class _MemberTile extends StatelessWidget {
     if (relay == null) return;
     showDialog<void>(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (dialogContext) => AlertDialog(
         backgroundColor: surfaceRaised,
         title: Text('${member.user} 的接力'),
         content: SizedBox(
@@ -768,3 +842,4 @@ class _ModulePickerState extends State<_ModulePicker> {
     );
   }
 }
+

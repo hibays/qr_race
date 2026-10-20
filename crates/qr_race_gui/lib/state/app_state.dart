@@ -295,8 +295,29 @@ class AppState extends ChangeNotifier {
   }
 
   String _describe(Object error) {
-    if (error is ApiException) return error.message;
-    return error.toString();
+    if (error is ApiException) {
+      if (error.status == 401) return '认证失败：token 或 TOTP 验证码不对（验证码 30 秒过期）';
+      if (error.status == 429) return '尝试失败次数过多，账户已锁定 60 秒，请稍后再试';
+      return error.message;
+    }
+    final text = error.toString();
+    if (text.contains('HandshakeException') || text.contains('CERTIFICATE')) {
+      return 'TLS 握手失败：证书指纹不匹配，或 URL 的地址不在证书里。'
+          '请重新复制自部署页的指纹；本机自部署用 https://127.0.0.1:<端口>。';
+    }
+    if (text.contains('SocketException') ||
+        text.contains('Connection refused') ||
+        text.contains('Failed host lookup')) {
+      return '连不上服务器：检查地址/端口、服务端是否在运行、手机与电脑是否同一网络；'
+          'USB 方式需要先执行 adb reverse。';
+    }
+    if (text.contains('TimeoutException')) {
+      return '连接超时：服务端未响应或网络被拦截。';
+    }
+    if (text.contains('FormatException')) {
+      return '服务器地址格式不对，需要 http:// 或 https:// 开头。';
+    }
+    return text;
   }
 
   @override

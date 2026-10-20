@@ -28,6 +28,7 @@ class ScanController extends ChangeNotifier {
   String? fatalError;
   String? publishError;
   final Set<String> _published = {};
+  final Set<String> _publishedTexts = {};
   final Map<String, String> _lastBySlot = {};
   final Map<String, DateTime> _retryAt = {};
   final Set<String> _queuedSlots = {};
@@ -82,6 +83,7 @@ class ScanController extends ChangeNotifier {
     final address = _address;
     if (api == null || address == null) return;
     for (final hit in snapshot.hits) {
+      if (_publishedTexts.contains(hit.text)) continue;
       final slot = relaySlot(hit.text);
       if (_lastBySlot[slot] == hit.text) continue;
       if (_queuedSlots.contains(slot)) continue;
@@ -107,6 +109,7 @@ class ScanController extends ChangeNotifier {
           _lastBySlot[pending.slot] = pending.hit.text;
           _retryAt.remove(pending.slot);
           _published.add(pending.hit.key);
+          _publishedTexts.add(pending.hit.text);
           publishError = null;
         } catch (error) {
           publishError =
@@ -173,6 +176,7 @@ class FakeScannerBackend implements ScannerBackend {
         error: null,
         width: 1280,
         height: 720,
+        rotation: 0,
         frames: 0,
         scanMs: 0,
         hits: const [],
@@ -198,12 +202,14 @@ ScannerSnapshot fakeSnapshot({
   List<ScanHit> hits = const [],
   Uint8List? preview,
   int previewSeq = 1,
+  int rotation = 0,
 }) {
   return ScannerSnapshot(
     running: true,
     error: null,
     width: 1280,
     height: 720,
+    rotation: rotation,
     frames: 42,
     scanMs: 1.8,
     hits: hits,

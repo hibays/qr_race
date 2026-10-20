@@ -31,6 +31,7 @@ docs/PERF.md                   实测与解读（含相机采集数据）
 docs/MODULES.md                模组契约与 RustPython 试验记录（当前受阻）
 docs/WASM.md                   wasm 扫描内核：ABI、构建方式与运行时胶水缺口
 docs/VERIFICATION.md           最终审计：门禁、功能证据与已知缺口
+docs/ARCHITECTURE.md           客户端/相机/服务端/身份/动态码数据流与实测取舍
 docs/MODELS.md                 WeChat Caffe → ONNX：转换、验证与推理接入计划
 models/                        sr.onnx / detect.onnx（Apache-2.0，见 models/README.md）
 tools/qr_bench.html            手工双码测试台（浏览器打开，用手机拍屏幕）
@@ -61,6 +62,19 @@ tools/qr_bench.html            手工双码测试台（浏览器打开，用手�
 平台后端（capture-desktop / -android / -apple / -wasm）只需实现 `CaptureSource::next_frame`，帧仍然不会进 Dart。
 
 若扫码页预览显示"摄像头关闭"图标：到 Windows 设置 → 隐私和安全性 → 相机，允许桌面应用访问相机（本开发的会话里就遇到过一次，表现为全黑帧）。
+
+## 扫码算法现状：rxing，不是 WeChat CNN
+
+当前桌面、Android、Web 的识别核心都是 **rxing 解码**：
+
+- 检测：经典 `PyramidDetector`（降采样粗定位 + 裁剪）；
+- 超分：`BilinearSuperResolver`（按需双线性）；
+- Android：Camera2 → JNI → Rust → 同一个 rxing 引擎。
+
+WeChat 的 Caffe 权重**只完成了转换**：`models/sr.onnx`（数值对齐）和
+`models/detect.onnx`（raw heads）在仓库里，但工程**没有 ONNX Runtime 依赖，也没有加载/执行任何模型**。所以看到的是 rxing 的速度（真机约 6ms/帧），不是微信 CNN 检测/超分。
+
+要真正跑 WeChat 算法，还差：ONNX Runtime（Android 需 ONNX Runtime Mobile/XNNPACK）、检测器 prior decode + NMS、按需 SR 裁剪，以及模型打包。`docs/MODELS.md` 记录了转换与验证细节。
 
 ## 平台构建
 
@@ -220,10 +234,11 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M24 二维码生成改用 rxing：2048² 无损 WebP（q90/m4），FFI 与 wasm 两路，移除 qr_flutter
 - [x] M25 程序化扰动纹理套件：10 个场景（噪声/模糊/低对比/梯度/旋转/透视/小码/多码/相机混合），bench --suite 与测试共用
 - [x] M26 Caffe→ONNX：自行转换 SR/检测器；SR 与独立 NumPy 前向最大误差 5.5e-06，检测器输出 raw heads（decode/NMS 待接入）
-- [x] M27 桌面客户端一键自部署：自动 provision 两个账号、写 TLS/SQLite 配置、启动服务器、展示 URL/指纹/token/secret，并可直接用主机账号连接
+- [x] M27 桌面客户端一键自部署：自动 provision 服务器身份、写 TLS/SQLite 配置、启动服务器、展示 URL/指纹/token/secret，并可直接用主机账号连接
 - [x] M28 Android 真机：arm64 Rust 库打包（rxing 二维码显示）、相机权限弹窗 + 拒绝后“去设置”引导、adb reverse 下 TLS 指纹登录成功
 - [x] M29 Android 内置服务端：`qr_race_embedded` 编译进 `libqr_race_ffi.so`，UI 可选自签名/已有证书/HTTP，默认 18443；真机 TLS 指纹登录成功
 - [x] M30 Android Camera2 → JNI → Rust 扫描：720×1280 预览、约 6ms/帧，实拍二维码命中；自动发布、前缀动态槽位、外部 App scheme 跳转、连接链接预填
+- [x] M31 每房间动态成员：房主专用 `/v1/room/guest` 生成临时身份，邀请链接自动带 TOTP 并直接进房；服务端不再要求预置“成员账号”
 - [ ] CNN 推理接入：ONNX Runtime 后端 + 检测器后处理 + 按需 SR
 - [ ] 模组执行（RustPython 阻塞，见 docs/MODULES.md）
 - [ ] Web 预览流；Apple 采集

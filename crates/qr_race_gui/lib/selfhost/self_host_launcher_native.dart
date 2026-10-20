@@ -34,7 +34,6 @@ class ProcessServerLauncher implements ServerLauncher {
     await dataDirectory.create(recursive: true);
 
     final host = await _provision(binary, 'host');
-    final member = await _provision(binary, 'member');
     final lan = await _lanAddress();
     final hosts = <String>[
       'localhost',
@@ -45,7 +44,7 @@ class ProcessServerLauncher implements ServerLauncher {
     final config = <String, Object>{
       'listen': '0.0.0.0:$port',
       'database': '${dataDirectory.path}${Platform.pathSeparator}qr_race.db',
-      'accounts': [host.account, member.account],
+      'accounts': [host.account],
     };
     if (tls.mode == SelfHostTls.selfSigned) {
       config['tls'] = {
@@ -121,8 +120,8 @@ class ProcessServerLauncher implements ServerLauncher {
       dataDirectory: dataDirectory.path,
       hostToken: host.token,
       hostSecret: host.totpSecret,
-      memberToken: member.token,
-      memberSecret: member.totpSecret,
+      memberToken: '',
+      memberSecret: '',
     );
   }
 

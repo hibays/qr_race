@@ -20,7 +20,6 @@ try {
 
     if (-not (Test-Path $Config)) {
         $hostJson = (& $server provision --user host | Select-Object -First 1) | ConvertFrom-Json
-        $memberJson = (& $server provision --user member | Select-Object -First 1) | ConvertFrom-Json
 
         $data = Join-Path $root "data"
         New-Item -ItemType Directory -Force -Path $data | Out-Null
@@ -46,8 +45,7 @@ try {
                 hosts = $hosts
             }
             accounts = @(
-                [ordered]@{ user_id = "host"; token = $hostJson.token; totp_secret = $hostJson.totp_secret; admin = $false },
-                [ordered]@{ user_id = "member"; token = $memberJson.token; totp_secret = $memberJson.totp_secret; admin = $false }
+                [ordered]@{ user_id = "host"; token = $hostJson.token; totp_secret = $hostJson.totp_secret; admin = $false }
             )
         }
         [System.IO.File]::WriteAllText($Config, ($configObject | ConvertTo-Json -Depth 8))
@@ -58,11 +56,11 @@ try {
         Write-Host "server URL: https://${urlHost}:$Port"
         Write-Host "host token:   $($hostJson.token)"
         Write-Host "host secret:  $($hostJson.totp_secret)"
-        Write-Host "member token: $($memberJson.token)"
-        Write-Host "member secret:$($memberJson.totp_secret)"
+        Write-Host ""
+        Write-Host "Members are created per room by the host's 邀请成员 button."
         Write-Host ""
         Write-Host "TOTP code:"
-        Write-Host "  $server totp --secret $($memberJson.totp_secret)"
+        Write-Host "  $server totp --secret $($hostJson.totp_secret)"
         Write-Host ""
         if ($ip) {
             Write-Host "If Windows Firewall blocks the LAN URL, run as admin:"

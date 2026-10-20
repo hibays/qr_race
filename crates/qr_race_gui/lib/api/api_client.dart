@@ -18,6 +18,7 @@ class ApiClient {
             transport.createHttpClient(normalizeFingerprint(fingerprint));
 
   final String baseUrl;
+  String? get fingerprint => _fingerprint;
   final http.Client _http;
   final String? _fingerprint;
   String? sessionId;
@@ -106,6 +107,20 @@ class ApiClient {
 
   Future<void> join(String address) async {
     await _post('/v1/room/join', query: {'address': address});
+  }
+
+  /// Host-only: mints a fresh member identity for this room. The guest is a
+  /// real server account, but its token/secret are only shared in the invite.
+  Future<GuestAccount> createGuest(String address) async {
+    final body = await _post(
+      '/v1/room/guest',
+      query: {'address': address},
+    );
+    return GuestAccount(
+      userId: body['user_id'] as String,
+      token: body['token'] as String,
+      totpSecret: body['totp_secret'] as String,
+    );
   }
 
   Future<void> leave(String address) async {
@@ -223,6 +238,18 @@ class ApiException implements Exception {
 
   @override
   String toString() => message.isEmpty ? 'HTTP $status' : message;
+}
+
+class GuestAccount {
+  const GuestAccount({
+    required this.userId,
+    required this.token,
+    required this.totpSecret,
+  });
+
+  final String userId;
+  final String token;
+  final String totpSecret;
 }
 
 class AuthSession {

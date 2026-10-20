@@ -10,7 +10,7 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **129 passed** |
+| Rust tests | `cargo test --workspace` | **130 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
 | Flutter tests | `flutter test` | **28 passed** |
 | Windows build | `flutter build windows --release` | built |
@@ -70,10 +70,22 @@ finished product.
   self-signed certificate, reported `https://127.0.0.1:18443` plus fingerprint,
   and “用此账号连接” authenticated over pinned TLS into the lobby. 8443 was
   already in use on this device, which is why the UI exposes the port.
-- Android camera: Camera2 YUV frames are rotated and pushed through JNI into
-  Rust; the preview is 720×1280, scan time ~6.2 ms on device, and a live QR
-  (`https://example.test/camera-hit`) was decoded from the screen. The preview
-  keeps the previous frame between updates, removing the black flicker.
+- Per-room dynamic member: the host-only `POST /v1/room/guest?address=...`
+  endpoint minted `guest-156ec94150ec` with a fresh token/secret; that guest
+  authenticated and joined the room, whose member list then showed
+  `host` as host and the guest as member. No pre-provisioned member account was
+  needed; invitations carry the guest credentials and a room address, and the
+  connect screen computes TOTP automatically.
+- Android camera: Camera2 YUV frames are pushed through JNI into Rust; the
+  preview is rotated at the small preview size (not per full frame), scan time
+  was 2–3 ms at 640×480, 7.8 ms at 960×720, and 6–16 ms at 1280×720 on device.
+  A live QR (`https://example.test/camera-hit`) was decoded from the screen;
+  the preview keeps the previous frame between updates, removing black flicker.
+- Duplicate hits are removed by decoded text as well as raw bytes (Rust), and
+  auto-publish keeps a published-text set, so identical results are sent once.
+- The FFI scan crate is built without `image-io` (no PNG/BMP decoders on the
+  scan path). `image` remains only for the low-rate JPEG preview; `png` appears
+  transitively via `rxing → imageproc` and is never called by the camera loop.
 - Permission and links: CAMERA runtime dialog with Settings fallback;
   `MANAGE_EXTERNAL_STORAGE` request for arbitrary certificate paths; file picker
   copies into app cache. A `qrrace://connect?...` deep link filled server,

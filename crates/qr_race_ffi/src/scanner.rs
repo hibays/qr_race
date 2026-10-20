@@ -70,7 +70,11 @@ impl SharedState {
 
         for (text, raw) in hits {
             let raw_b64 = BASE64.encode(&raw);
-            if self.hits.iter().any(|hit| hit.raw_b64 == raw_b64) {
+            if self
+                .hits
+                .iter()
+                .any(|hit| hit.raw_b64 == raw_b64 || hit.text == text)
+            {
                 continue;
             }
             self.hits.insert(
@@ -304,6 +308,20 @@ mod tests {
         );
         assert!(state.preview_seq > 0);
         assert_eq!(&state.preview[0..2], &[0xFF, 0xD8], "JPEG magic");
+    }
+
+    #[test]
+    fn the_same_text_is_deduplicated_even_with_different_bytes() {
+        let mut state = SharedState::new();
+        state.record_scan(
+            1.0,
+            vec![
+                ("https://example.test/same".to_string(), b"first".to_vec()),
+                ("https://example.test/same".to_string(), b"second".to_vec()),
+            ],
+        );
+        assert_eq!(state.hits.len(), 1);
+        assert_eq!(state.hits[0].text, "https://example.test/same");
     }
 
     #[test]

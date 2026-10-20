@@ -11,7 +11,7 @@ use qr_race_capture::GrayFrame;
 use qr_race_scan::{RxingDecoder, ScanEngine};
 use serde::Serialize;
 
-const PREVIEW_INTERVAL: Duration = Duration::from_millis(90);
+const PREVIEW_INTERVAL: Duration = Duration::from_millis(60);
 const PREVIEW_MAX_WIDTH: u32 = 480;
 const MAX_HITS: usize = 8;
 
@@ -35,12 +35,14 @@ struct Shared {
     preview_seq: u64,
     width: u32,
     height: u32,
+    rotation: i32,
 }
 
 struct Frame {
     width: u32,
     height: u32,
     data: Vec<u8>,
+    rotation: i32,
 }
 
 struct Session {
@@ -66,6 +68,7 @@ pub fn start(width: u32, height: u32) -> i32 {
         preview_seq: 0,
         width,
         height,
+        rotation: 0,
     }));
     let (tx, rx) = sync_channel::<Frame>(2);
     let worker_shared = shared.clone();
@@ -94,9 +97,14 @@ pub fn start(width: u32, height: u32) -> i32 {
                             state.scan_ms_total += elapsed_ms;
                             state.width = frame.width;
                             state.height = frame.height;
+                            state.rotation = frame.rotation;
                             for (text, raw) in hits {
                                 let raw_b64 = BASE64.encode(&raw);
-                                if state.hits.iter().any(|hit| hit.raw_b64 == raw_b64) {
+                                if state
+                                    .hits
+                                    .iter()
+                                    .any(|hit| hit.raw_b64 == raw_b64 || hit.text == text)
+                                {
                                     continue;
                                 }
                                 state.hits.insert(
@@ -122,7 +130,7 @@ pub fn start(width: u32, height: u32) -> i32 {
                 }
                 let due = last_preview.is_none_or(|last| last.elapsed() >= PREVIEW_INTERVAL);
                 if due {
-                    if let Some(jpeg) = preview_jpeg(&gray, PREVIEW_MAX_WIDTH) {
+                    if let Some(jpeg) = preview_jpeg(&gray, PREVIEW_MAX_WIDTH, frame.rotation) {
                         if let Ok(mut state) = worker_shared.lock() {
                             state.preview = jpeg;
                             state.preview_seq += 1;
@@ -157,7 +165,7 @@ pub fn stop() {
 
 /// Copies the Y plane (already extracted by Kotlin) and queues it. Dropping the
 /// frame when the worker is behind is intentional: the camera must stay live.
-pub fn push_gray(width: u32, height: u32, stride: u32, data: &[u8]) -> i32 {
+pub fn push_gray(width: u32, height: u32, stride: u32, rotation: i32, data: &[u8]) -> i32 {
     if width == 0 || height == 0 {
         return -1;
     }
@@ -186,6 +194,7 @@ pub fn push_gray(width: u32, height: u32, stride: u32, data: &[u8]) -> i32 {
         width,
         height,
         data: plane,
+        rotation,
     }) {
         Ok(()) => 0,
         Err(std::sync::mpsc::TrySendError::Full(_)) => 0,
@@ -213,6 +222,7 @@ pub fn state_json() -> Vec<u8> {
                         "source": "android-camera",
                         "width": state.width,
                         "height": state.height,
+                        "rotation": state.rotation,
                     });
                     (serde_json::to_vec(&json).unwrap_or_default(), ())
                 }
@@ -248,6 +258,7 @@ fn empty_state() -> Vec<u8> {
         "source": null,
         "width": 0,
         "height": 0,
+        "rotation": 0,
     }))
     .unwrap_or_default()
 }
@@ -259,7 +270,7 @@ fn now_ms() -> u64 {
         .unwrap_or(0)
 }
 
-fn preview_jpeg(frame: &GrayFrame, max_width: u32) -> Option<Vec<u8>> {
+fn preview_jpeg(frame: &GrayFrame, max_width: u32, rotation: i32) -> Option<Vec<u8>> {
     let scale = frame.width().div_ceil(max_width).max(1);
     let width = (frame.width() / scale).max(1);
     let height = (frame.height() / scale).max(1);
@@ -279,6 +290,7 @@ fn preview_jpeg(frame: &GrayFrame, max_width: u32) -> Option<Vec<u8>> {
             data.push(sum.checked_div(count).unwrap_or(0) as u8);
         }
     }
+    let (data, width, height) = rotate_luma(data, width, height, rotation);
     let image = image::GrayImage::from_raw(width, height, data)?;
     let mut buffer = Vec::new();
     let mut encoder = image::codecs::jpeg::JpegEncoder::new_with_quality(&mut buffer, 60);
@@ -286,6 +298,44 @@ fn preview_jpeg(frame: &GrayFrame, max_width: u32) -> Option<Vec<u8>> {
         .encode_image(&image::DynamicImage::ImageLuma8(image))
         .ok()?;
     Some(buffer)
+}
+
+fn rotate_luma(data: Vec<u8>, width: u32, height: u32, rotation: i32) -> (Vec<u8>, u32, u32) {
+    let normalized = ((rotation % 360) + 360) % 360;
+    if normalized == 0 {
+        return (data, width, height);
+    }
+    let mut output = vec![0u8; data.len()];
+    match normalized {
+        90 => {
+            for y in 0..height {
+                for x in 0..width {
+                    output[(x * height + (height - 1 - y)) as usize] =
+                        data[(y * width + x) as usize];
+                }
+            }
+            (output, height, width)
+        }
+        180 => {
+            for y in 0..height {
+                for x in 0..width {
+                    output[((height - 1 - y) * width + (width - 1 - x)) as usize] =
+                        data[(y * width + x) as usize];
+                }
+            }
+            (output, width, height)
+        }
+        270 => {
+            for y in 0..height {
+                for x in 0..width {
+                    output[((width - 1 - x) * height + y) as usize] =
+                        data[(y * width + x) as usize];
+                }
+            }
+            (output, height, width)
+        }
+        _ => (data, width, height),
+    }
 }
 
 #[cfg(target_os = "android")]
@@ -296,6 +346,7 @@ pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativePushFra
     width: jni::sys::jint,
     height: jni::sys::jint,
     stride: jni::sys::jint,
+    rotation: jni::sys::jint,
     data: jni::objects::JByteArray,
 ) {
     let Ok(bytes) = env.convert_byte_array(data) else {
@@ -303,7 +354,7 @@ pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativePushFra
     };
     // SAFETY: `i8` and `u8` have identical layout; we only read the slice.
     let bytes: &[u8] = unsafe { std::slice::from_raw_parts(bytes.as_ptr().cast(), bytes.len()) };
-    let _ = push_gray(width as u32, height as u32, stride as u32, bytes);
+    let _ = push_gray(width as u32, height as u32, stride as u32, rotation, bytes);
 }
 
 /// Starts the mobile scanner worker; camera frames arrive via JNI.

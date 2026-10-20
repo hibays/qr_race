@@ -8,6 +8,7 @@ class ScannerSnapshot {
     required this.error,
     required this.width,
     required this.height,
+    required this.rotation,
     required this.frames,
     required this.scanMs,
     required this.hits,
@@ -29,6 +30,7 @@ class ScannerSnapshot {
       error: json['error'] as String?,
       width: json['width'] as int? ?? 0,
       height: json['height'] as int? ?? 0,
+      rotation: json['rotation'] as int? ?? 0,
       frames: stats['frames'] as int? ?? 0,
       scanMs: (stats['scan_ms_last'] as num?)?.toDouble() ?? 0,
       hits: hits,
@@ -42,6 +44,9 @@ class ScannerSnapshot {
   final String? error;
   final int width;
   final int height;
+
+  /// Sensor rotation in degrees; the preview is rotated on the GPU.
+  final int rotation;
   final int frames;
   final double scanMs;
   final List<ScanHit> hits;

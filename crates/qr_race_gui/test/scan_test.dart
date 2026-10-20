@@ -69,7 +69,18 @@ void main() {
           state: state,
           address: '东京A区1B级103房',
           backend: FakeScannerBackend(
-            snapshots: [fakeSnapshot(hits: [hit])],
+            snapshots: [
+              fakeSnapshot(
+                hits: [
+                  hit,
+                  ScanHit(
+                    text: hit.text,
+                    raw: Uint8List.fromList([1, 2, 3]),
+                    atMs: hit.atMs,
+                  ),
+                ],
+              ),
+            ],
           ),
           permission: const GrantedCameraPermission(),
         ),

@@ -128,18 +128,10 @@ impl EmbeddedServer {
                     let state = AppState::new(clock);
                     let host_token = generate_token();
                     let host_secret = generate_totp_secret_base32();
-                    let member_token = generate_token();
-                    let member_secret = generate_totp_secret_base32();
                     if let Err(error) =
                         state.provision(UserId("host".to_string()), &host_token, &host_secret)
                     {
                         let _ = ready_tx.send(Err(format!("provision host: {error}")));
-                        return;
-                    }
-                    if let Err(error) =
-                        state.provision(UserId("member".to_string()), &member_token, &member_secret)
-                    {
-                        let _ = ready_tx.send(Err(format!("provision member: {error}")));
                         return;
                     }
 
@@ -148,8 +140,9 @@ impl EmbeddedServer {
                         fingerprint,
                         host_token,
                         host_secret,
-                        member_token,
-                        member_secret,
+                        // Members are minted per room via /v1/room/guest.
+                        member_token: String::new(),
+                        member_secret: String::new(),
                     };
                     if ready_tx.send(Ok(info)).is_err() {
                         return;

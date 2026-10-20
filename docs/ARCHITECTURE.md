@@ -1,0 +1,118 @@
+# Architecture
+
+## Layers
+
+```
+Android Camera2 (Kotlin)            Desktop / Web
+  ImageReader YUV_420_888             nokhwa / browser getUserMedia
+        │ Y plane only                       │
+        ▼                                    ▼
+  JNI nativePushFrame                 qr_race_capture / wasm
+        │                                    │
+        └──────────────┬─────────────────────┘
+                       ▼
+              qr_race_scan (Rust)
+        PyramidDetector → crop → rxing decode
+              (optional bilinear SR)
+                       │
+             hits / stats / preview
+                       │ FFI / wasm
+                       ▼
+                 Flutter UI
+```
+
+No camera frame enters Dart. Dart polls a small JSON state (hits, stats, error,
+preview sequence) plus a low-rate JPEG preview.
+
+## Android camera path (fast path)
+
+1. `CameraCapture.kt` opens the back camera with `ImageReader` at the requested
+   size (default 1280×720) and YUV_420_888.
+2. On each image it copies **only the Y plane**, accounting for `rowStride`.
+3. `nativePushFrame(width, height, stride, sensorOrientation, luma)` crosses JNI
+   once. Rust copies the plane into a bounded `sync_channel(2)` queue. If the
+   worker is behind, the frame is dropped instead of queued.
+4. The Rust worker runs `ScanEngine` (pyramid detector + rxing). Frames are
+   **not rotated** here; QR detection is rotation-independent. Sensor rotation
+   is metadata used only when encoding the preview.
+5. The preview is downscaled to at most 480 px, rotated at that small size, and
+   JPEG-encoded every 60 ms. Scanning never waits for the preview.
+6. `addImageAvailableListener` uses `acquireLatestImage()` and a busy flag, so
+   the camera stays live and the UI never builds an unbounded backlog.
+
+Hits are deduplicated by **both** exact bytes and decoded text. A repeated
+symbol in view produces one hit.
+
+## Why `image` and PNG appear in the dependency graph
+
+- The scan path is raw `GrayFrame` data; no compression, PNG or JPEG is involved
+  in decoding.
+- The only image encoding in the FFI is the **preview JPEG** (`image` with the
+  `jpeg` feature). Compression ratio is irrelevant there; it exists only because
+  Flutter's `Image.memory` needs an encoded image.
+- `qr_race_ffi` now builds `qr_race_scan` with `default-features = false`, so
+  the scan crate's own PNG/BMP file decoders are gone.
+- A transitive `png` still appears through `rxing → imageproc`, but it is not
+  called by the camera path. Removing it would require patching rxing; it does
+  not affect per-frame work.
+
+## Embedded server (Android self-host)
+
+`qr_race_embedded` is compiled into the same `libqr_race_ffi.so`:
+
+- starts a current-thread Tokio runtime on a Rust thread;
+- binds **127.0.0.1 only** (single-device self-host);
+- supports HTTP, generated self-signed TLS, or user-picked cert/key;
+- uses the in-memory hub (rooms/relays reset when the app process dies);
+- is controlled from Dart through `qr_server_start_config` / `qr_server_info` /
+  `qr_server_stop`.
+
+The desktop build keeps using the separate `qr_race_server` process (and SQLite),
+selected by platform in `ServerLauncher`.
+
+## Identity, rooms and invitations
+
+- A **server account** is an identity (token + TOTP secret). It is not a room
+  role.
+- Creating a room makes that account the room's **host**; joining makes it a
+  **member/co-host**. The same identity can be host in one room and member in
+  another.
+- The host can call `POST /v1/room/guest?address=...`; the server provisions a
+  fresh identity and returns its token/TOTP secret. That guest is scoped by the
+  invite link to one room and joins as a member.
+- Invite links use `qrrace://connect?...&room=...`; the app fills the form,
+  computes TOTP from the link secret, logs in, joins the room and opens it.
+
+## Dynamic relays
+
+- Scan hits are published automatically, no button.
+- Payload prefix (`A:https://...`, `cam1|...`) identifies a slot. The room
+  shows only the newest relay per slot; multiple prefixes coexist.
+- The server keeps an append-only relay history (64 per room); grouping is a
+  client concern today. A server-side slot/upsert API is a possible next step.
+- Opening a relay/scan result uses Android's `ACTION_VIEW` chooser for http(s)
+  (WeChat/WeCom/browser), direct launch for custom schemes, and copies the link
+  when no app handles it.
+
+## On-device numbers (OnePlus PLF110)
+
+| requested capture | negotiated | scan p50-ish | notes |
+|---|---|---|---|
+| 640×480 | 640×480 | ~2–3 ms | fastest; fewer pixels per QR module |
+| 960×540 | 960×720 (closest) | ~7.8 ms | middle ground |
+| 1280×720 | 1280×720 | ~6–16 ms | default; decoded a QR at desk distance |
+
+These are Rust scan times from the scanner HUD (`帧 / scan_ms`). Total latency
+also includes camera exposure and the 120 ms Dart poll; a frame is never queued
+if scanning is behind. 1280×720 is the default because it preserves recognition
+margin for small/distant codes while staying well under the 33 ms budget in the
+measured runs. 640×480 is available with
+`--dart-define=SCAN_WIDTH=640 --dart-define=SCAN_HEIGHT=480` for battery/testing.
+
+## WeChat CNN models: not executed yet
+
+Scanning is **rxing plus classical pyramid/bilinear**, not the WeChat detector or
+super-resolution network. `models/detect.onnx` and `models/sr.onnx` are converted
+weights only; the project has no ONNX Runtime dependency and never loads them.
+Running the WeChat algorithm would require an inference backend (ONNX Runtime
+Mobile), detector prior decode/NMS, and crop-based SR. See `docs/MODELS.md`.

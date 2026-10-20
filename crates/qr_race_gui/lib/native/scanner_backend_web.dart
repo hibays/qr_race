@@ -75,6 +75,7 @@ class WebScannerBackend implements ScannerBackend {
         error: _error,
         width: _width,
         height: _height,
+        rotation: 0,
         frames: _frames,
         scanMs: _scanMs,
         hits: _hits,

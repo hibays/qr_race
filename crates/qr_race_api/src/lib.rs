@@ -160,6 +160,7 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/room", get(routes::room_view))
         .route("/v1/room/light", post(routes::light))
         .route("/v1/room/join", post(routes::join))
+        .route("/v1/room/guest", post(routes::guest))
         .route("/v1/room/leave", post(routes::leave))
         .route("/v1/room/promote", post(routes::promote))
         .route("/v1/room/demote", post(routes::demote))

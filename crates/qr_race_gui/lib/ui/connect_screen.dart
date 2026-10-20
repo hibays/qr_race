@@ -3,8 +3,10 @@ import 'package:flutter/material.dart';
 import '../api/app_links.dart';
 import '../api/cert_fingerprint.dart';
 import '../api/connect_link.dart';
+import '../selfhost/self_host_types.dart';
 import '../state/app_state.dart';
 import 'lobby_screen.dart';
+import 'room_screen.dart';
 import 'self_host_screen.dart';
 import 'theme.dart';
 
@@ -27,6 +29,8 @@ class _ConnectScreenState extends State<ConnectScreen> {
   final _fingerprint = TextEditingController();
   final _token = TextEditingController();
   final _code = TextEditingController();
+  String? _linkSecret;
+  String? _linkRoom;
 
   @override
   void initState() {
@@ -48,11 +52,20 @@ class _ConnectScreenState extends State<ConnectScreen> {
       _server.text = link.server;
       if (link.fingerprint != null) _fingerprint.text = link.fingerprint!;
       if (link.token != null) _token.text = link.token!;
+      _linkSecret = link.secret;
+      _linkRoom = link.room;
+      if (link.secret != null) _code.clear();
     });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('已从连接链接填充，请输入 TOTP 验证码')),
+        SnackBar(
+          content: Text(
+            link.secret != null
+                ? '已填充连接；验证码会自动生成，直接点连接'
+                : '已从连接链接填充，请输入 TOTP 验证码',
+          ),
+        ),
       );
     });
   }
@@ -106,6 +119,9 @@ class _ConnectScreenState extends State<ConnectScreen> {
   }
 
   Future<void> _connect() async {
+    if (_code.text.trim().isEmpty && _linkSecret != null) {
+      _code.text = totpCode(_linkSecret!);
+    }
     if (!_formKey.currentState!.validate()) return;
     final ok = await widget.state.connect(
       server: _server.text,
@@ -115,6 +131,23 @@ class _ConnectScreenState extends State<ConnectScreen> {
     );
     if (!mounted) return;
     if (ok) {
+      final room = _linkRoom;
+      if (room != null) {
+        final entered = await widget.state.enterRoom(room);
+        if (!mounted) return;
+        if (!entered) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(widget.state.error ?? '进入房间失败')),
+          );
+          return;
+        }
+        Navigator.of(context).pushReplacement(
+          MaterialPageRoute(
+            builder: (_) => RoomScreen(state: widget.state, address: room),
+          ),
+        );
+        return;
+      }
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => LobbyScreen(state: widget.state)),
       );

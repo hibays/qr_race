@@ -207,8 +207,8 @@ class _SelfHostScreenState extends State<SelfHostScreen>
     final info = _info;
     return [
       const _Note(
-        '一键完成：生成两个账号 → 配置 TLS/监听 → 启动服务器。'
-        '服务器保持运行，直到你在这里点“停止”。',
+        '一键完成：生成服务器身份 → 配置 TLS/监听 → 启动服务器。'
+        '成员不预置账号：房主进房间后点“邀请成员”，服务端为该房间动态生成临时身份。',
       ),
       const SizedBox(height: 14),
       Row(
@@ -350,7 +350,7 @@ class _SelfHostScreenState extends State<SelfHostScreen>
         _InfoCard(info: info),
         const SizedBox(height: 12),
         _AccountCard(
-          title: '房主账号',
+          title: '服务器账号',
           token: info.hostToken,
           secret: info.hostSecret,
           onConnect: _connectAsHost,
@@ -358,17 +358,7 @@ class _SelfHostScreenState extends State<SelfHostScreen>
             server: info.url,
             fingerprint: info.fingerprint,
             token: info.hostToken,
-          ),
-        ),
-        const SizedBox(height: 8),
-        _AccountCard(
-          title: '成员账号',
-          token: info.memberToken,
-          secret: info.memberSecret,
-          link: buildConnectLink(
-            server: info.url,
-            fingerprint: info.fingerprint,
-            token: info.memberToken,
+            secret: info.hostSecret,
           ),
         ),
         const SizedBox(height: 16),

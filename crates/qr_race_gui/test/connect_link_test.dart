@@ -7,12 +7,14 @@ void main() {
       server: 'https://127.0.0.1:8443',
       fingerprint: 'abc123',
       token: 'secret-token',
+      secret: 'JBSWY3DPEHPK3PXP',
     );
     expect(link, startsWith('qrrace://connect?'));
     final parsed = parseConnectLink(link)!;
     expect(parsed.server, 'https://127.0.0.1:8443');
     expect(parsed.fingerprint, 'abc123');
     expect(parsed.token, 'secret-token');
+    expect(parsed.secret, 'JBSWY3DPEHPK3PXP');
   });
 
   test('accepts a bare query and rejects unrelated text', () {

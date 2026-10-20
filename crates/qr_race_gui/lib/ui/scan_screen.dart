@@ -72,6 +72,8 @@ class _ScanScreenState extends State<ScanScreen> {
     try {
       final controller = ScanController(
         backend: widget.backend ?? createScannerBackend(),
+        width: const int.fromEnvironment('SCAN_WIDTH', defaultValue: 1280),
+        height: const int.fromEnvironment('SCAN_HEIGHT', defaultValue: 720),
       );
       _controller = controller;
       controller.start();
