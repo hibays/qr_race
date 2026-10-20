@@ -14,7 +14,7 @@ finished product.
 | Flutter analyze | `flutter analyze` | no issues |
 | Flutter tests | `flutter test` | **27 passed** |
 | Windows build | `flutter build windows --release` | built |
-| Web build | `flutter build web --release` | built, but wasm scanner is excluded after the zxing-cpp swap |
+| Web build | `flutter build web --release` | built; scan/QR use vendored zxing-wasm |
 | Android build | `flutter build apk --debug` | built (arm64 Rust lib + Camera2 scanning + embedded server) |
 
 ### QR generation
@@ -24,8 +24,8 @@ finished product.
   bridge. `qr_race_qr` tests decode the WebP back and scan it with the pipeline.
 - Native FFI: `dart run tool/qr_probe.dart` against the release DLL produced a
   2452-byte RIFF/VP8L file that Pillow reads as 2048×2048.
-- Web QR rendering used the old wasm export; after the zxing-cpp swap the wasm
-  crate is excluded and Web scanning/QR generation need an Emscripten rebuild.
+- Web QR rendering uses `zxing-wasm` `writeBarcode`, scaled to 2048×2048 and
+  encoded as WebP by canvas; the probe returned a 13,616-byte RIFF/WebP.
 - The Flutter UI renders these bytes with `Image.memory` and
   `FilterQuality.none`; `qr_flutter` was removed.
 
@@ -152,14 +152,13 @@ finished product.
   numbers in `docs/PERF.md` are historical; Android color timing is pending.
 - Multi-code: generated 1280×720 scene with two symbols, pyramid pipeline returns
   both, byte-for-byte.
-- wasm: historical only. The zxing-cpp swap removed the wasm build from the
-  workspace; a Rust wasm build needs an Emscripten C++ toolchain.
-- Browser fake camera (pre-swap, historical): `pwsh -File scripts/browser-scan-probe.ps1` runs Edge headless with a
-  fake camera (Y4M of a QR page) and reports
-  `HIT:https://example.test/relay`, 640×480, `scan_ms` ≈ 1.6.
-- Browser real camera (pre-swap, historical): `pwsh -File scripts/browser-scan-probe.ps1 -RealCamera`
-  acquires 1280×720 from the PC camera and scans at ~3 ms; no QR was in view,
-  so this proves the physical camera path, not a physical hit.
+- Browser scan: vendored `zxing-wasm` reader in `web/scan/`; no rxing and no
+  Rust wasm build.
+- Browser fake camera: `pwsh -File scripts/browser-scan-probe.ps1` runs Edge
+  headless with a fake camera (Y4M of a QR page) and reports
+  `HIT:https://example.test/relay`, 640×480, `scan_ms` ≈ 1.7.
+- Browser real camera: `pwsh -File scripts/browser-scan-probe.ps1 -RealCamera`
+  acquires 1280×720 from the PC camera; a physical QR hit remains manual.
 - Real camera: camera access was enabled and the CLI scanned textured frames at
   1920×1080 (6.01 ms average, ~24 fps input) and 1280×720 (2.89 ms average,
   ~28 fps input); no QR was in view, so a live symbol was not decoded.
@@ -228,8 +227,9 @@ cargo fmt --all -- --check
 cargo clippy --workspace --all-targets -- -D warnings
 cargo test --workspace
 
-# Web wasm is intentionally not part of the zxing-cpp build yet.
-# A future build needs Emscripten + the zxing-cpp C++ core.
+# Web uses vendored zxing-wasm; verify the browser path from the repo root.
+pwsh -File scripts/browser-scan-probe.ps1
+
 cd crates/qr_race_gui
 flutter analyze
 flutter test
@@ -243,6 +243,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 

@@ -6,7 +6,7 @@
 
 ## 现在有什么（M0–M30）
 
-工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/桌面与 Android 一键自部署）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建（wasm 扫码/QR 待 Emscripten 重做）、内置自签名 HTTPS、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android App（内置 Rust 服务端、Camera2→Rust 扫码、权限/所有文件访问引导、二维码显示）、按前缀的自动发布与动态槽位、外部 App scheme 跳转、纯 Rust qrcode 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）、自实现微信 CNN 分层流水线（zxing-cpp 快路径 → CNN 384 → 全分辨率 crop → 小码 SR → 分块远码检测）已落地；Android 用 ORT；解码/WeChat crop 已统一为 zxing-cpp，Camera2 改为 YUV 彩色三平面；Android 彩色链路与 Apple 采集仍待真机重测。
+工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/桌面与 Android 一键自部署）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建 + zxing-wasm 浏览器扫码/WebP 二维码、内置自签名 HTTPS、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android App（内置 Rust 服务端、Camera2→Rust 扫码、权限/所有文件访问引导、二维码显示）、按前缀的自动发布与动态槽位、外部 App scheme 跳转、纯 Rust qrcode 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）、自实现微信 CNN 分层流水线（zxing-cpp 快路径 → CNN 384 → 全分辨率 crop → 小码 SR → 分块远码检测）已落地；Android 用 ORT；解码/WeChat crop 已统一为 zxing-cpp，Camera2 改为 YUV 彩色三平面；Android 彩色链路与 Apple 采集仍待真机重测。
 
 ```
 crates/
@@ -34,7 +34,7 @@ docs/VENDORED.md               cvlite/zxing-cpp 的 vendored 来源与构建状�
 docs/PROMPT_CLOSURE.md        PROMPT.md 分层收尾清单、门禁与剩余缺口
 docs/MODELS.md                 WeChat Caffe → ONNX：转换、验证与推理接入计划
 docs/EXTENSIONS.md             扩展点说明（不含 Python/模组运行时）
-docs/WASM.md                   wasm 扫码移除说明与 Emscripten 迁移缺口
+docs/WASM.md                   zxing-wasm 浏览器扫码与 WebP 二维码
 docs/VERIFICATION.md           最终审计：门禁、功能证据与已知缺口
 docs/ARCHITECTURE.md           客户端/相机/服务端/身份/动态码数据流与实测取舍
 docs/MODELS.md                 WeChat Caffe → ONNX：转换、验证与推理接入计划
@@ -87,7 +87,7 @@ vendored 来源见 [docs/VENDORED.md](docs/VENDORED.md)。
 | 目标 | 状态 | 命令 |
 |---|---|---|
 | Windows 桌面 | 可用（含原生相机 + FFI 扫码） | `flutter build windows --release` |
-| Web | 构建可用；扫码与二维码 wasm 在 zxing-cpp 迁移后暂移除（需 Emscripten/zxing-wasm） | `flutter build web --release` |
+| Web | 可用；扫码/二维码走 vendored zxing-wasm，需 HTTPS 或 localhost | `flutter build web --release` |
 | Android | **debug APK 可构建**；内置服务端（TLS/HTTP）、Camera2→Rust 扫码、自动发布、二维码显示、权限引导 | `pwsh -File scripts/android-deploy.ps1` |
 | iOS / macOS | 未验证（需要 macOS 与 Xcode） | — |
 
@@ -155,8 +155,11 @@ flutter run -d windows
 # 无服务器预览界面
 flutter run -d windows --dart-define=DEMO=true
 
-# Web 构建（Rust wasm 扫码暂缺；需 Emscripten 重做）
+# Web 构建（zxing-wasm 资产已 vendored）
 flutter build web --release
+
+# 浏览器相机 → zxing-wasm（Edge headless 假摄像头）
+pwsh -File scripts/browser-scan-probe.ps1
 
 # 原生扫描会话（cdylib，Dart FFI 用）
 cargo build -p qr_race_ffi --release
@@ -239,6 +242,7 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [ ] Apple 采集（AVFoundation）
 - [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
 - [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+
 
 
 

@@ -86,7 +86,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 - 2026-10-20 实机采集（Windows x64、集成摄像头、release）：相机权限开放后，真实纹理帧 1080p 全帧扫描平均 6.01ms（86 帧输入/60 扫描，3.586s），1280×720 平均 2.89ms（111 帧输入/60 扫描，3.915s）；两次都没有二维码入镜。更早相机返回 Windows 隐私占位帧时的 4.23ms（1080p）/1.95ms（720p）只是无特征帧的地板。录制帧率约 24–28fps，30fps 仍需更强的采集源。注意：42ms/19.5ms 来自 debug 构建，已作废。详见 `docs/PERF.md`。
 - 2026-10-20 粗到精扫描（rxing 时代，release，1280×720 场景）：整帧解码 p50 4.629ms；金字塔检测 2.331ms；按需双线性超分 4.037ms。zxing-cpp 迁移后整帧基线见上；检测/超分仍是 trait 实现，CNN 已按同一层级接入（Android ORT）。
 - 2026-10-20 wasm 与浏览器：wasm 扫描内核在 Node 中 1280×720 约 18–22ms；Edge headless + 假摄像头（Y4M）跑通 `getUserMedia → canvas → wasm`，640×480 命中，扫描约 1.8ms。物理相机实拍仍未验证。
-- 2026-10-20 二维码生成：纯 Rust `qrcode` 编码 2048×2048 无损 WebP（纠错 M、quality 90 / method 4），与 rcrm bridge 参数一致；桌面 FFI 与单测验证 2048² 与回读解码。Web wasm 编码路径待 zxing-cpp/Emscripten 重做。Flutter 用 `Image.memory` 显示，已移除 `qr_flutter`。
+- 2026-10-20 二维码生成：纯 Rust `qrcode` 编码 2048×2048 无损 WebP（纠错 M、quality 90 / method 4），与 rcrm bridge 参数一致；桌面 FFI 与单测验证 2048² 与回读解码。Web 走 vendored zxing-wasm（reader/writer），扫码与 2048² WebP 均已验证。Flutter 用 `Image.memory` 显示，已移除 `qr_flutter`。
 - 2026-10-20 CNN 权重转换：自行解析 WeChat Caffe 权重并写 ONNX。SR 输入 1×1×224²、输出 1×1×447²，与独立 NumPy 前向最大误差 5.5e-06；检测器输入 1×1×384²，输出 mbox_loc/conf/priorbox（6912 priors），DetectionOutput 无 ONNX 等价物，decode/NMS 已在 `qr_race_wechat` 实现；Android ORT 已接入扫描管线。
 - 2026-10-20 构建与测试：Rust 134 个测试、Flutter 27 个测试；Windows release、Web release、Android debug APK 均构建成功。
 - 2026-10-20 Android 自启动与扫码：`qr_race_embedded` 编进 `libqr_race_ffi.so`，App 内可选自签名/已有证书/HTTP，默认端口 18443；真机启动后显示 URL、证书指纹与服务器账号，并通过指纹固定 + token 登录。Camera2 的 Y 平面经 JNI 直接进 Rust（旋转元数据、预览小图旋转；640×480 约 2–3ms、960×720 约 7.8ms、1280×720 约 6–16ms），实拍 `https://example.test/camera-hit` 命中；预览保留上一帧，不再黑屏闪烁。
@@ -106,6 +106,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 3. **房间是真实地点。** 京、区、级、房对应现实场地，房间码是鉴权路径的一部分；成员可以在别处，接力让这种分离成立。
 4. **原生深度，薄接缝。** 帧与推理留在原生层，Flutter 只负责界面；模块在 server 与 client 两端都可拔插，接口要窄、可替换。
 5. **生产即标准。** TDD、可复现的基准、明确的许可与安全边界；不拿演示级实现充数。
+
 
 
 

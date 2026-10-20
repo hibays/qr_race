@@ -16,7 +16,7 @@ status document, not a claim that every requirement is complete.
 | 7 | CNN backend speed selection | Done (tested: ORT/tract) | ORT 6–48 ms beats tract; st-zrt wraps ORT, lele N/A, Candle untested |
 | 8 | Camera capture: Android | Done | Camera2 Y/U/V color planes → JNI → Rust; RGB for zxing-cpp, luma for CNN |
 | 9 | Camera capture: desktop | Done | nokhwa backend |
-| 10 | Camera capture: Web | Partial | wasm scanner excluded after zxing-cpp swap; Emscripten rebuild pending |
+| 10 | Camera capture: Web | Done (fake camera) | zxing-wasm reader; fake-camera hit 640×480/1.7 ms; physical hit pending |
 | 11 | Camera capture: Apple | Not done | no iOS/macOS host on this machine |
 | 12 | Server: rooms, roles, relays, lobby | Done | hub/API tests |
 | 13 | Auth | Done (token-only) | TOTP removed from product flow; legacy optional code |
@@ -28,7 +28,7 @@ status document, not a claim that every requirement is complete.
 | 19 | Auto-publish / dynamic prefix slots | Done | client grouping, published-text dedup |
 | 20 | Guest/invite identities | Done | per-room guest endpoint, invite links |
 | 21 | External app scheme jump | Done | chooser/clipboard fallback |
-| 22 | QR generation via qrcode crate WebP | Done | lossless VP8L, rcrm-aligned params |
+| 22 | QR generation via qrcode / zxing-wasm WebP | Done | native qrcode VP8L + Web zxing-wasm writer to WebP |
 | 23 | Test infrastructure | Done | 134 Rust / 27 Flutter at last count; fuzz/smoke suites |
 | 24 | Deployment docs | Done | Ubuntu/Windows/Android, self-host, TLS |
 | 25 | WeChat CNN budget | Done (60 ms) | pre-swap rxing p95: fast 6.9 ms, CNN 6.9 ms, tiled far 21.8 ms; zxing-cpp re-test pending |
@@ -71,6 +71,7 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
+
 
 
 

@@ -7,6 +7,7 @@ were deleted when zxing-cpp replaced both `rxing` and `wxing`.
 |---|---|---|---|
 | `crates/cvlite` | <https://github.com/wilinz/cvlite> | 0.1.0 | WeChat pipeline resize/color helpers (Apache-2.0) |
 | `crates/zxing-cpp` | <https://github.com/zxing-cpp/zxing-cpp> | 0.5.3 | Rust binding + bundled C++ barcode reader/writer (Apache-2.0) |
+| `crates/qr_race_gui/web/scan/zxing-wasm` | <https://github.com/Sec-ant/zxing-wasm> | 3.1.6 | Browser zxing-cpp reader/writer wasm (MIT) |
 
 `crates/zxing-cpp` is normally a crates.io package; it is vendored so three
 build issues could be fixed locally:
@@ -24,3 +25,4 @@ Desktop targets build the bundled C++ with CMake. Android builds are driven by
 `qr_race_wechat` still uses `cvlite` for resizing; its decoder now calls
 zxing-cpp directly. No `wxing`, `wxscan`, TFLite, `rxing`, or `rustpython`
 dependency remains in the workspace.
+

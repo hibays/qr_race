@@ -1,17 +1,41 @@
 # Web / wasm scanning
 
-The Rust wasm scanner was removed with the zxing-cpp migration. zxing-cpp is
-C++ and needs an Emscripten toolchain plus a static C++ runtime for wasm, which
-this workspace does not currently build.
+Status: works end to end with **zxing-wasm** (ZXing-C++ compiled to WebAssembly).
+No rxing, no Rust wasm crate, and no server round-trip.
 
-Current state:
+| piece | role |
+|---|---|
+| `web/scan/camera_scan.js` | `getUserMedia` → canvas → `readBarcodes`; also `qrRaceQrWebp` via `writeBarcode` |
+| `web/scan/zxing-wasm/` | vendored zxing-wasm ES modules (reader + writer) |
+| `web/scan/zxing_reader.wasm` | zxing-cpp reader wasm |
+| `web/scan/zxing_writer.wasm` | zxing-cpp writer wasm |
+| `lib/native/scanner_backend_web.dart` | polls the hit JSON, same interface as native |
+| `lib/native/qr_renderer_web.dart` | receives WebP bytes from `qrRaceQrWebp` |
 
-- Android and desktop scan natively with zxing-cpp.
-- Web still builds, but camera scanning and QR rendering report unsupported:
-  the Rust wasm crate and its generated artifacts were removed to eliminate the
-  last rxing binary.
-- A future Web backend should either build zxing-cpp with Emscripten or use the
-  `zxing-wasm` browser package behind the same `ScannerBackend` interface.
+The browser path keeps frames in JavaScript; Dart only receives hits/stats.
 
-The old fake-camera probe and Node wasm probe were removed with the crate.
+## Verified
 
+- Deterministic fake camera probe:
+
+  ```text
+  pwsh -File scripts/browser-scan-probe.ps1
+  {'title': 'HIT:https://example.test/relay', 'state':
+   {'frames': 4, 'width': 640, 'height': 480, 'scanMs': 1.7,
+    'hit': 'https://example.test/relay', 'error': None}}
+  ```
+
+- WebP QR generation through zxing-wasm returned a 13,616-byte RIFF/WebP.
+- Physical browser camera acquisition was previously verified at 1280×720
+  (~3 ms/frame); the same `getUserMedia` path now feeds zxing-wasm.
+
+## Rebuild
+
+`flutter build web --release` (assets under `web/scan/` are checked in).
+
+## Constraints
+
+- **Secure context.** `getUserMedia` needs HTTPS or localhost.
+- The browser backend is zxing-wasm, not the Rust zxing-cpp binding; both wrap
+  the same ZXing-C++ core.
+- Physical-camera QR hit still needs a manual run.
