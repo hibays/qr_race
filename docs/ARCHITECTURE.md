@@ -133,13 +133,13 @@ The scan worker runs tiers:
    four overlapping 2×2 tiles and run each through the same 384 detector. This
    preserves small modules without needing a dynamic-shape model.
 
-The backend sits behind `crate::net::Net`: Android uses `OrtNet` with ONNX
-Runtime 1.31 (`libonnxruntime.so` packaged in `jniLibs`); desktop uses the pure
-Rust tract backend as fallback. The session is mutex-guarded because ORT `run`
-takes `&mut Session`.
+The backend sits behind `crate::net::Net`: Android uses `StZrtNet` with ONNX
+Runtime 1.29 through `st-zrt` (`libonnxruntime.so` packaged in `jniLibs`); desktop uses the pure
+Rust tract backend as fallback. `st-zrt` sessions run through `&self`, so the
+pipeline no longer needs a mutex around inference.
 
-Device HUD (OnePlus PLF110, ORT): fast 2.9–6.8 ms; CNN 384 6.3 ms (empty scene)
-to 15.9 ms (candidate + SR); tiled far-code pass 21.4 ms. A 11-vmin QR on the PC
+Device HUD (OnePlus PLF110, st-zrt): 1920×1440 fast p50 8.3 ms / p95 21.1 ms;
+CNN 9.5 ms in the live camera run. A 11-vmin QR on the PC
 screen decoded `https://example.test/far-small-live` at 1280×720 in the tiled
 path, under the 60 ms CNN budget. Clear codes stay on the fast path.
 A real-camera run (1075 frames) measured HUD p95 17.4 ms, CNN 59.1 ms and
@@ -165,9 +165,12 @@ measured runs. 640×480 is available with
 
 `models/detect.onnx` and `models/sr.onnx` are loaded from `include_bytes!` by
 `qr_race_wechat`. The pipeline is real: prior decode/NMS, full-resolution crop,
-zxing-cpp decode, and on-demand SR run on device. Android uses the ORT session
-against `libonnxruntime.so` (measured CNN 6–14 ms on the OnePlus); desktop keeps
+zxing-cpp decode, and on-demand SR run on device. Android uses the st-zrt session
+against ONNX Runtime 1.29 `libonnxruntime.so` (measured CNN 9.5 ms on the OnePlus); desktop keeps
 tract as the fallback. The fast zxing-cpp path remains the 30 fps target; the
 real 1920×1440 device run measured fast p50 8.3 ms / p95 21.1 ms.
 
 TFLite/FFI upstream crates are not built. See `docs/MODELS.md` and `docs/VENDORED.md`.
+
+
+

@@ -58,6 +58,11 @@ if (-not (Test-Path $zxingLib)) {
     if ($LASTEXITCODE -ne 0) { throw "zxing-cpp build failed" }
 }
 $env:ZXING_CPP_LIB_DIR = $zxingBuild
+$ortRoot = Join-Path $root ".refs\\ort-android-1.29"
+if (-not (Test-Path (Join-Path $ortRoot "lib\\libonnxruntime.so"))) {
+    throw "ONNX Runtime 1.29 Android lib missing: $ortRoot\lib\libonnxruntime.so"
+}
+$env:ST_ZRT_ORT_PATH = $ortRoot
 
 Write-Host "building qr_race_ffi for $target ($Abi)..." -ForegroundColor Cyan
 Push-Location $root
@@ -74,6 +79,8 @@ $dest = Join-Path $root "crates\qr_race_gui\android\app\src\main\jniLibs\$Abi"
 New-Item -ItemType Directory -Force -Path $dest | Out-Null
 Copy-Item $source $dest -Force
 Copy-Item $zxingLib $dest -Force
+Copy-Item (Join-Path $ortRoot "lib\\libonnxruntime.so") $dest -Force
 $cxx = Join-Path $ndk.FullName "toolchains\llvm\prebuilt\windows-x86_64\sysroot\usr\lib\$target\libc++_shared.so"
 if (Test-Path $cxx) { Copy-Item $cxx $dest -Force }
 Write-Host "packaged $dest\libqr_race_ffi.so, libZXing.so, libc++_shared.so" -ForegroundColor Green
+

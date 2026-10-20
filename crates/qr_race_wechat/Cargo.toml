@@ -10,7 +10,7 @@ doctest = false
 
 [features]
 default = ["tract"]
-ort = ["dep:ort"]
+st-zrt = ["dep:st-zrt"]
 tract = ["dep:tract-onnx"]
 
 [dependencies]
@@ -18,7 +18,7 @@ qr_race_scan.workspace = true
 cvlite = { path = "../cvlite" }
 zxing-cpp = { version = "0.5.3", default-features = false }
 tract-onnx = { version = "0.21", optional = true }
-ort = { version = "2.0.0-rc.15", default-features = false, features = ["load-dynamic"], optional = true }
+st-zrt = { version = "0.4.1", default-features = false, optional = true }
 
 [dev-dependencies]
 qrcode = "0.14"
@@ -27,3 +27,4 @@ qr_race_fixtures.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 zxing-cpp = { version = "0.5.3", default-features = false, features = ["bundled"] }
+

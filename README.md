@@ -6,7 +6,7 @@
 
 ## 现在有什么（M0–M30）
 
-工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/桌面与 Android 一键自部署）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建 + zxing-wasm 浏览器扫码/WebP 二维码、内置自签名 HTTPS、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android App（内置 Rust 服务端、Camera2→Rust 扫码、权限/所有文件访问引导、二维码显示）、按前缀的自动发布与动态槽位、外部 App scheme 跳转、纯 Rust qrcode 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）、自实现微信 CNN 分层流水线（zxing-cpp 快路径 → CNN 384 → 全分辨率 crop → 小码 SR → 分块远码检测）已落地；Android 用 ORT；解码/WeChat crop 已统一为 zxing-cpp，Camera2 改为 YUV 彩色三平面，Android 预览改为 Flutter Texture；OnePlus 真机 1920×1440 已复测 fast p50 8.3ms/p95 21.1ms，Apple 采集仍缺失。
+工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/桌面与 Android 一键自部署）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建 + zxing-wasm 浏览器扫码/WebP 二维码、内置自签名 HTTPS、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android App（内置 Rust 服务端、Camera2→Rust 扫码、权限/所有文件访问引导、二维码显示）、按前缀的自动发布与动态槽位、外部 App scheme 跳转、纯 Rust qrcode 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）、自实现微信 CNN 分层流水线（zxing-cpp 快路径 → CNN 384 → 全分辨率 crop → 小码 SR → 分块远码检测）已落地；Android 用 st-zrt；解码/WeChat crop 已统一为 zxing-cpp，Camera2 改为 YUV 彩色三平面，Android 预览改为 Flutter Texture；OnePlus 真机 1920×1440 已复测 fast p50 8.3ms/p95 21.1ms，Apple 采集仍缺失。
 
 ```
 crates/
@@ -241,7 +241,8 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M30 Android Camera2 → JNI → Rust 扫描：真机 1920×1440、fast p50 8.3ms/p95 21.1ms，实拍二维码命中；自动发布、前缀动态槽位、外部 App scheme 跳转、连接链接预填
 - [x] M31 每房间动态成员：房主专用 `/v1/room/guest` 生成临时身份，邀请链接直接进房；服务端不再要求预置“成员账号”
 - [x] M32 桌面自部署进 bridge：Rust 通过 Windows Job Object 持有 server 子进程，关闭 GUI 自动清理；配置/SQLite 复用；桌面 CJK 字体回退对齐 rcrm；TOTP 2FA 从产品与初版需求移除
-- [x] M33 自实现 WeChat 分层：ORT CNN 384 → 全分辨率 crop → 小码 SR → 2×2 分块远码检测；vendored cvlite；真机旧 rxing 数据 fast p50 6.8ms、CNN p50 5.5ms、远码分块 p50 21.4ms（zxing-cpp/彩色相机真机已复测：1920×1440 fast p50 8.3ms、p95 21.1ms、预览 Flutter Texture）
+- [x] M33 自实现 WeChat 分层：st-zrt CNN 384 → 全分辨率 crop → 小码 SR → 2×2 分块远码检测；vendored cvlite；真机旧 rxing 数据 fast p50 6.8ms、CNN p50 5.5ms、远码分块 p50 21.4ms（zxing-cpp/彩色相机真机已复测：1920×1440 fast p50 8.3ms、p95 21.1ms、预览 Flutter Texture）
 - [ ] Apple 采集（AVFoundation）
 - [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
 - [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+

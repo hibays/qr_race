@@ -30,9 +30,9 @@ serde_json.workspace = true
 
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
-# ONNX Runtime is more than 3x faster than tract on the device; the mobile
-# build loads the packaged libonnxruntime.so dynamically.
-qr_race_wechat = { workspace = true, default-features = false, features = ["ort"] }
+# st-zrt is a thin safe layer over ONNX Runtime 1.29; the Android build
+# packages libonnxruntime.so and points ST_ZRT_ORT_PATH at its headers/lib.
+qr_race_wechat = { workspace = true, default-features = false, features = ["st-zrt"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 qr_race_wechat = { workspace = true, default-features = false, features = ["tract"] }
@@ -46,3 +46,4 @@ windows-sys = { version = "0.61", features = [
 
 [dev-dependencies]
 qrcode = "0.14"
+
