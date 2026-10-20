@@ -89,6 +89,11 @@ finished product.
 - Deterministic fixture suite: 10/10 scenes fully decoded (clean/noise/blur/
   low-contrast/gradient/rotated/perspective/small/multi/camera-like), all on
   the fast path; the separate synthetic small-code test exercises CNN/SR.
+- Far-code synthetic sweep (1280×720 textured canvas, QR 50–300 px, box blur
+  0/1/2 px): 17/24 combinations decoded. All 160/220/300 px cases hit on the
+  fast path; 80–100 px with 1 px blur hit via CNN+SR; 50–60 px with blur, and
+  ～120 px at 2 px blur, still miss. This is a distance proxy, not a field
+  detection-rate claim.
 - Vendored sources (crates.io) are under `crates/wxscan`, `crates/cvlite`,
   `crates/wxing`, `crates/wxscan-tflite`, `crates/wxscan-ffi`; only the first
   three are built as path dependencies. See `docs/VENDORED.md`.
@@ -236,6 +241,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 

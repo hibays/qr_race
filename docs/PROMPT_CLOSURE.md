@@ -54,9 +54,10 @@ Device-only checks:
 
 ## Remaining work, in order
 
-1. **Multi-device/rate sweep.** Synthetic p95 (fast 6.9 ms, CNN 6.9 ms, tiled
-   far 21.8 ms) and one real-camera run (p95 17.4 ms, CNN 59.1 ms, 5/1075
-   dropped) are measured. A multi-device detection-rate sweep remains.
+1. **Larger field sweep.** Synthetic p95 (fast 6.9 ms, CNN 6.9 ms, tiled far
+   21.8 ms), one real-camera run (p95 17.4 ms, CNN 59.1 ms, 5/1075 dropped)
+   and a 17/24 synthetic far-code size/blur matrix are measured. A multi-device
+   field detection-rate sweep remains.
 2. **Apple capture.** `qr_race_capture_apple` + AVFoundation, then the same
    frame-never-in-Dart contract.
 3. **Optional follow-ups.** st-zrt is only an ORT wrapper; lele is not an
@@ -70,6 +71,7 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
+
 
 
 
