@@ -93,7 +93,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 - 2026-10-20 自动发布与动态码：扫码命中即自动发布，无需手动按钮；同一前缀（`A:`、`cam1|`）的新内容替换房间槽位，不同前缀可同时存在，房间按前缀显示最新一条。连接页支持 `qrrace://connect?...` 深链/粘贴链接预填服务器、指纹和 token；扫码/房间结果可一键跳微信、企业微信、浏览器或其他已安装 App，失败自动复制链接。
 - 2026-10-20 每房间动态成员：服务端新增 host-only `/v1/room/guest`，房主进房后现场生成临时成员 token；邀请链接带房间地址，guest 直接登录并进房。实测 guest 以 member 身份加入，host 列表正确；不再依赖预置“成员账号”。
 - 2026-10-20 桌面自部署进 bridge：Rust bridge 在 Windows Job Object 中启动 `qr_race_server`，GUI 关闭/崩溃会杀掉子进程并释放端口；配置/账号/SQLite 复用 `%APPDATA%\qr_race\selfhost\desktop`。桌面字体按 rcrm 加 `Microsoft YaHei/PingFang SC/SimHei/Noto Sans CJK SC` 回退。TOTP 2FA 已从 PRODUCT/PROMPT/UI/API 流程移除（只保留 legacy 校验代码）。
-- 2026-10-20 自实现微信 CNN 分层流水线：`qr_race_wechat` 不再依赖 registry `wxscan`，算法模块与 ONNX 后端在本仓库（Android ORT / 桌面 tract）；rxing 全帧 fast path，miss 后 CNN 384 → 全分辨率 crop → 小码 SR → 每第 4 次 CNN 做 2×2 重叠分块检测。真机 HUD（ORT）：fast 2.9–5.7ms、CNN 6.3–15.9ms、远码分块 48.3ms；均低于 60ms，普通码由 fast path 保持 30fps。`crates/wxscan`、`crates/cvlite`、`crates/wxing` 已集中 vendored 供学习/对照。
+- 2026-10-20 自实现微信 CNN 分层流水线：`qr_race_wechat` 不再依赖 registry `wxscan`，算法模块与 ONNX 后端在本仓库（Android ORT / 桌面 tract）；rxing 全帧 fast path，miss 后 CNN 384 → 全分辨率 crop → 小码 SR → 每第 4 次 CNN 做 2×2 重叠分块检测。真机 HUD（ORT）：fast 2.9–6.8ms、CNN 5.5–15.9ms、远码分块 21.4ms；均低于 60ms，普通码由 fast path 保持 30fps。`crates/wxscan`、`crates/cvlite`、`crates/wxing` 已集中 vendored 供学习/对照。
 - 2026-10-20 Ubuntu 中心服务器：新增 `scripts/deploy-server-linux.sh`、`qr_race_server fingerprint --cert`，systemd/前台两种模式；WSL Linux 实测自签名 HTTPS 启动、指纹与日志/CLI 一致、token-only 认证 200。自签名连接链接构造时必须带 64-hex 指纹。
 - 2026-10-20 Android 真机：OnePlus PLF110（`3B163Q00LSK00000`）安装 debug APK；`adb reverse` + 自签名 HTTPS + 证书指纹 + token 登录成功进入大厅；房间里的接力二维码由 rxing WebP 正常显示。扫码页会弹出系统相机权限；拒绝后提供“重新申请/打开系统设置”，`MainActivity` 把不可再询问的拒绝映射为 permanentlyDenied 并跳转应用设置。相机采集已接入：Camera2 Y 平面经 JNI 进 Rust，640×480 约 2–3ms、960×720 约 7.8ms、1280×720 约 6–16ms；实拍二维码命中，重复结果按文本/字节去重。
 - 2026-10-20 运维能力：SQLite 重启恢复、内置自签名 HTTPS（证书指纹固定）、登录失败 5 次锁定 60 秒、房间/角色/接力持久化均有过真实进程冒烟。
@@ -106,6 +106,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 3. **房间是真实地点。** 京、区、级、房对应现实场地，房间码是鉴权路径的一部分；成员可以在别处，接力让这种分离成立。
 4. **原生深度，薄接缝。** 帧与推理留在原生层，Flutter 只负责界面；模块在 server 与 client 两端都可拔插，接口要窄、可替换。
 5. **生产即标准。** TDD、可复现的基准、明确的许可与安全边界；不拿演示级实现充数。
+
 
 
 

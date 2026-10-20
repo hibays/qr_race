@@ -31,7 +31,7 @@ status document, not a claim that every requirement is complete.
 | 22 | QR generation via rxing WebP | Done | lossless VP8L, rcrm-aligned params |
 | 23 | Test infrastructure | Done | 142 Rust / 29 Flutter at last count; fuzz/smoke suites |
 | 24 | Deployment docs | Done | Ubuntu/Windows/Android, self-host, TLS |
-| 25 | WeChat CNN budget | Done (60 ms) | fast 2.9–5.7 ms; CNN 6.3–48.3 ms; fast path remains 30 fps target |
+| 25 | WeChat CNN budget | Done (60 ms) | p95: fast 6.9 ms, CNN 6.9 ms, tiled far 21.8 ms |
 
 ## Test gates
 
@@ -54,8 +54,9 @@ Device-only checks:
 
 ## Remaining work, in order
 
-1. **Formal p95/drop trace.** Fast path 2.9–5.7 ms, CNN 6.3–48.3 ms on
-   device; collect a repeatable trace and a far-code detection-rate sweep.
+1. **Real-camera drop trace.** Synthetic p95 is measured (fast 6.9 ms, CNN
+   6.9 ms, tiled far 21.8 ms); collect a real-camera dropped-frame trace and a
+   far-code detection-rate sweep.
 2. **Apple capture.** `qr_race_capture_apple` + AVFoundation, then the same
    frame-never-in-Dart contract.
 3. **Optional follow-ups.** st-zrt is only an ORT wrapper; lele is not an
@@ -69,6 +70,8 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
+
+
 
 
 

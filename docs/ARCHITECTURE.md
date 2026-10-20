@@ -134,8 +134,8 @@ Runtime 1.31 (`libonnxruntime.so` packaged in `jniLibs`); desktop uses the pure
 Rust tract backend as fallback. The session is mutex-guarded because ORT `run`
 takes `&mut Session`.
 
-Device HUD (OnePlus PLF110, ORT): fast 2.9–5.7 ms; CNN 384 6.3 ms (empty scene)
-to 15.9 ms (candidate + SR); tiled far-code pass 48.3 ms. A 11-vmin QR on the PC
+Device HUD (OnePlus PLF110, ORT): fast 2.9–6.8 ms; CNN 384 6.3 ms (empty scene)
+to 15.9 ms (candidate + SR); tiled far-code pass 21.4 ms. A 11-vmin QR on the PC
 screen decoded `https://example.test/far-small-live` at 1280×720 in the tiled
 path, under the 60 ms CNN budget. Clear codes stay on the fast path.
 
@@ -166,4 +166,5 @@ The next backend step is to replace `src/backend.rs` with an ORT session using
 the Android `libonnxruntime.so`, and to compare 384/768 schedules against the
 current tract implementation. TFLite/FFI upstream crates are vendored but not
 built. See `docs/MODELS.md` and `docs/VENDORED.md`.
+
 

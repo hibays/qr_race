@@ -1,7 +1,7 @@
 use std::time::Instant;
 
-use qr_race_scan::{GrayFrame, RxingDecoder, ScanEngine};
-use qr_race_wechat::WeChatScanner;
+use qr_race_scan::GrayFrame;
+use qr_race_wechat::TieredScanner;
 
 fn qr_frame(text: &str, width: u32, height: u32, module: u32) -> GrayFrame {
     let code = qrcode::QrCode::new(text.as_bytes()).expect("qr");
@@ -34,49 +34,60 @@ fn pct(values: &mut [f64], p: f64) -> f64 {
     values[index]
 }
 
-fn main() {
-    let iterations = 10;
-
-    let load = Instant::now();
-    let scanner = WeChatScanner::new().expect("tract loads models");
+fn report(label: &str, mut times: Vec<f64>, hits: usize) {
     println!(
-        "wechat model load: {:.1} ms (detector+sr: {})",
-        load.elapsed().as_secs_f64() * 1000.0,
-        scanner.has_models()
+        "{label}: p50 {:.1} ms, p95 {:.1} ms, hits {hits}",
+        pct(&mut times, 0.5),
+        pct(&mut times, 0.95)
+    );
+}
+
+fn main() {
+    let load = Instant::now();
+    let scanner = TieredScanner::new().expect("model load");
+    println!(
+        "model load: {:.1} ms",
+        load.elapsed().as_secs_f64() * 1000.0
     );
 
-    for (width, height, module) in [(640u32, 480u32, 3u32), (960, 720, 4), (1280, 720, 5)] {
-        let frame = qr_frame("https://example.test/wechat-bench", width, height, module);
-        let _ = scanner.scan(&frame);
-        let mut wechat = Vec::new();
-        for _ in 0..iterations {
-            let started = Instant::now();
-            let outcome = scanner.scan(&frame);
-            let ms = started.elapsed().as_secs_f64() * 1000.0;
-            assert!(
-                !outcome.hits.is_empty(),
-                "wechat missed at {width}x{height}: {outcome:?}"
-            );
-            wechat.push(ms);
-        }
+    // Clear symbol: the fast path should handle it and never need CNN.
+    let frame = qr_frame("https://example.test/wechat-bench", 1280, 720, 5);
+    let _ = scanner.scan(&frame);
+    let mut fast = Vec::new();
+    for _ in 0..20 {
+        let started = Instant::now();
+        let outcome = scanner.scan(&frame);
+        fast.push(started.elapsed().as_secs_f64() * 1000.0);
+        assert_eq!(outcome.tier, "fast");
+    }
+    report("fast 1280x720", fast, 1);
 
-        let engine = ScanEngine::new(Box::new(RxingDecoder::new()));
-        let _ = engine.scan(&frame);
-        let mut rxing = Vec::new();
-        for _ in 0..iterations {
-            let started = Instant::now();
-            let outcome = engine.scan(&frame).expect("rxing scan");
-            let ms = started.elapsed().as_secs_f64() * 1000.0;
-            assert!(!outcome.hits.is_empty(), "rxing missed at {width}x{height}");
-            rxing.push(ms);
-        }
+    // Force the CNN stage on the same frame; this measures detector + crop +
+    // decode without relying on the fast path.
+    let _ = scanner.scan_cnn_at(&frame, 384);
+    let mut cnn = Vec::new();
+    for _ in 0..10 {
+        let started = Instant::now();
+        let outcome = scanner.scan_cnn_at(&frame, 384);
+        cnn.push(started.elapsed().as_secs_f64() * 1000.0);
+        assert!(!outcome.hits.is_empty());
+    }
+    report("cnn 384 1280x720", cnn, 1);
 
+    // Far-code schedule: four overlapping tiles at the fixed 384 input.
+    let far = qr_frame("https://example.test/far-bench", 1280, 720, 2);
+    let _ = scanner.scan_cnn_at(&far, 768);
+    let mut tiled = Vec::new();
+    for _ in 0..5 {
+        let started = Instant::now();
+        let outcome = scanner.scan_cnn_at(&far, 768);
+        tiled.push(started.elapsed().as_secs_f64() * 1000.0);
         println!(
-            "{width}x{height} wechat: p50 {:.1} ms, p95 {:.1} ms | rxing: p50 {:.1} ms, p95 {:.1} ms",
-            pct(&mut wechat, 0.5),
-            pct(&mut wechat, 0.95),
-            pct(&mut rxing, 0.5),
-            pct(&mut rxing, 0.95)
+            "  tiled detail: {:.1} ms, tier {}, hits {}",
+            tiled.last().copied().unwrap_or(0.0),
+            outcome.tier,
+            outcome.hits.len()
         );
     }
+    report("tiled far 1280x720", tiled, 1);
 }

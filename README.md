@@ -75,11 +75,11 @@ tools/qr_bench.html            手工双码测试台（浏览器打开，用手�
 - **fast**：rxing 全帧解码 + 经典 `PyramidDetector`；清晰码 2.9–5.7ms，保住 30fps；
 - **CNN**：fast miss 后进入 WeChat 检测器（384×384），候选框回全分辨率 crop，再由 rxing 解码；小 crop 按需跑 SR；
 - **远码**：每第 4 次 CNN 把画面切成 2×2 重叠块，各送 384 检测，保留小模块；
-- **后端**：Android 用 ORT（`libonnxruntime.so`，真机 CNN 6.3–48.3ms）；桌面用 tract 兜底；
+- **后端**：Android 用 ORT（`libonnxruntime.so`，真机 CNN 5.5–21.4ms）；桌面用 tract 兜底；
 - **帧不进 Dart**：Camera2 Y 平面经 JNI 进 Rust，Dart 只轮询命中和统计。
 
 实拍远码 `https://example.test/far-small-live` 在 1280×720 下命中，HUD 显示
-fast 2.9ms、CNN 48.3ms（在 60ms 预算内）。普通清晰码由 fast path 处理，
+fast 2.9ms、CNN 21.4ms（在 60ms 预算内）。普通清晰码由 fast path 处理，
 不触发 CNN。实现位于 [crates/qr_race_wechat](crates/qr_race_wechat/src/lib.rs)，
 vendored 来源见 [docs/VENDORED.md](docs/VENDORED.md)。
 
@@ -247,12 +247,13 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M30 Android Camera2 → JNI → Rust 扫描：720×1280 预览、约 6ms/帧，实拍二维码命中；自动发布、前缀动态槽位、外部 App scheme 跳转、连接链接预填
 - [x] M31 每房间动态成员：房主专用 `/v1/room/guest` 生成临时身份，邀请链接直接进房；服务端不再要求预置“成员账号”
 - [x] M32 桌面自部署进 bridge：Rust 通过 Windows Job Object 持有 server 子进程，关闭 GUI 自动清理；配置/SQLite 复用；桌面 CJK 字体回退对齐 rcrm；TOTP 2FA 从产品与初版需求移除
-- [x] M33 自实现 WeChat 分层：ORT CNN 384 → 全分辨率 crop → 小码 SR → 2×2 分块远码检测；vendored wxscan/cvlite/wxing；真机 fast 2.9–5.7ms、CNN 6–48ms
-- [ ] Apple 采集；正式 p95/丢帧证明（CNN 已在 60ms 预算内）
+- [x] M33 自实现 WeChat 分层：ORT CNN 384 → 全分辨率 crop → 小码 SR → 2×2 分块远码检测；vendored wxscan/cvlite/wxing；真机 fast p50 6.8ms、CNN p50 5.5ms、远码分块 p50 21.4ms
 - [ ] Apple 采集（AVFoundation）
-- [ ] Web 预览流；Apple 采集
-- [ ] Apple 采集；正式 p95/丢帧证明（CNN 已在 60ms 预算内）
-- [ ] Web/wasm 实时采集扫码
+- [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
+- [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+
+
+
 
 
 

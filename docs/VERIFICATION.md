@@ -70,14 +70,17 @@ finished product.
   the registry `wxscan` crate. ONNX weights load from `include_bytes!`; Android
   uses ORT, desktop tract. Tests cover the full pipeline, the tiered fast path
   and a small synthetic symbol through the CNN path.
-- Device (OnePlus PLF110) HUD with ORT: clear-code fast path 2.9–5.7 ms; CNN
-  384 6.3–15.9 ms; tiled far-code pass 48.3 ms (within the 60 ms budget).
+- Device (OnePlus PLF110) HUD with ORT: clear-code fast path 2.9–6.8 ms; CNN
+  384 5.5–15.9 ms; tiled far-code pass 21.4 ms (within the 60 ms budget).
   A live 11-vmin QR on the PC screen decoded
   `https://example.test/far-small-live`; the HUD showed fast 2.9 ms / CNN
-  48.3 ms. Clear codes never trigger CNN.
+  21.4 ms. Clear codes never trigger CNN.
+- Formal device benchmark (20 fast / 10 CNN / 5 tiled iterations): fast p50
+  6.8 ms, p95 6.9 ms; CNN 384 p50 5.5 ms, p95 6.9 ms; tiled far p50 21.4 ms,
+  p95 21.8 ms. This is a synthetic-frame trace, not a real-camera drop trace.
 - The live far/small case is now reproduced with ORT and the 2×2 tiled pass;
-  this is a single sample, not a measured detection-rate curve. Formal p95 and
-  dropped-frame measurements remain in `PROMPT_CLOSURE.md`.
+  this is a single sample, not a measured detection-rate curve; a real-camera
+  dropped-frame trace remains in `PROMPT_CLOSURE.md`.
 - Vendored sources (crates.io) are under `crates/wxscan`, `crates/cvlite`,
   `crates/wxing`, `crates/wxscan-tflite`, `crates/wxscan-ffi`; only the first
   three are built as path dependencies. See `docs/VENDORED.md`.
@@ -189,9 +192,9 @@ finished product.
 
 ## Known gaps
 
-1. **CNN speed is within the relaxed budget.** Android ORT: fast 2.9–5.7 ms,
-   CNN 6.3–15.9 ms, tiled far 48.3 ms. Formal p95 and frame-drop traces are
-   still needed; the fast path remains the 30 fps guarantee.
+1. **CNN speed is within the relaxed budget.** Android ORT p95: fast 6.9 ms,
+   CNN 6.9 ms, tiled far 21.8 ms on synthetic frames. A real-camera dropped-frame
+   trace remains; the fast path is the 30 fps guarantee.
 2. **No Python modules.** Removed from the product; only the unused internal
    extension catalog and Rust extension seams remain.
 3. **Apple capture does not exist.** iOS/macOS cannot be built or verified on
@@ -225,6 +228,9 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
+
+
 
 
 

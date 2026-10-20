@@ -158,17 +158,21 @@ impl TieredScanner {
             if width < 8 || height < 8 {
                 continue;
             }
+            // Try the full-resolution crop first. SR is only the fallback for
+            // a crop that is genuinely too small; running it unconditionally
+            // made the tiled path roughly three times slower.
+            let direct = self.decode_crop(&crop, width, height);
+            if !direct.is_empty() {
+                hits.extend(direct);
+                continue;
+            }
             let area = (width * height) as f64;
-            let (decoded, sr) = if area < 120.0 * 120.0 {
-                match self.decode_with_sr(&crop, width, height) {
-                    Some(hits) => (hits, true),
-                    None => (self.decode_crop(&crop, width, height), false),
+            if area < 120.0 * 120.0 {
+                if let Some(sr_hits) = self.decode_with_sr(&crop, width, height) {
+                    used_sr = true;
+                    hits.extend(sr_hits);
                 }
-            } else {
-                (self.decode_crop(&crop, width, height), false)
-            };
-            used_sr |= sr;
-            hits.extend(decoded);
+            }
         }
         TieredOutcome {
             hits: dedup(hits),
