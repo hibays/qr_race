@@ -21,6 +21,8 @@ struct Hit {
     text: String,
     raw_b64: String,
     at_ms: u64,
+    /// Sequence of the last frame that contained this hit.
+    last_seq: u64,
     /// Four corners in source-frame pixels, [tl, tr, br, bl].
     points: Vec<[f32; 2]>,
 }
@@ -143,14 +145,28 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                 };
                 match outcome {
                     Ok(outcome) => {
-                        let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
-                        let mut hits: Vec<(String, Vec<u8>, Vec<[f32; 2]>)> = outcome
-                            .hits
+                        let mut base_hits = outcome.hits;
+                        // One color decode can miss a second code at the frame
+                        // edge. Retry the luma fast path and merge by raw bytes
+                        // before falling through to CNN.
+                        if fast_enabled && base_hits.len() < 2 {
+                            if let Ok(extra) = engine.scan(&gray) {
+                                for hit in extra.hits {
+                                    if !base_hits.iter().any(|existing| {
+                                        existing.raw == hit.raw || existing.text == hit.text
+                                    }) {
+                                        base_hits.push(hit);
+                                    }
+                                }
+                            }
+                        }
+                        let mut hits: Vec<(String, Vec<u8>, Vec<[f32; 2]>)> = base_hits
                             .into_iter()
                             .map(|hit| (hit.text, hit.raw, hit.points))
                             .collect();
                         // Tiered fallback: mode 0 runs it every other miss;
                         // mode 2 (WeChat) runs it on every frame.
+                        let mut ran_cnn = false;
                         if cnn_enabled && hits.is_empty() && (mode == 2 || frame_seq % 2 == 0) {
                             if let Some(tiered) = &tiered {
                                 let cnn_started = Instant::now();
@@ -158,6 +174,7 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                                 // spends the 768 detector for far/small codes.
                                 let target = if frame_seq % 8 == 0 { 768 } else { 384 };
                                 let cnn = tiered.scan_cnn_at(&gray, target);
+                                ran_cnn = true;
                                 let cnn_ms = cnn_started.elapsed().as_secs_f64() * 1000.0;
                                 let detections = cnn.detections.clone();
                                 hits.extend(
@@ -173,6 +190,7 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                                 }
                             }
                         }
+                        let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
                         if let Ok(mut state) = worker_shared.lock() {
                             state.frames += 1;
                             state.scans += 1;
@@ -186,6 +204,9 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                             state.width = frame.width;
                             state.height = frame.height;
                             state.rotation = frame.rotation;
+                            if !ran_cnn {
+                                state.detections.clear();
+                            }
                             let at_ms = now_ms();
                             state.latest_seq += 1;
                             state.latest = hits
@@ -194,16 +215,21 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                                     text: text.clone(),
                                     raw_b64: BASE64.encode(raw),
                                     at_ms,
+                                    last_seq: state.latest_seq,
                                     points: points.clone(),
                                 })
                                 .collect();
+                            let hit_seq = state.latest_seq;
                             for (text, raw, points) in hits {
                                 let raw_b64 = BASE64.encode(&raw);
-                                if state
+                                if let Some(existing) = state
                                     .hits
-                                    .iter()
-                                    .any(|hit| hit.raw_b64 == raw_b64 || hit.text == text)
+                                    .iter_mut()
+                                    .find(|hit| hit.raw_b64 == raw_b64 || hit.text == text)
                                 {
+                                    existing.at_ms = at_ms;
+                                    existing.last_seq = hit_seq;
+                                    existing.points = points;
                                     continue;
                                 }
                                 state.hits.insert(
@@ -211,7 +237,8 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                                     Hit {
                                         text,
                                         raw_b64,
-                                        at_ms: now_ms(),
+                                        at_ms,
+                                        last_seq: hit_seq,
                                         points,
                                     },
                                 );

@@ -38,41 +38,14 @@ Write-Host "device: $deviceLine" -ForegroundColor Green
 if ($LASTEXITCODE -ne 0) { throw "adb reverse failed" }
 Write-Host "adb reverse tcp:$Port -> tcp:$Port (phone can use https://127.0.0.1:$Port)" -ForegroundColor Green
 
-$apk = Join-Path $gui "build\app\outputs\flutter-apk\app-debug.apk"
+$apkDir = Join-Path $root "dist\android"
 if (-not $SkipBuild) {
-    if (-not $SkipRust) {
-        & pwsh -NoProfile -File (Join-Path $root "scripts\build-android-ffi.ps1")
-        if ($LASTEXITCODE -ne 0) { throw "Android Rust library build failed" }
-    }
-    $props = Join-Path $gui "android\gradle\wrapper\gradle-wrapper.properties"
-    $backup = "$props.qrrace-backup"
-    Copy-Item $props $backup -Force
-    try {
-        $localZip = Join-Path $root ".refs\gradle-9.3.1-bin.zip"
-        if (Test-Path $localZip) {
-            $text = Get-Content $props -Raw
-            $text = $text -replace 'distributionUrl=.*', "distributionUrl=file\:///$($localZip.Replace('\','/'))"
-            Set-Content $props -Value $text -Encoding ascii
-            Write-Host "using local Gradle distribution to avoid TLS downloads" -ForegroundColor DarkGray
-        }
-        Push-Location $gui
-        try {
-            $arguments = @("build", "apk", "--debug")
-            if ($Demo) { $arguments += "--dart-define=DEMO=true" }
-            if ($ScanWidth -gt 0) { $arguments += "--dart-define=SCAN_WIDTH=$ScanWidth" }
-            if ($ScanHeight -gt 0) { $arguments += "--dart-define=SCAN_HEIGHT=$ScanHeight" }
-            & flutter @arguments
-            if ($LASTEXITCODE -ne 0) { throw "flutter build apk failed" }
-        } finally {
-            Pop-Location
-        }
-    } finally {
-        Copy-Item $backup $props -Force
-        Remove-Item $backup -Force
-    }
+    & pwsh -NoProfile -File (Join-Path $root "scripts\build_android.ps1") -DebugBuild -Abis "arm64-v8a"
+    if ($LASTEXITCODE -ne 0) { throw "Android build failed" }
 }
-
-if (-not (Test-Path $apk)) { throw "APK not found: $apk" }
+$apk = Get-ChildItem $apkDir -Filter "qr_race-*-arm64-v8a-debug.apk" -ErrorAction SilentlyContinue |
+    Sort-Object LastWriteTime -Descending | Select-Object -First 1 -ExpandProperty FullName
+if (-not $apk -or -not (Test-Path $apk)) { throw "debug arm64 APK not found; run scripts/build_android.ps1 -DebugBuild -Abis arm64-v8a" }
 & $adb install -r $apk
 if ($LASTEXITCODE -ne 0) { throw "adb install failed" }
 & $adb shell am force-stop app.qrrace.qr_race_gui
@@ -86,3 +59,5 @@ Write-Host "  fingerprint / token: see the desktop self-host screen or deploy-se
 Write-Host ""
 Write-Host "Android can self-host: 连接页 -> 自部署服务器（本机），默认端口 18443。"
 Write-Host "Or connect to a desktop/server URL and scan/publish automatically."
+
+

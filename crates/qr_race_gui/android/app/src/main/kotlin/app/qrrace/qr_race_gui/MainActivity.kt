@@ -66,6 +66,9 @@ class MainActivity : FlutterActivity() {
                     "createPreviewTexture" -> {
                         result.success(ensurePreviewTexture().id())
                     }
+                    "previewTextureId" -> {
+                        result.success(previewTexture?.id() ?: -1)
+                    }
                     "startCapture" -> {
                         val width = call.argument<Int>("width") ?: 1280
                         val height = call.argument<Int>("height") ?: 720
@@ -73,6 +76,8 @@ class MainActivity : FlutterActivity() {
                         captureHeight = height
                         captureActive = true
                         capture?.stop()
+                        previewTexture?.release()
+                        previewTexture = null
                         val texture = ensurePreviewTexture()
                         texture.surfaceTexture().setDefaultBufferSize(width, height)
                         capture = CameraCapture(
@@ -139,6 +144,10 @@ class MainActivity : FlutterActivity() {
     override fun onResume() {
         super.onResume()
         if (captureActive && capture == null && isGranted()) {
+            // The old SurfaceTexture can remain black after the Flutter engine
+            // detaches on pause. Recreate it and let Dart pick up the new id.
+            previewTexture?.release()
+            previewTexture = null
             val texture = ensurePreviewTexture()
             texture.surfaceTexture().setDefaultBufferSize(captureWidth, captureHeight)
             capture = CameraCapture(
@@ -279,3 +288,5 @@ class MainActivity : FlutterActivity() {
         startActivity(intent)
     }
 }
+
+

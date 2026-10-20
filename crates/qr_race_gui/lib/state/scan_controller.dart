@@ -62,6 +62,12 @@ class ScanController extends ChangeNotifier {
   /// `qr_scanner_start_backend` stops only the Rust worker; the Android
   /// Camera2 session stays open, so switching backends does not race a new
   /// camera open against the old stopCapture.
+  void restartCamera() {
+    snapshot = null;
+    _startBackend();
+    notifyListeners();
+  }
+
   void restart(String name) {
     if (name == backendName) return;
     backendName = name;
@@ -243,3 +249,4 @@ ScannerSnapshot fakeSnapshot({
     source: 'fake camera',
   );
 }
+

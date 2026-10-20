@@ -98,6 +98,7 @@ class ScanHit {
     required this.raw,
     required this.atMs,
     this.points = const [],
+    this.lastSeq = 0,
   });
 
   factory ScanHit.fromJson(Map<String, dynamic> json) => ScanHit(
@@ -105,12 +106,15 @@ class ScanHit {
         raw: _decodeBase64(json['raw_b64']),
         atMs: json['at_ms'] as int? ?? 0,
         points: _decodePoints(json['points']),
+        lastSeq: json['last_seq'] as int? ?? 0,
       );
 
   final String text;
   final Uint8List raw;
   final int atMs;
 
+  /// Frame sequence that last contained this hit.
+  final int lastSeq;
   /// Four source-frame corners, [top-left, top-right, bottom-right, bottom-left].
   final List<(double, double)> points;
 
@@ -160,3 +164,4 @@ List<(double, double)> _decodePoints(Object? value) {
   }
   return List.unmodifiable(points);
 }
+

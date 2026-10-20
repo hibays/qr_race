@@ -152,8 +152,8 @@ impl TieredScanner {
     pub fn scan_cnn_at(&self, frame: &GrayFrame, target: usize) -> TieredOutcome {
         let detect_started = Instant::now();
         let boxes = self.detect_boxes(frame, target);
-        let detections = boxes.clone();
         let detect_ms = detect_started.elapsed().as_secs_f64() * 1000.0;
+        let mut used_detections = Vec::new();
         let decode_started = Instant::now();
         let mut hits = Vec::new();
         let mut used_sr = false;
@@ -173,6 +173,7 @@ impl TieredScanner {
                 for hit in &mut direct {
                     hit.points = quad.iter().map(|(x, y)| [*x, *y]).collect();
                 }
+                used_detections.push(quad);
                 hits.extend(direct);
                 continue;
             }
@@ -183,6 +184,7 @@ impl TieredScanner {
                     for hit in &mut sr_hits {
                         hit.points = quad.iter().map(|(x, y)| [*x, *y]).collect();
                     }
+                    used_detections.push(quad);
                     hits.extend(sr_hits);
                 }
             }
@@ -192,7 +194,7 @@ impl TieredScanner {
             tier: if used_sr { "cnn+sr" } else { "cnn" },
             detect_ms,
             decode_ms: decode_started.elapsed().as_secs_f64() * 1000.0,
-            detections,
+            detections: used_detections,
         }
     }
 

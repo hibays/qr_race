@@ -29,7 +29,7 @@ class ScanScreen extends StatefulWidget {
   State<ScanScreen> createState() => _ScanScreenState();
 }
 
-class _ScanScreenState extends State<ScanScreen> {
+class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
   ScanController? _controller;
   late final CameraPermission _permission;
   CameraPermissionStatus? _denied;
@@ -43,6 +43,7 @@ class _ScanScreenState extends State<ScanScreen> {
   void initState() {
     super.initState();
     _permission = widget.permission ?? createCameraPermission();
+    WidgetsBinding.instance.addObserver(this);
     _requestPermission();
   }
 
@@ -121,8 +122,16 @@ class _ScanScreenState extends State<ScanScreen> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _controller?.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _controller?.restartCamera();
+    }
   }
 
   void _changeBackend(String backend) {
@@ -304,7 +313,7 @@ class _Body extends StatelessWidget {
             child: controller.previewTextureId != null
                 ? ClipRect(
                     child: FittedBox(
-                      fit: BoxFit.cover,
+                      fit: BoxFit.contain,
                       child: RotatedBox(
                         quarterTurns: 0,
                         child: SizedBox(
@@ -320,7 +329,7 @@ class _Body extends StatelessWidget {
                 : snapshot?.preview != null
                     ? Image.memory(
                         snapshot!.preview!,
-                        fit: BoxFit.cover,
+                        fit: BoxFit.contain,
                         gaplessPlayback: true,
                       )
                     : const _CameraPlaceholder(),
@@ -349,12 +358,13 @@ class _Body extends StatelessWidget {
             controller: controller,
             snapshot: snapshot,
             rotation: controller.previewTextureId != null ? 90 : (snapshot?.rotation ?? 0),
+            contain: controller.previewTextureId != null,
           ),
         ),
         Positioned(
           left: 12,
           bottom: 12,
-          child: _StatusChip(snapshot: snapshot),
+          child: _StatusChip(snapshot: snapshot, backend: controller.backendName),
         ),
         Positioned(
           left: 0,
@@ -473,25 +483,28 @@ class _HitOverlay extends StatelessWidget {
     required this.controller,
     required this.snapshot,
     required this.rotation,
+    required this.contain,
   });
 
   final ScanController controller;
   final ScannerSnapshot? snapshot;
   final int rotation;
+  final bool contain;
 
   @override
   Widget build(BuildContext context) {
-    final live = (snapshot?.latestSeq ?? 0) > 0;
-    final hits = live
-        ? (snapshot?.latestHits ?? const <ScanHit>[])
-        : (snapshot?.hits ?? const <ScanHit>[]);
+    final all = snapshot?.hits ?? const <ScanHit>[];
+    final seq = snapshot?.latestSeq ?? 0;
+    final hits = seq == 0
+        ? all
+        : all.where((hit) => seq - hit.lastSeq <= 3).toList(growable: false);
     if (hits.isEmpty) return const SizedBox.shrink();
     final latest = hits.first;
     return LayoutBuilder(
       builder: (context, constraints) {
         final size = Size(constraints.maxWidth, constraints.maxHeight);
         final source = _SourceSize.of(snapshot, rotation);
-        final point = _mapToView(latest.points, snapshot, source, size, rotation);
+        final point = _mapToView(latest.points, snapshot, source, size, rotation, contain);
         final left = point == null
             ? 16.0
             : (point.dx - 130).clamp(8.0, size.width - 268.0);
@@ -510,6 +523,7 @@ class _HitOverlay extends StatelessWidget {
                     source: source,
                     view: size,
                     rotation: rotation,
+                    contain: contain,
                   ),
                 ),
               ),
@@ -523,6 +537,17 @@ class _HitOverlay extends StatelessWidget {
                 autoPublish: controller.autoPublishEnabled,
               ),
             ),
+            for (final hit in hits.skip(1).take(2))
+              if (_mapToView(hit.points, snapshot, source, size, rotation, contain)
+                  case final point?)
+                Positioned(
+                  left: (point.dx - 85).clamp(8.0, size.width - 178.0),
+                  top: (point.dy + 50).clamp(78.0, size.height - 120.0),
+                  child: _MiniHitBubble(
+                    hit: hit,
+                    published: controller.isPublished(hit),
+                  ),
+                ),
           ],
         );
       },
@@ -552,8 +577,9 @@ Offset? _mapToView(
   _SourceSize source,
   Size view,
   int rotation,
+  bool contain,
 ) {
-  final mapped = _mapPoints(points, snapshot, source, view, rotation);
+  final mapped = _mapPoints(points, snapshot, source, view, rotation, contain);
   if (mapped.isEmpty) return null;
   final sum = mapped.fold(Offset.zero, (a, b) => a + b);
   return sum / mapped.length.toDouble();
@@ -565,14 +591,19 @@ List<Offset> _mapPoints(
   _SourceSize source,
   Size view,
   int rotation,
+  bool contain,
 ) {
   if (points.isEmpty || snapshot == null) return const [];
   final degrees = ((rotation % 360) + 360) % 360;
   final w = snapshot.width.toDouble();
   final h = snapshot.height.toDouble();
-  final scale = (view.width / source.width) > (view.height / source.height)
-      ? view.width / source.width
-      : view.height / source.height;
+  final scale = contain
+      ? ((view.width / source.width) < (view.height / source.height)
+          ? view.width / source.width
+          : view.height / source.height)
+      : ((view.width / source.width) > (view.height / source.height)
+          ? view.width / source.width
+          : view.height / source.height);
   final drawn = Size(source.width * scale, source.height * scale);
   final offset = Offset(
     (view.width - drawn.width) / 2,
@@ -600,6 +631,7 @@ class _DetectionBoxPainter extends CustomPainter {
     required this.source,
     required this.view,
     required this.rotation,
+    required this.contain,
   });
 
   final List<ScanHit> hits;
@@ -608,19 +640,21 @@ class _DetectionBoxPainter extends CustomPainter {
   final _SourceSize source;
   final Size view;
   final int rotation;
+  final bool contain;
 
   @override
   void paint(Canvas canvas, Size size) {
     for (final box in detections) {
-      final quad = _mapPoints(box, snapshot, source, size, rotation);
+      final quad = _mapPoints(box, snapshot, source, size, rotation, contain);
       if (quad.length < 4) continue;
       final path = Path()..moveTo(quad[0].dx, quad[0].dy);
       for (final point in quad.skip(1)) {
         path.lineTo(point.dx, point.dy);
       }
       path.close();
-      canvas.drawPath(
-        path,
+      final cyanBounds = path.getBounds().inflate(5);
+      canvas.drawRect(
+        cyanBounds,
         Paint()
           ..style = PaintingStyle.stroke
           ..strokeWidth = 2
@@ -628,11 +662,22 @@ class _DetectionBoxPainter extends CustomPainter {
       );
     }
     for (var i = 0; i < hits.length; i++) {
-      final quad = _mapPoints(hits[i].points, snapshot, source, size, rotation);
-      if (quad.length < 4) continue;
-      final path = Path()..moveTo(quad[0].dx, quad[0].dy);
-      for (final point in quad.skip(1)) {
-        path.lineTo(point.dx, point.dy);
+      final quad = _mapPoints(hits[i].points, snapshot, source, size, rotation, contain);
+      if (quad.isEmpty) continue;
+      final path = Path();
+      if (quad.length >= 4) {
+        path.moveTo(quad[0].dx, quad[0].dy);
+        for (final point in quad.skip(1)) {
+          path.lineTo(point.dx, point.dy);
+        }
+      } else {
+        final xs = quad.map((p) => p.dx);
+        final ys = quad.map((p) => p.dy);
+        final left = xs.reduce((a, b) => a < b ? a : b);
+        final top = ys.reduce((a, b) => a < b ? a : b);
+        final right = xs.reduce((a, b) => a > b ? a : b);
+        final bottom = ys.reduce((a, b) => a > b ? a : b);
+        path.addRect(Rect.fromLTRB(left - 8, top - 8, right + 8, bottom + 8));
       }
       path.close();
       final paint = Paint()
@@ -650,6 +695,47 @@ class _DetectionBoxPainter extends CustomPainter {
       old.snapshot != snapshot;
 }
 
+class _MiniHitBubble extends StatelessWidget {
+  const _MiniHitBubble({required this.hit, required this.published});
+
+  final ScanHit hit;
+  final bool published;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 170,
+      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.72),
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(
+          color: published ? accent : Colors.white.withValues(alpha: 0.28),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(
+            hit.text,
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 11, color: Colors.white),
+          ),
+          const SizedBox(height: 3),
+          Text(
+            published ? '已广播' : '离线 · 未广播',
+            style: TextStyle(
+              fontSize: 9,
+              color: published ? accent : muted,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
 class _HitBubble extends StatelessWidget {
   const _HitBubble({
     required this.hit,
@@ -717,15 +803,21 @@ class _HitBubble extends StatelessWidget {
 }
 
 class _StatusChip extends StatelessWidget {
-  const _StatusChip({required this.snapshot});
+  const _StatusChip({required this.snapshot, required this.backend});
 
   final ScannerSnapshot? snapshot;
+  final String backend;
 
   @override
   Widget build(BuildContext context) {
+    final mode = switch (backend) {
+      'zxing' => 'zxing',
+      'wechat' => 'CNN',
+      _ => '混合',
+    };
     final text = snapshot == null
         ? '启动中…'
-        : '${snapshot!.width}×${snapshot!.height} · 帧 ${snapshot!.frames}'
+        : '$mode · ${snapshot!.width}×${snapshot!.height} · 帧 ${snapshot!.frames}'
             ' · ${snapshot!.scanMs.toStringAsFixed(1)}ms'
             ' · p95 ${snapshot!.p95Ms.toStringAsFixed(1)}ms'
             '${snapshot!.wechatRuns > 0 ? ' · CNN ${snapshot!.wechatMs.toStringAsFixed(1)}ms' : ''}'
@@ -928,3 +1020,13 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
+
+
+
+
+
+
+
+
+

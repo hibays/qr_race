@@ -51,7 +51,7 @@ for the detector heads, or a comparison against an OpenCV 4 environment.
 - `crates/qr_race_wechat/src/pipeline` equivalent modules: detector, scale,
   decodermgr, wechat_qrcode.
 - `src/backend/st_zrt.rs` (Android) and `src/backend/tract.rs` (desktop).
-- Android packages `libonnxruntime.so` in `jniLibs/arm64-v8a/`; desktop uses
+- Android packages `libonnxruntime.so` per ABI under `jniLibs/<abi>/`; desktop uses
   tract so no DLL shipping is required.
 
 ## License
@@ -61,9 +61,10 @@ Weights: © 2021 THL A29 Limited (Tencent), Apache-2.0. The license text is in
 those weights.
 
 ONNX Runtime 1.29 (MIT) is not vendored; the Android
-build packages `jniLibs/arm64-v8a/libonnxruntime.so` from
+build packages `jniLibs/<abi>/libonnxruntime.so` from
 `com.microsoft.onnxruntime:onnxruntime-android:1.29.0`, and `st-zrt` links it
 directly. Desktop uses tract instead, so no ORT DLL is shipped there.
+
 
 
 

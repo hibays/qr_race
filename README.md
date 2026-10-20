@@ -74,10 +74,10 @@ tools/qr_bench.html            手工双码测试台（浏览器打开，用手�
 - **fast**：zxing-cpp 彩色 RGB → miss 再用 `try_harder` 彩色重试 → 仍 miss 才回退 luma/CNN；桌面合成套件 9–13ms，Android 真机 1920×1440 fast p50 8.3ms/p95 21.1ms；
 - **2K/彩色**：Android 请求 2560×1440（按设备能力回退），Camera2 传 Y/U/V，Rust 用 `yuv` 的 SIMD 内核转 RGB；预览直接用 Flutter Texture，不经过 JPEG/旋转拷贝；
 - **可切换后端**：扫码页可在混合 / 仅 zxing-cpp / 微信 CNN 间切换，FFI 走 `qr_scanner_start_backend`；Android 与桌面都导出该入口；
-- **全屏取景**：相机铺满屏幕，结果面板悬浮在底部；识别气泡按四角坐标贴在二维码附近并显示“已广播到房间/广播中/离线”。
+- **完整取景**：相机按传感器比例 `BoxFit.contain` 显示全部画面（黑边而不是裁掉边缘），结果面板悬浮在底部；多码时每个码都有命中框和内容气泡，并显示“已广播到房间/广播中/离线”。
 - **CNN**：fast miss 后进入 WeChat 检测器（384×384），候选框回全分辨率 crop，再由 zxing-cpp 解码；小 crop 按需跑 SR；
 - **远码**：每第 4 次 CNN 把画面切成 2×2 重叠块，各送 384 检测，保留小模块；
-- **后端**：Android 用 ORT（`libonnxruntime.so`，真机 CNN 5.5–21.4ms）；桌面用 tract 兜底；
+- **后端**：Android 用 st-zrt + ONNX Runtime 1.29（真机 CNN 9.5ms）；桌面用 tract 兜底；
 - **帧不进 Dart**：Camera2 Y 平面经 JNI 进 Rust，Dart 只轮询命中和统计。
 
 实拍远码 `https://example.test/far-small-live` 在 1280×720 下命中，HUD 显示
@@ -89,12 +89,14 @@ vendored 来源见 [docs/VENDORED.md](docs/VENDORED.md)。
 
 | 目标 | 状态 | 命令 |
 |---|---|---|
-| Windows 桌面 | 可用（含原生相机 + FFI 扫码） | `flutter build windows --release` |
-| Web | 可用；扫码/二维码走 vendored zxing-wasm，需 HTTPS 或 localhost | `flutter build web --release` |
-| Android | **debug APK 可构建**；内置服务端（TLS/HTTP）、Camera2→Rust 扫码、自动发布、二维码显示、权限引导 | `pwsh -File scripts/android-deploy.ps1` |
-| iOS / macOS | 未验证（需要 macOS 与 Xcode） | — |
+| Windows 桌面 | 可用（含原生相机 + FFI 扫码） | `pwsh scripts/build_windows.ps1` → `dist/windows/*.zip` |
+| Web | 可用；扫码/二维码走 vendored zxing-wasm，需 HTTPS 或 localhost | `pwsh scripts/build_web.ps1` → `dist/web/*.zip` |
+| Android | 内置服务端、Camera2→Rust 扫码；**arm64-v8a / armeabi-v7a / x86_64 分架构 APK** | `pwsh scripts/build_android.ps1` → `dist/android/*-<abi>-release.apk` |
+| Linux | 脚本提供；需在 Linux 主机执行 | `bash scripts/build_linux.sh` |
+| macOS | 脚本提供；需 macOS + Xcode | `bash scripts/build_macos.sh` |
+| iOS | 未实现采集；需要 macOS + Xcode | — |
 
-Android 构建需要接受 SDK licenses（`flutter doctor --android-licenses`）。`scripts/android-deploy.ps1` 会先调用 `build-android-ffi.ps1` 交叉编译 arm64 `libqr_race_ffi.so`，再构建 APK；Gradle wrapper 若因 TLS 拦截报 PKIX，脚本会自动临时改用 `.refs/gradle-9.3.1-bin.zip`。Android App 可以在本机启动服务端（默认 18443）、用 Camera2 采集并由 Rust 直接扫码、自动发布；真机步骤见 [DEPLOY.md](DEPLOY.md)。
+Android 构建需要接受 SDK licenses（`flutter doctor --android-licenses`）。`build_android.ps1` 先拉取 ONNX Runtime 1.29 AAR 与 zxing-cpp 源码到 `.refs/`，再逐 ABI 编译 FFI/ZXing/ORT，最后 `flutter build apk --split-per-abi`。原生 `.so`、APK、ZIP 都不进 Git；`dist/` 与 `jniLibs/**/*.so` 已忽略。真机步骤见 [DEPLOY.md](DEPLOY.md)。
 
 ## 持久化
 
@@ -167,10 +169,8 @@ pwsh -File scripts/browser-scan-probe.ps1
 # 原生扫描会话（cdylib，Dart FFI 用）
 cargo build -p qr_race_ffi --release
 
-# 把扫描器打进 Flutter 的 Windows 构建
-cd crates\qr_race_gui
-flutter build windows --release
-pwsh scripts\copy_ffi.ps1 -Config Release
+# 原生扫描会话 + Flutter Windows 打包（FFI DLL、server、assets 一起进 ZIP）
+pwsh scripts/build_windows.ps1
 
 # 无界面验证 FFI（需要已构建的 DLL 与相机）
 dart run tool/ffi_probe.dart
@@ -245,4 +245,6 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [ ] Apple 采集（AVFoundation）
 - [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
 - [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+
+
 

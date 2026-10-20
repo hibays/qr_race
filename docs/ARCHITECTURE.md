@@ -37,7 +37,7 @@ preview sequence). Android preview is a zero-copy Flutter Texture; desktop keeps
 4. The Rust worker converts YUV to RGB with the SIMD `yuv` crate and first decodes RGB with zxing-cpp. On a miss it runs
    `ScanEngine` (pyramid detector + zxing-cpp on luma), then the CNN tiers.
    Frames are **not rotated** here; QR detection is rotation-independent.
-   Sensor rotation is metadata only; the Android SurfaceTexture is a 1440×1920 portrait buffer and is already upright, so the texture child uses the swapped dimensions and `BoxFit.cover`.
+   Sensor rotation is metadata only; the Android SurfaceTexture is a 1440×1920 portrait buffer and is already upright, so the texture child uses the swapped dimensions and `BoxFit.contain`, so the full sensor field of view is visible with letterboxing instead of a center crop.
 5. Android preview is rendered straight from the Camera2 SurfaceTexture registered
    with Flutter, so no JPEG, no rotation copy, and no full-frame preview upload.
    Desktop still uses the 1280 px JPEG preview.
@@ -171,6 +171,7 @@ tract as the fallback. The fast zxing-cpp path remains the 30 fps target; the
 real 1920×1440 device run measured fast p50 8.3 ms / p95 21.1 ms.
 
 TFLite/FFI upstream crates are not built. See `docs/MODELS.md` and `docs/VENDORED.md`.
+
 
 
 

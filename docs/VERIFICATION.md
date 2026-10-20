@@ -15,7 +15,10 @@ finished product.
 | Flutter tests | `flutter test` | **29 passed** |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `flutter build web --release` | built; scan/QR use vendored zxing-wasm |
-| Android build | `flutter build apk --debug` | built (arm64 Rust lib + 2K Camera2 + backend switch + embedded server) |
+| Android packages | `pwsh scripts/build_android.ps1` | 3 split release APKs: arm64-v8a 59.6 MB, armeabi-v7a 45.3 MB, x86_64 67.6 MB; each contains FFI/ZXing/ORT/libc++ for its ABI |
+| Windows package | `pwsh scripts/build_windows.ps1` | portable ZIP 25.2 MB with `qr_race_gui.exe`, `qr_race_ffi.dll`, `qr_race_server.exe` |
+| Web package | `pwsh scripts/build_web.ps1` | ZIP 14.4 MB |
+| Binary policy | `git ls-files` | no native `.so`/`.dll`/APK/ZIP committed; `dist/` and `jniLibs/**/*.so` ignored |
 | Android device | OnePlus PLF110, demo room, 2K | 1920×1440 selected; fast p50 **8.3 ms**, p95 **21.1 ms**, CNN 6.1 ms; 1289 frames, dropped 5 |
 | Android overlay | same device | hit quadrilateral + CNN candidate box follow the newest frame; bubble shows content and `离线 · 未广播` |
 | Android resume | WeChat → back to scanner | Camera2 reopened automatically; frames resumed at 527 after resume |
@@ -250,4 +253,5 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 

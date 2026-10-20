@@ -79,7 +79,7 @@ qr_race_server fingerprint --cert /var/lib/qr_race/cert.pem
    pwsh -File scripts\android-deploy.ps1
    ```
 
-   脚本会先编译 arm64 Rust 库、再构建/安装 APK（`-SkipRust` 可跳过前者）。
+   脚本会调用 `build_android.ps1 -DebugBuild -Abis arm64-v8a`，构建/安装 arm64 debug APK；生产包用 `build_android.ps1` 生成三个 ABI 的 release APK。
 
 2. 打开 App → 连接页 → **“自部署服务器（本机）”**。
 
@@ -258,7 +258,7 @@ pwsh -File scripts\deploy-server.ps1 -Port 8443
 | 扫码页黑屏/一帧一闪 | 确认相机权限已允许；预览会保留上一帧（不再闪黑）。仍异常时重启 App 并检查其他相机应用是否占用。 |
 | 扫码页一直“正在申请相机权限…” | 系统权限弹窗被遮挡，回到桌面再切回 App；或在设置里检查权限。 |
 | 拒绝相机权限后没有弹窗 | 页面会给出“重新申请/打开系统设置”，到设置 → 应用 → qr_race → 权限 手动打开。 |
-| Android 房间二维码是空白/图标 | APK 必须包含 arm64 的 `libqr_race_ffi.so`；用 `scripts\android-deploy.ps1` 重新构建安装，不要装旧 APK。 |
+| Android 房间二维码是空白/图标 | APK 必须包含对应 ABI 的 `libqr_race_ffi.so`；用 `scripts\build_android.ps1` 重新构建安装，不要装旧 APK。 |
 | Gradle 构建报 PKIX / 证书错误 | 本仓库的脚本会自动临时使用 `.refs\gradle-9.3.1-bin.zip`；手动构建时也可临时把 `android/gradle/wrapper/gradle-wrapper.properties` 的 `distributionUrl` 指向该本地 zip，构建后还原。 |
 
 ## 9. 安全提醒
@@ -269,5 +269,6 @@ pwsh -File scripts\deploy-server.ps1 -Port 8443
 - `config.json`、`cert.pem`、`key.pem`、`qr_race.db` 都含敏感信息，不要提交。
 - 管理员账号可以上传模组，只发给可信的人。
 - 当前 App 允许明文 HTTP 仅用于本地调试；正式使用请走 HTTPS。
+
 
 

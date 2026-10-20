@@ -83,6 +83,15 @@ class FfiScannerBackend implements ScannerBackend {
     }
   }
 
+  Future<void> _refreshPreviewTexture() async {
+    try {
+      final id = await _channel.invokeMethod<int>('previewTextureId');
+      if (id != null && id >= 0) {
+        _previewTextureId = id == 0 ? null : id;
+      }
+    } catch (_) {}
+  }
+
   Future<void> _startAndroidCapture(int width, int height, int fps) async {
     try {
       await _channel.invokeMethod<int>('createPreviewTexture');
@@ -116,6 +125,9 @@ class FfiScannerBackend implements ScannerBackend {
 
   @override
   ScannerSnapshot poll() {
+    if (Platform.isAndroid) {
+      _refreshPreviewTexture();
+    }
     final length = _state(_buffer, _capacity);
     if (length <= 0) {
       throw StateError('qr_scanner_state returned $length');
@@ -145,3 +157,5 @@ class FfiScannerBackend implements ScannerBackend {
 }
 
 ScannerBackend createScannerBackend() => FfiScannerBackend();
+
+
