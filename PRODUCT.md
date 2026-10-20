@@ -58,7 +58,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 - 自实现 WeChat 式三段流水线：CNN 检测、按需超分、解码。`tools/qr_bench.html` 要分别给出"只检测+解码"与"检测+超分+解码"的耗时分布。
 - 超分按需触发：例如检测框面积低于阈值才启用，禁止每帧无条件跑。
 - 快路径解码用 rxing 最新版（记录时 0.9.3，Apache-2.0，edition 2024，带 `multi_barcode_readers`）；不用 rqrr。微信 CNN port 内部沿用 vendored `wxing` 解码器，但它是分层流水线的一部分，不是全帧主后端；不使用 cvlite/TFLite 推理后端。
-- 推理后端已由实测决定：Android 用 `ort` + ONNX Runtime 1.31（真机 CNN 6–48ms），桌面用 tract 兜底。`st-zrt` 只是 ORT 封装（同内核），`lele` 无 ONNX 前端，Candle 未显示出接近 ORT 的成熟度/速度；不再为选型拖延。
+- 推理后端已由实测决定：Android 用 `ort` + ONNX Runtime 1.31（真机 CNN 6–48ms），桌面用 tract 兜底。`st-zrt` 只是 ORT 封装（同内核，未单独重复测速）；`lele` 无 ONNX 前端，不适用；Candle 未实测——ORT 已在 60ms 预算内，先不引入第二套运行时。
 - 参考权重是 WeChat 开源的 Caffe 格式（`detect` 检测、`sr` 超分，见 `WeChatCV/opencv_3rdparty`）。Apache-2.0，含 zxing 的 Apache-2.0 归属，商用可用，需保留许可证与归属声明；走 ONNX 后端时要处理 Caffe → ONNX 的转换，或自带解析。
 
 **工程结构**
@@ -106,6 +106,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 3. **房间是真实地点。** 京、区、级、房对应现实场地，房间码是鉴权路径的一部分；成员可以在别处，接力让这种分离成立。
 4. **原生深度，薄接缝。** 帧与推理留在原生层，Flutter 只负责界面；模块在 server 与 client 两端都可拔插，接口要窄、可替换。
 5. **生产即标准。** TDD、可复现的基准、明确的许可与安全边界；不拿演示级实现充数。
+
 
 
 

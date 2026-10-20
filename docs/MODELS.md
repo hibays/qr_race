@@ -37,9 +37,9 @@ for the detector heads, or a comparison against an OpenCV 4 environment.
 - **Backend chosen:** Android uses ORT + ONNX Runtime 1.31; desktop uses tract
   as fallback. Device HUD: fast path 2.9–5.7 ms; CNN 384 6.3–15.9 ms; 2×2 tiled
   far-code pass 48.3 ms, inside the 60 ms relaxed CNN budget. `st-zrt` wraps ORT
-  (same kernels), `lele` has no ONNX frontend, Candle was not competitive enough
-  to justify replacing ORT. `OrtNet` and `TractNet` implement the same `Net`
-  trait.
+  (same kernels, not separately benchmarked); `lele` has no ONNX frontend;
+  Candle was not benchmarked because ORT already fit the budget. `OrtNet` and
+  `TractNet` implement the same `Net` trait.
 - **Far/small:** a live 11-vmin PC-screen QR decoded
   `https://example.test/far-small-live` at 1280×720 through the tiled path.
   This is one sample; a detection-rate/p95 sweep remains future work.
@@ -65,3 +65,4 @@ ONNX Runtime 1.31 (MIT) is not linked into the Rust static library; the Android
 build packages `jniLibs/arm64-v8a/libonnxruntime.so` from
 `com.microsoft.onnxruntime:onnxruntime-android:1.31.0`, and `ort` loads it with
 `load-dynamic`. Desktop uses tract instead, so no ORT DLL is shipped there.
+

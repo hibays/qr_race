@@ -13,7 +13,7 @@ status document, not a claim that every requirement is complete.
 | 4 | Multi-code / parallel crop decode | Partial | desktop `thread::scope`; mobile serial |
 | 5 | WeChat detector + SR + decode | Done (own pipeline) | `qr_race_wechat`, ORT Android / tract desktop |
 | 6 | Far/small-code scan-rate gain | Done (sample) | live 11-vmin QR decoded via 2×2 tiled pass; formal rate sweep pending |
-| 7 | CNN backend speed selection | Done | ORT Android wins (6–48 ms); tract desktop fallback |
+| 7 | CNN backend speed selection | Done (tested: ORT/tract) | ORT 6–48 ms beats tract; st-zrt wraps ORT, lele N/A, Candle untested |
 | 8 | Camera capture: Android | Done | Camera2 Y plane → JNI → Rust; no frames in Dart |
 | 9 | Camera capture: desktop | Done | nokhwa backend |
 | 10 | Camera capture: Web | Partial | wasm + getUserMedia; browser matrix not exhaustive |
@@ -58,9 +58,9 @@ Device-only checks:
    device; collect a repeatable trace and a far-code detection-rate sweep.
 2. **Apple capture.** `qr_race_capture_apple` + AVFoundation, then the same
    frame-never-in-Dart contract.
-3. **Optional follow-ups.** st-zrt is only an ORT wrapper; Candle/lele are not
-   justified by the current measurements. Keep the `Net` trait for future
-   backends.
+3. **Optional follow-ups.** st-zrt is only an ORT wrapper; lele is not an
+   ONNX frontend; Candle was not benchmarked because ORT already met the
+   budget. Keep the `Net` trait for future backends.
 
 ## Four-layer closure view
 
@@ -69,6 +69,7 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
+
 
 
 
