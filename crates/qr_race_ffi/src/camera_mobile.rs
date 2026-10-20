@@ -93,6 +93,7 @@ pub fn start(width: u32, height: u32) -> i32 {
         .name("qr-scanner-android".to_string())
         .spawn(move || {
             let decoder = ZxingDecoder::new();
+            let hard_decoder = ZxingDecoder::new().try_harder(true);
             let engine = ScanEngine::new(Box::new(decoder.clone()));
             let tiered = TieredScanner::new().ok();
             let mut frame_seq: u64 = 0;
@@ -103,13 +104,21 @@ pub fn start(width: u32, height: u32) -> i32 {
                 };
                 let started = Instant::now();
                 frame_seq += 1;
-                // The fast path gets RGB from Camera2; fall back to luma only
-                // when the color read finds nothing.
-                let color_hits = frame
+                // The fast path gets RGB from Camera2. On a miss, retry the RGB
+                // frame with zxing-cpp's harder reader before waking the CNN;
+                // this is the main recognition-rate lever for dim/far codes.
+                let mut color_hits = frame
                     .color
                     .as_deref()
                     .and_then(|rgb| decoder.decode_rgb(rgb, frame.width, frame.height).ok())
                     .unwrap_or_default();
+                if color_hits.is_empty() {
+                    color_hits = frame
+                        .color
+                        .as_deref()
+                        .and_then(|rgb| hard_decoder.decode_rgb(rgb, frame.width, frame.height).ok())
+                        .unwrap_or_default();
+                }
                 let outcome = if color_hits.is_empty() {
                     engine.scan(&gray)
                 } else {
