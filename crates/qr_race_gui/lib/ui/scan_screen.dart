@@ -127,10 +127,13 @@ class _ScanScreenState extends State<ScanScreen> {
 
   void _changeBackend(String backend) {
     if (backend == _backendName) return;
-    _controller?.dispose();
-    _controller = null;
     setState(() => _backendName = backend);
-    _startScanner();
+    final controller = _controller;
+    if (controller != null) {
+      controller.restart(backend);
+    } else {
+      _startScanner();
+    }
   }
 
   @override

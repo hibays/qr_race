@@ -93,6 +93,7 @@ void main() {
     expect(find.text('识别结果 · 自动发布'), findsOneWidget);
     expect(find.textContaining('cam1'), findsWidgets);
     expect(find.textContaining('已自动发布'), findsWidgets);
+    expect(find.text('已广播到房间'), findsOneWidget);
     expect(find.text('发布'), findsNothing);
     expect(calls, hasLength(1));
     expect(calls.single.url.path, '/v1/room/relay');
@@ -246,3 +247,4 @@ class RecordingBackend implements ScannerBackend {
   @override
   void dispose() {}
 }
+

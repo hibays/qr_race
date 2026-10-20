@@ -23,7 +23,7 @@ class ScanController extends ChangeNotifier {
   final int width;
   final int height;
   final int fps;
-  final String backendName;
+  String backendName;
   final Duration interval;
 
   ScannerSnapshot? snapshot;
@@ -52,6 +52,23 @@ class ScanController extends ChangeNotifier {
   }
 
   void start() {
+    _startBackend();
+    _timer = Timer.periodic(interval, (_) => _poll());
+  }
+
+  /// Switches decoder backend without tearing down the widget. The native
+  /// `qr_scanner_start_backend` stops only the Rust worker; the Android
+  /// Camera2 session stays open, so switching backends does not race a new
+  /// camera open against the old stopCapture.
+  void restart(String name) {
+    if (name == backendName) return;
+    backendName = name;
+    snapshot = null;
+    _startBackend();
+    notifyListeners();
+  }
+
+  void _startBackend() {
     try {
       backend.start(
         camera: camera,
@@ -60,7 +77,6 @@ class ScanController extends ChangeNotifier {
         fps: fps,
         backend: backendName,
       );
-      _timer = Timer.periodic(interval, (_) => _poll());
     } catch (error) {
       fatalError = error.toString();
       notifyListeners();
@@ -222,4 +238,5 @@ ScannerSnapshot fakeSnapshot({
     source: 'fake camera',
   );
 }
+
 
