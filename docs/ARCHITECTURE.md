@@ -134,8 +134,7 @@ The scan worker runs tiers:
    preserves small modules without needing a dynamic-shape model.
 
 The backend sits behind `crate::net::Net`: Android uses `StZrtNet` with ONNX
-Runtime 1.29 through `st-zrt` (`libonnxruntime.so` packaged in `jniLibs`); desktop uses the pure
-Rust tract backend as fallback. `st-zrt` sessions run through `&self`, so the
+Runtime 1.29 through `st-zrt` (`libonnxruntime.so` packaged in `jniLibs`); desktop uses the AOT-generated lele backend as fallback. `st-zrt` sessions run through `&self`, so the
 pipeline no longer needs a mutex around inference.
 
 Device HUD (OnePlus PLF110, st-zrt): 1920×1440 fast p50 8.3 ms / p95 21.1 ms;
@@ -167,10 +166,11 @@ measured runs. 640×480 is available with
 `qr_race_wechat`. The pipeline is real: prior decode/NMS, full-resolution crop,
 zxing-cpp decode, and on-demand SR run on device. Android uses the st-zrt session
 against ONNX Runtime 1.29 `libonnxruntime.so` (measured CNN 9.5 ms on the OnePlus); desktop keeps
-tract as the fallback. The fast zxing-cpp path remains the 30 fps target; the
+the AOT-generated lele backend as the fallback. The fast zxing-cpp path remains the 30 fps target; the
 real 1920×1440 device run measured fast p50 8.3 ms / p95 21.1 ms.
 
 TFLite/FFI upstream crates are not built. See `docs/MODELS.md` and `docs/VENDORED.md`.
+
 
 
 

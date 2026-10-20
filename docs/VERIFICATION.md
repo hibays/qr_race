@@ -76,7 +76,7 @@ finished product.
 
 - `qr_race_wechat` is our implementation under `crates/`, not a dependency on
   the registry `wxscan` crate. ONNX weights load from `include_bytes!`; Android
-  uses st-zrt (ONNX Runtime 1.29), desktop tract. Tests cover the full pipeline, the tiered fast path
+  uses st-zrt (ONNX Runtime 1.29), desktop lele AOT. Tests cover the full pipeline, the tiered fast path
   and a small synthetic symbol through the CNN path.
 - Pre-migration device (OnePlus PLF110, rxing) HUD: clear-code fast path 2.9–6.8 ms; CNN
   384 5.5–15.9 ms; tiled far-code pass 21.4 ms (within the 60 ms budget).
@@ -253,5 +253,6 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 

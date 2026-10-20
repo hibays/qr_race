@@ -2,7 +2,7 @@
 #![allow(clippy::all)] // ported algorithm modules are kept close to upstream
 
 //! WeChat `wechat_qrcode` detector + super-resolution, implemented in this
-//! crate with a tract ONNX backend over our converted weights.
+//! crate with a lele AOT backend (desktop) or st-zrt/ORT (Android) over our converted weights.
 //!
 //! The pipeline modules (`detector`, `scale`, `decodermgr`, `wechat_qrcode`)
 //! are a studied port of OpenCV contrib's `wechat_qrcode` and the Apache-2.0
@@ -249,7 +249,7 @@ impl TieredScanner {
     fn decode_with_sr(&self, data: &[u8], width: usize, height: usize) -> Option<Vec<ScanHit>> {
         let (square, side) = square_pad(data, width, height);
         // The SR graph is fixed 224×224. Resize the padded crop instead of
-        // feeding an arbitrary square (tract tolerated it, ORT does not).
+        // feeding an arbitrary square (the fixed 224 SR graph does not).
         let fixed = cvlite::resize(&square, side, side, 224, 224, cvlite::Interpolation::Cubic);
         let (up, up_w, up_h) = self.sr.super_resolution_scale(&fixed, 224, 224)?;
         Some(self.decode_crop(&up, up_w, up_h))

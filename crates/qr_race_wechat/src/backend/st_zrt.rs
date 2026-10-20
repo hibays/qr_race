@@ -1,6 +1,6 @@
 //! ONNX Runtime backend through `st-zrt` 0.4.
 //!
-//! Android packages ONNX Runtime 1.29 (`libonnxruntime.so`); desktop uses tract.
+//! Android packages ONNX Runtime 1.29 (`libonnxruntime.so`); desktop uses lele.
 //! `st-zrt` sessions are `&self`-reentrant, so the pipeline no longer needs a
 //! mutex around `run`.
 

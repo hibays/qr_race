@@ -184,7 +184,7 @@ impl<N: Net> WeChatQRCode<N> {
     fn detect(&self, img: &[u8], width: usize, height: usize) -> Vec<QuadPoints> {
         if let Some(detector) = self.detector.as_ref() {
             // The converted detector has a fixed 384x384 input. Upstream's
-            // variable 400x400 target works with tract's dynamic plans but not
+            // variable 400x400 target works with a dynamic planner but not
             // with the exported graph / ORT; keep the model's square.
             let detect_width = 384;
             let detect_height = 384;

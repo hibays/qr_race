@@ -9,15 +9,15 @@ license.workspace = true
 doctest = false
 
 [features]
-default = ["tract"]
+default = ["lele"]
 st-zrt = ["dep:st-zrt"]
-tract = ["dep:tract-onnx"]
+lele = ["dep:lele"]
 
 [dependencies]
 qr_race_scan.workspace = true
 cvlite = { path = "../cvlite" }
 zxing-cpp = { version = "0.5.3", default-features = false }
-tract-onnx = { version = "0.21", optional = true }
+lele = { version = "=0.1.15", default-features = false, optional = true }
 st-zrt = { version = "0.4.1", default-features = false, optional = true }
 
 [dev-dependencies]
@@ -27,4 +27,9 @@ qr_race_fixtures.workspace = true
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
 zxing-cpp = { version = "0.5.3", default-features = false, features = ["bundled"] }
+
+
+[build-dependencies]
+lele = { version = "=0.1.15", features = ["compiler"] }
+
 

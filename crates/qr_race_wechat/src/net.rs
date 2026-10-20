@@ -2,7 +2,7 @@
 //!
 //! Upstream runs the detect and sr ONNX models through `cv::dnn::Net`. Here
 //! that is a trait; the default implementation uses tflite (see the `tflite`
-//! module), and a pure Rust engine such as tract only needs one more
+//! module), and the AOT-compiled lele backend only needs one more
 //! implementation.
 
 /// Output of one forward pass: data plus shape (NCHW).

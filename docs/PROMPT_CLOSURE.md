@@ -11,9 +11,9 @@ status document, not a claim that every requirement is complete.
 | 2 | zxing-cpp decoder, no rqrr/cvlite decode backend | Done | `qr_race_scan::ZxingDecoder` |
 | 3 | 30 fps fast scan path | Done for clear codes | device 2.7–9 ms at 1280×720 |
 | 4 | Multi-code / parallel crop decode | Partial | desktop `thread::scope`; mobile serial |
-| 5 | WeChat detector + SR + decode | Done (own pipeline) | `qr_race_wechat`, ORT Android / tract desktop |
+| 5 | WeChat detector + SR + decode | Done (own pipeline) | `qr_race_wechat`, st-zrt Android / lele desktop |
 | 6 | Far/small-code scan-rate gain | Done (sample) | far QR decoded; zxing-cpp + color device run: fast p50 8.3 ms / p95 21.1 ms at 1920×1440 |
-| 7 | CNN backend speed selection | Done (tested: ORT/tract) | ORT 6–48 ms beats tract; st-zrt wraps ORT, lele N/A, Candle untested |
+| 7 | CNN backend speed selection | Done (tested: st-zrt/lele) | st-zrt 9.5 ms on device; lele detect 19.7 ms / tiled 53.3 ms on desktop; Candle untested |
 | 8 | Camera capture: Android | Done | 2K request (2560×1440, fallback), Y/U/V color planes → JNI → Rust; full-screen UI |
 | 9 | Camera capture: desktop | Done | nokhwa backend |
 | 10 | Camera capture: Web | Done (fake camera) | zxing-wasm reader; fake-camera hit 640×480/1.7 ms; physical hit pending |
@@ -71,3 +71,4 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
+

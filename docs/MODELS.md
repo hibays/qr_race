@@ -34,11 +34,12 @@ for the detector heads, or a comparison against an OpenCV 4 environment.
 
 ## Current status
 
-- **Backend chosen:** Android uses st-zrt + ONNX Runtime 1.29; desktop uses tract
+- **Backend chosen:** Android uses st-zrt + ONNX Runtime 1.29; desktop uses lele AOT
   as fallback. Real 1920×1440 run: fast p50 8.3 ms / p95 21.1 ms, CNN 9.5 ms.
-  `st-zrt` 0.4.1 is the runtime layer over ONNX Runtime 1.29; `lele` has no
-  ONNX frontend; Candle was not benchmarked because st-zrt already fit the
-  60 ms budget. `StZrtNet` and `TractNet` implement the same `Net` trait.
+  `st-zrt` 0.4.1 is the runtime layer over ONNX Runtime 1.29. Desktop uses
+  `lele` 0.1.15 as a build-time ONNX→Rust AOT compiler: detect 384 p50 19.7 ms,
+  2×2 tiled far p50 53.3 ms. Candle was not benchmarked. `StZrtNet` and
+  `LeleNet` implement the same `Net` trait.
 - **Far/small:** a live 11-vmin PC-screen QR decoded
   `https://example.test/far-small-live` at 1280×720 through the tiled path.
   This is one sample; a detection-rate/p95 sweep remains future work.
@@ -50,9 +51,9 @@ for the detector heads, or a comparison against an OpenCV 4 environment.
 
 - `crates/qr_race_wechat/src/pipeline` equivalent modules: detector, scale,
   decodermgr, wechat_qrcode.
-- `src/backend/st_zrt.rs` (Android) and `src/backend/tract.rs` (desktop).
-- Android packages `libonnxruntime.so` per ABI under `jniLibs/<abi>/`; desktop uses
-  tract so no DLL shipping is required.
+- `src/backend/st_zrt.rs` (Android) and `src/backend/lele.rs` (desktop).
+- Android packages `libonnxruntime.so` per ABI under `jniLibs/<abi>/`; desktop
+  uses AOT-generated Rust so no ONNX runtime DLL is shipped.
 
 ## License
 
@@ -63,7 +64,10 @@ those weights.
 ONNX Runtime 1.29 (MIT) is not vendored; the Android
 build packages `jniLibs/<abi>/libonnxruntime.so` from
 `com.microsoft.onnxruntime:onnxruntime-android:1.29.0`, and `st-zrt` links it
-directly. Desktop uses tract instead, so no ORT DLL is shipped there.
+directly. Desktop uses lele AOT instead, so no ORT DLL is shipped there.
+
+
+
 
 
 
