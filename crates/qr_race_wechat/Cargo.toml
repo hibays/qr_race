@@ -32,4 +32,3 @@ zxing-cpp = { version = "0.5.3", default-features = false, features = ["bundled"
 [build-dependencies]
 lele = { version = "=0.1.15", features = ["compiler"] }
 
-

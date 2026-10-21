@@ -8,3 +8,7 @@ crates/qr_race_gui/web/scan/qr_race_scan_wasm_bg.wasm.d.ts
 /dist/
 crates/qr_race_gui/android/app/src/main/jniLibs/**/*.so
 
+
+tools/backend_bench/*/target/
+tools/backend_bench/*/Cargo.lock
+

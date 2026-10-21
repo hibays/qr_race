@@ -1,0 +1,9 @@
+[package]
+name = "backend-bench-ort"
+version = "0.1.0"
+edition = "2024"
+
+[workspace]
+
+[dependencies]
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["load-dynamic"] }
