@@ -95,7 +95,6 @@ class ScanController extends ChangeNotifier {
     try {
       final next = backend.poll();
       snapshot = next;
-      fatalError = null;
       _collect(next);
     } catch (error) {
       fatalError = error.toString();
@@ -249,5 +248,6 @@ ScannerSnapshot fakeSnapshot({
     source: 'fake camera',
   );
 }
+
 
 

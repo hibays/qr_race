@@ -324,7 +324,7 @@ class _Body extends StatelessWidget {
     }
     final media = MediaQuery.sizeOf(context);
     final landscape = media.width > media.height;
-    final previewRotation = snapshot?.rotation ?? 90;
+    final previewRotation = landscape ? 0 : (snapshot?.rotation ?? 90);
     final source = _SourceSize.of(snapshot, previewRotation);
     final previewFit = landscape && !fullFrame ? BoxFit.cover : BoxFit.contain;
     return Stack(
@@ -337,7 +337,7 @@ class _Body extends StatelessWidget {
                     child: FittedBox(
                       fit: previewFit,
                       child: RotatedBox(
-                        quarterTurns: quarterTurnsForRotation(previewRotation),
+                        quarterTurns: quarterTurnsForRotation(snapshot?.rotation ?? 90),
                         child: SizedBox(
                           width: landscape ? (snapshot?.width ?? 1920).toDouble() : source.width,
                           height: landscape ? (snapshot?.height ?? 1440).toDouble() : source.height,
@@ -1024,6 +1024,10 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
+
+
+
 
 
 
