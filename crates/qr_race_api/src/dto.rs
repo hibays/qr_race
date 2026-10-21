@@ -36,6 +36,19 @@ pub struct WsTicketResponse {
 #[derive(Debug, Deserialize)]
 pub struct CreateRoomRequest {
     pub address: String,
+    #[serde(default)]
+    pub pin: Option<String>,
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SetPinRequest {
+    pub address: String,
+    pub pin: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PinRoomResponse {
+    pub address: String,
 }
 
 #[derive(Debug, Deserialize)]

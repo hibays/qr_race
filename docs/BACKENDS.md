@@ -86,9 +86,10 @@ tools/backend_bench/stzrt
 5. Add `capture-apple` behind the same `CaptureSource` contract.
 6. Keep `bindings-flutter` thin: method channel + texture ids + JSON state only.
 
-The native product now uses `ort` rc15 + ORT 1.29 on Android and desktop;
+The CNN cadence is a code constant: `CNN_FRAME_INTERVAL = 1` in `qr_race_pipeline`, so every frame runs detection/SR; raise it only as an explicit CPU trade. The native product now uses `ort` rc15 + ORT 1.29 on Android and desktop;
 `st-zrt` remains only in the benchmark tool. WASM/lele and the capture splits
 above are the remaining steps.
+
 
 
 

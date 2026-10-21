@@ -63,6 +63,11 @@ impl Store {
                 created_at_ms INTEGER NOT NULL
             );
             CREATE INDEX IF NOT EXISTS relays_room_seq ON relays(room, seq);
+            CREATE TABLE IF NOT EXISTS room_pins (
+                pin TEXT PRIMARY KEY,
+                address TEXT NOT NULL UNIQUE,
+                updated_at_ms INTEGER NOT NULL
+            );
             ",
         )?;
         Ok(Self {
@@ -106,6 +111,50 @@ impl Store {
             ],
         )?;
         Ok(())
+    }
+
+    pub fn set_room_pin(
+        &self,
+        pin: &str,
+        address: &RoomAddress,
+        at_ms: u64,
+    ) -> Result<(), StoreError> {
+        self.lock()?.execute(
+            "INSERT INTO room_pins (pin, address, updated_at_ms) VALUES (?1, ?2, ?3)
+             ON CONFLICT(pin) DO UPDATE SET address=excluded.address, updated_at_ms=excluded.updated_at_ms",
+            params![pin, address.to_string(), at_ms as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn room_pin(&self, pin: &str) -> Result<Option<RoomAddress>, StoreError> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare("SELECT address FROM room_pins WHERE pin = ?1")?;
+        let mut rows = statement.query(params![pin])?;
+        let Some(row) = rows.next()? else {
+            return Ok(None);
+        };
+        let address: String = row.get(0)?;
+        address
+            .parse()
+            .map(Some)
+            .map_err(|error: qr_race_core::CoreError| StoreError::Corrupt(error.to_string()))
+    }
+
+    pub fn room_pins(&self) -> Result<Vec<(String, RoomAddress)>, StoreError> {
+        let connection = self.lock()?;
+        let mut statement = connection.prepare("SELECT pin, address FROM room_pins")?;
+        let mut rows = statement.query([])?;
+        let mut pins = Vec::new();
+        while let Some(row) = rows.next()? {
+            let pin: String = row.get(0)?;
+            let address: String = row.get(1)?;
+            let address = address
+                .parse()
+                .map_err(|error: qr_race_core::CoreError| StoreError::Corrupt(error.to_string()))?;
+            pins.push((pin, address));
+        }
+        Ok(pins)
     }
 
     pub fn delete_room(&self, address: &RoomAddress) -> Result<(), StoreError> {

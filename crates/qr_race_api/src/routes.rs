@@ -15,8 +15,8 @@ use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::dto::{
-    AuthRequest, AuthResponse, CreateRoomRequest, LobbyDto, LobbyRoomDto, RelayBody, RelayDto,
-    RoomViewDto, TargetRequest, WsTicketResponse,
+    AuthRequest, AuthResponse, CreateRoomRequest, LobbyDto, LobbyRoomDto, PinRoomResponse,
+    RelayBody, RelayDto, RoomViewDto, SetPinRequest, TargetRequest, WsTicketResponse,
 };
 use crate::error::ApiError;
 
@@ -83,15 +83,58 @@ pub async fn create_room(
     Json(body): Json<CreateRoomRequest>,
 ) -> Result<(StatusCode, Json<RoomAddress>), ApiError> {
     let address = parse_address(&body.address)?;
+    if let Some(pin) = body.pin.as_deref() {
+        validate_pin(pin)?;
+        let hub = state.hub.lock().expect("hub lock");
+        if hub.resolve_pin(pin).is_some() {
+            return Err(ApiError::BadRequest("PIN is already in use".into()));
+        }
+    }
     let events = {
         let mut hub = state.hub.lock().expect("hub lock");
-        hub.create_room(address.clone(), user)?
+        let events = hub.create_room(address.clone(), user.clone())?;
+        if let Some(pin) = body.pin.as_deref() {
+            hub.set_pin(&user, &address, pin)?;
+        }
+        events
     };
     // The channel exists from the moment the room does, so nobody misses the
     // events that follow.
     let _ = state.subscribe(&address);
     state.publish(&address, &events);
     Ok((StatusCode::CREATED, Json(address)))
+}
+
+pub async fn set_pin(
+    State(state): State<Arc<AppState>>,
+    Authed(user): Authed,
+    Json(body): Json<SetPinRequest>,
+) -> Result<StatusCode, ApiError> {
+    let address = parse_address(&body.address)?;
+    let mut hub = state.hub.lock().expect("hub lock");
+    hub.set_pin(&user, &address, &body.pin)?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+pub async fn by_pin(
+    State(state): State<Arc<AppState>>,
+    Authed(_user): Authed,
+    Query(query): Query<PinQuery>,
+) -> Result<Json<PinRoomResponse>, ApiError> {
+    let pin = query.pin.trim();
+    validate_pin(pin)?;
+    let hub = state.hub.lock().expect("hub lock");
+    let address = hub
+        .resolve_pin(pin)
+        .ok_or_else(|| ApiError::NotFound("no room for this PIN".into()))?;
+    Ok(Json(PinRoomResponse {
+        address: address.to_string(),
+    }))
+}
+
+#[derive(Deserialize)]
+pub struct PinQuery {
+    pub pin: String,
 }
 
 pub async fn room_view(
@@ -243,6 +286,13 @@ pub async fn relay(
         .map(|relay: RelayEntry| RelayDto::from(&relay))
         .ok_or_else(|| ApiError::BadRequest("relay was not published".into()))?;
     Ok(Json(relay))
+}
+
+fn validate_pin(pin: &str) -> Result<(), ApiError> {
+    if pin.len() != 4 || !pin.chars().all(|c| c.is_ascii_digit()) {
+        return Err(ApiError::BadRequest("PIN must be four digits".into()));
+    }
+    Ok(())
 }
 
 fn parse_address(value: &str) -> Result<RoomAddress, ApiError> {

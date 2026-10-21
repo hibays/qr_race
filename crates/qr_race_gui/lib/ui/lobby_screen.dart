@@ -1,9 +1,11 @@
 import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
+import '../rooms/room_picker.dart';
 import '../state/app_state.dart';
 import 'connect_screen.dart';
 import 'room_screen.dart';
+import 'settings_screen.dart';
 import 'theme.dart';
 
 class LobbyScreen extends StatefulWidget {
@@ -42,36 +44,39 @@ class _LobbyScreenState extends State<LobbyScreen> {
     );
   }
 
-  Future<String?> _promptAddress({
-    required String title,
-    required String action,
-  }) {
-    return showDialog<String>(
-      context: context,
-      builder: (context) => _AddressDialog(title: title, action: action),
-    );
+  Future<void> _enterByAddress() async {
+    final choice = await showRoomPicker(context, mode: RoomPickerMode.enter);
+    if (choice != null) await _enter(choice.address);
   }
 
-  Future<void> _enterByAddress() async {
-    final address = await _promptAddress(title: '输入房间地址', action: '进入');
-    final trimmed = address?.trim() ?? '';
-    if (trimmed.isNotEmpty) {
-      await _enter(trimmed);
+  Future<void> _enterByPin() async {
+    final pin = await showPinEntry(context);
+    if (pin == null || !mounted) return;
+    final address = await widget.state.resolvePin(pin);
+    if (address == null) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.state.error ?? '没有这个配对码')),
+      );
+      return;
     }
+    await _enter(address);
   }
 
   Future<void> _createRoom() async {
-    final address = await _promptAddress(title: '创建房间', action: '创建并点亮');
-    final trimmed = address?.trim() ?? '';
-    if (trimmed.isEmpty || !mounted) return;
+    final choice = await showRoomPicker(context, mode: RoomPickerMode.create);
+    if (choice == null || !mounted) return;
 
-    final error = await widget.state.createAndLight(trimmed);
+    final error = await widget.state.createAndLight(
+      choice.address,
+      pin: choice.pin,
+    );
     if (!mounted) return;
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
       return;
     }
-    await _enter(trimmed);
+    await _enter(choice.address);
   }
 
   @override
@@ -98,6 +103,18 @@ class _LobbyScreenState extends State<LobbyScreen> {
             icon: const Icon(Icons.add),
           ),
           IconButton(
+            tooltip: '配对码进入',
+            onPressed: _enterByPin,
+            icon: const Icon(Icons.pin_outlined),
+          ),
+          IconButton(
+            tooltip: '设置',
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+            ),
+            icon: const Icon(Icons.settings_outlined),
+          ),
+          IconButton(
             tooltip: '刷新',
             onPressed: widget.state.refreshLobby,
             icon: const Icon(Icons.refresh),
@@ -114,7 +131,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
         backgroundColor: accent,
         foregroundColor: accentInk,
         icon: const Icon(Icons.keyboard_alt_outlined),
-        label: const Text('输入房间地址'),
+        label: const Text('快速选择房间'),
       ),
       body: ListenableBuilder(
         listenable: widget.state,
@@ -260,46 +277,3 @@ class _CenteredNote extends StatelessWidget {
   }
 }
 
-class _AddressDialog extends StatefulWidget {
-  const _AddressDialog({required this.title, required this.action});
-
-  final String title;
-  final String action;
-
-  @override
-  State<_AddressDialog> createState() => _AddressDialogState();
-}
-
-class _AddressDialogState extends State<_AddressDialog> {
-  final _controller = TextEditingController();
-
-  @override
-  void dispose() {
-    _controller.dispose();
-    super.dispose();
-  }
-
-  @override
-  Widget build(BuildContext context) {
-    return AlertDialog(
-      backgroundColor: surfaceRaised,
-      title: Text(widget.title),
-      content: TextField(
-        controller: _controller,
-        autofocus: true,
-        decoration: const InputDecoration(hintText: '东京A区1B级103房'),
-        onSubmitted: (value) => Navigator.of(context).pop(value),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.of(context).pop(),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () => Navigator.of(context).pop(_controller.text),
-          child: Text(widget.action),
-        ),
-      ],
-    );
-  }
-}

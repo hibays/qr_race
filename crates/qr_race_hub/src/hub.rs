@@ -87,6 +87,9 @@ pub enum HubError {
     #[error("user is not a participant of this room")]
     NotAParticipant,
 
+    #[error("invalid pairing PIN: {0}")]
+    InvalidPin(String),
+
     #[error("storage: {0}")]
     Storage(String),
 
@@ -100,6 +103,7 @@ pub struct Hub {
     clock: Arc<dyn Clock>,
     next_relay: u64,
     store: Option<Arc<Store>>,
+    pins: BTreeMap<String, RoomAddress>,
 }
 
 /// Relays are kept in memory, so a room keeps its newest entries and drops the
@@ -114,6 +118,7 @@ impl Hub {
             clock,
             next_relay: 0,
             store: None,
+            pins: BTreeMap::new(),
         }
     }
 
@@ -137,6 +142,11 @@ impl Hub {
             );
         }
         let next_relay = store.max_relay_seq().map_err(storage_error)?;
+        let pins = store
+            .room_pins()
+            .map_err(storage_error)?
+            .into_iter()
+            .collect();
 
         Ok(Self {
             rooms,
@@ -144,6 +154,7 @@ impl Hub {
             clock,
             next_relay,
             store: Some(store),
+            pins,
         })
     }
 
@@ -174,6 +185,43 @@ impl Hub {
         Ok(vec![RoomEvent::RoomCreated { address, host }])
     }
 
+    /// Sets the four-digit pairing PIN. Only the host may change it.
+    pub fn set_pin(
+        &mut self,
+        actor: &UserId,
+        address: &RoomAddress,
+        pin: &str,
+    ) -> Result<(), HubError> {
+        if pin.len() != 4 || !pin.chars().all(|c| c.is_ascii_digit()) {
+            return Err(HubError::InvalidPin("PIN must be four digits".into()));
+        }
+        {
+            let room = self.room_mut(address)?;
+            if room.host != *actor {
+                return Err(CoreError::NotHost {
+                    action: "change the pairing PIN",
+                }
+                .into());
+            }
+        }
+        if let Some(existing) = self.pins.get(pin)
+            && existing != address
+        {
+            return Err(HubError::InvalidPin("PIN is already in use".into()));
+        }
+        self.pins.retain(|_, existing| existing != address);
+        self.pins.insert(pin.to_string(), address.clone());
+        if let Some(store) = &self.store {
+            store
+                .set_room_pin(pin, address, self.clock.now_ms())
+                .map_err(storage_error)?;
+        }
+        Ok(())
+    }
+
+    pub fn resolve_pin(&self, pin: &str) -> Option<RoomAddress> {
+        self.pins.get(pin).cloned()
+    }
     pub fn light_room(
         &mut self,
         actor: &UserId,
@@ -593,6 +641,19 @@ mod tests {
         );
     }
 
+    #[test]
+    fn pairing_pin_is_host_only_and_survives_restart() {
+        let clock = ManualClock::new(1_700_000_000_000);
+        let store = Arc::new(Store::in_memory().unwrap());
+        let mut hub = Hub::with_store(Arc::new(clock.clone()), store.clone()).unwrap();
+        hub.create_room(address(), host()).unwrap();
+        assert!(hub.set_pin(&host(), &address(), "1234").is_ok());
+        assert!(hub.set_pin(&member("m-1"), &address(), "5678").is_err());
+        assert_eq!(hub.resolve_pin("1234"), Some(address()));
+
+        let reloaded = Hub::with_store(Arc::new(clock), store).unwrap();
+        assert_eq!(reloaded.resolve_pin("1234"), Some(address()));
+    }
     #[test]
     fn a_restart_resumes_rooms_roles_and_relays() {
         let clock = ManualClock::new(1_700_000_000_000);

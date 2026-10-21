@@ -4,6 +4,7 @@ import '../api/app_links.dart';
 import '../api/cert_fingerprint.dart';
 import '../api/connect_link.dart';
 import '../state/app_state.dart';
+import '../state/server_settings.dart';
 import 'lobby_screen.dart';
 import 'room_screen.dart';
 import 'self_host_screen.dart';
@@ -28,18 +29,32 @@ class _ConnectScreenState extends State<ConnectScreen> {
   final _fingerprint = TextEditingController();
   final _token = TextEditingController();
   String? _linkRoom;
-
   @override
   void initState() {
     super.initState();
+
     final initial = widget.initialLink;
     if (initial != null) {
       _applyLink(initial);
     } else {
       AppLinks.initial().then((link) {
-        if (link != null && mounted) _applyLink(link);
+        if (!mounted) return;
+        if (link != null) {
+          _applyLink(link);
+        } else {
+          _loadSaved();
+        }
       });
     }
+  }
+
+  Future<void> _loadSaved() async {
+    final settings = await ServerSettings.load();
+    if (!mounted) return;
+    setState(() {
+      _server.text = settings.server;
+      _fingerprint.text = settings.fingerprint;
+    });
   }
 
   void _applyLink(String raw) {
@@ -91,6 +106,11 @@ class _ConnectScreenState extends State<ConnectScreen> {
     );
     if (!mounted) return;
     if (ok) {
+      await ServerSettings.save(
+        server: _server.text,
+        fingerprint: _fingerprint.text,
+      );
+      if (!mounted) return;
       final room = _linkRoom;
       if (room != null) {
         final entered = await widget.state.enterRoom(room);
@@ -296,3 +316,9 @@ class _LinkDialogState extends State<_LinkDialog> {
     );
   }
 }
+
+
+
+
+
+

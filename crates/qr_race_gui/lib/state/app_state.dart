@@ -64,6 +64,7 @@ class AppState extends ChangeNotifier {
   RoomView? room;
   bool busy = false;
   String? error;
+  String? pairingPin;
 
   WebSocketChannel? _events;
   StreamSubscription<dynamic>? _eventsSub;
@@ -84,7 +85,6 @@ class AppState extends ChangeNotifier {
       final auth = await client.authenticate(token: token);
       api = client;
       session = auth;
-      await refreshLobby();
       return true;
     } catch (e) {
       error = _describe(e);
@@ -147,7 +147,7 @@ class AppState extends ChangeNotifier {
 
   /// Creates the room, or reuses it if it already exists, then lights it.
   /// Both "already exists" and "already lit" are fine: the host is re-entering.
-  Future<String?> createAndLight(String address) async {
+  Future<String?> createAndLight(String address, {String? pin}) async {
     final client = api;
     if (client == null) return '离线演示模式不能建房';
     busy = true;
@@ -155,7 +155,7 @@ class AppState extends ChangeNotifier {
     notifyListeners();
     try {
       try {
-        await client.createRoom(address);
+        await client.createRoom(address, pin: pin);
       } on ApiException catch (e) {
         if (e.status != 409) rethrow;
       }
@@ -165,6 +165,8 @@ class AppState extends ChangeNotifier {
         if (e.status != 409) rethrow;
       }
       await refreshLobby();
+      pairingPin = pin;
+      notifyListeners();
       return null;
     } catch (e) {
       error = _describe(e);
@@ -172,6 +174,32 @@ class AppState extends ChangeNotifier {
     } finally {
       busy = false;
       notifyListeners();
+    }
+  }
+
+  Future<void> setPin(String pin) async {
+    final client = api;
+    final address = _roomAddress;
+    if (client == null || address == null) return;
+    try {
+      await client.setPin(address, pin);
+      pairingPin = pin;
+      notifyListeners();
+    } catch (e) {
+      error = _describe(e);
+      notifyListeners();
+    }
+  }
+
+  Future<String?> resolvePin(String pin) async {
+    final client = api;
+    if (client == null) return null;
+    try {
+      return await client.resolvePin(pin);
+    } catch (e) {
+      error = _describe(e);
+      notifyListeners();
+      return null;
     }
   }
 
@@ -296,4 +324,11 @@ class AppState extends ChangeNotifier {
     super.dispose();
   }
 }
+
+
+
+
+
+
+
 

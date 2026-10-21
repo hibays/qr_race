@@ -113,6 +113,13 @@ Android 构建需要接受 SDK licenses（`flutter doctor --android-licenses`）
 两者共享 ORT kernel，差异在噪声范围内。复现：`pwsh -File scripts/bench_backends.ps1`。
 
 目标矩阵是 WASM lele、Android/桌面 ORT（XNNPACK/CoreML EP）；`ort-sys` 与 `st-zrt-sys` 都声明 `links = "onnxruntime"`，不能在同一 Cargo graph 里共存，因此必须拆成独立 `detect-*` crate。迁移顺序与 capture/scan 边界见 [docs/BACKENDS.md](docs/BACKENDS.md)。
+## 房间、配对码与服务器设置
+
+- 房间按固定场馆库存快速选择：西京 Z 区 A–H 级 1–5 层 01–09；东京 A/B 区 1A–6B 级 1–6 层 01–09。
+- 房主创建房间时可生成/修改 4 位配对码；成员在大厅点配对码图标即可进入。
+- 服务器地址与证书指纹保存在本机；大厅设置页可修改，token 不落盘。
+- 采集候选框会回传 Camera2：候选过小时自动数字变焦，并把 AF/AE 区域设到候选框；预览 overlay 同时做自动定位。
+
 ## 持久化
 
 - `database` 配置指向 SQLite 文件；房间（成员、角色、加入密码哈希）与接力写穿到库，重启后原样恢复，接力 id 继续增长（不会重号）。
@@ -260,6 +267,8 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [ ] Apple 采集（AVFoundation）
 - [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
 - [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+
+
 
 
 

@@ -61,6 +61,7 @@ impl From<HubError> for ApiError {
             HubError::RoomNotFound(_) => ApiError::NotFound(message),
             HubError::RoomNotLit(_) => ApiError::Conflict(message),
             HubError::NotAScanner | HubError::NotAParticipant => ApiError::Forbidden(message),
+            HubError::InvalidPin(_) => ApiError::BadRequest(message),
             HubError::Storage(_) => ApiError::Internal(message),
             HubError::Core(core) => ApiError::from(core),
         }

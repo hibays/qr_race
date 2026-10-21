@@ -69,6 +69,12 @@ class _RoomScreenState extends State<RoomScreen> {
                 ),
               if (room != null && me?.role == 'host')
                 IconButton(
+                  tooltip: '设置配对码',
+                  onPressed: _setPin,
+                  icon: const Icon(Icons.pin_outlined),
+                ),
+              if (room != null && me?.role == 'host')
+                IconButton(
                   tooltip: '邀请成员',
                   onPressed: () => _invite(room),
                   icon: const Icon(Icons.person_add_alt_1_outlined),
@@ -92,6 +98,16 @@ class _RoomScreenState extends State<RoomScreen> {
                   children: [
                     if (state.error != null) _ErrorBar(message: state.error!),
                     if (!room.lit && me?.role == 'host')
+                    if (state.pairingPin != null)
+                      Container(
+                        width: double.infinity,
+                        color: accent.withValues(alpha: 0.12),
+                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        child: Text(
+                          '配对码 ${state.pairingPin} · 成员可在大厅用此码进入',
+                          style: const TextStyle(fontSize: 12),
+                        ),
+                      ),
                       _UnlitBanner(onLight: state.lightRoom),
                     Expanded(child: _RoomBody(state: state, room: room)),
                   ],
@@ -107,6 +123,43 @@ class _RoomScreenState extends State<RoomScreen> {
       if (member.user == userId) return member;
     }
     return null;
+  }
+
+  Future<void> _setPin() async {
+    final controller = TextEditingController(text: widget.state.pairingPin ?? '');
+    final pin = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('设置 4 位配对码'),
+        content: TextField(
+          controller: controller,
+          keyboardType: TextInputType.number,
+          maxLength: 4,
+          autofocus: true,
+          decoration: const InputDecoration(hintText: '0000'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
+          FilledButton(
+            onPressed: () {
+              final value = controller.text.trim();
+              if (value.length == 4 && int.tryParse(value) != null) {
+                Navigator.pop(context, value);
+              }
+            },
+            child: const Text('保存'),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (pin == null || !mounted) return;
+    await widget.state.setPin(pin);
+    if (mounted && widget.state.error != null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(widget.state.error!)),
+      );
+    }
   }
 
   void _openScanner(String address) {

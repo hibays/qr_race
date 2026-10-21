@@ -11,6 +11,12 @@
 
 use qr_race_scan::{Decoder, GrayFrame, ScanHit, ZxingDecoder};
 use qr_race_wechat::{CnnEngine, CnnQuad};
+/// How often the CNN detector runs. `1` means every frame; raise it to trade
+/// detection latency for CPU. This is intentionally a code-level constant.
+pub const CNN_FRAME_INTERVAL: u64 = 1;
+
+/// Every Nth CNN pass uses the 768 detector for far/small symbols.
+pub const CNN_LARGE_INPUT_INTERVAL: u64 = 128;
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub enum ScanMode {
@@ -169,11 +175,12 @@ impl ScanPipeline {
         if mode != ScanMode::Cnn {
             hits = self.decoder.decode_full(frame, color);
         }
+        let fast_hit = !hits.is_empty();
 
         let mut detections = Vec::new();
         let mut detect_ms = 0.0;
         let mut decode_ms = started.elapsed().as_secs_f64() * 1000.0;
-        if mode != ScanMode::Zxing && hits.is_empty() {
+        if mode != ScanMode::Zxing && frame_seq.is_multiple_of(CNN_FRAME_INTERVAL) {
             let Some(detector) = self.detector.as_ref() else {
                 return PipelineOutcome {
                     hits,
@@ -229,7 +236,9 @@ impl ScanPipeline {
                 }
             }
             decode_ms = decode_started.elapsed().as_secs_f64() * 1000.0;
-            tier = if sr_used { "cnn+sr" } else { "cnn" };
+            if !fast_hit {
+                tier = if sr_used { "cnn+sr" } else { "cnn" };
+            }
         }
 
         PipelineOutcome {

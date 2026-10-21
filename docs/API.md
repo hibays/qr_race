@@ -164,3 +164,11 @@ trusted network.
 
 
 
+
+### Pairing PIN
+
+- `POST /v1/rooms` body may include `"pin": "1234"`. The host sets the pair code while creating the room.
+- `POST /v1/rooms/pin` body `{ "address": "东京A区1B级103房", "pin": "1234" }` changes it (host only).
+- `GET /v1/room/by-pin?pin=1234` returns `{ "address": "..." }` for the lobby PIN entry.
+
+PINs are four ASCII digits, unique among rooms, and persisted with the room in SQLite.

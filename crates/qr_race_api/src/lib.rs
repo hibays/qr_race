@@ -156,6 +156,8 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/ws-ticket", post(routes::ws_ticket))
         .route("/v1/lobby", get(routes::lobby))
         .route("/v1/rooms", post(routes::create_room))
+        .route("/v1/rooms/pin", post(routes::set_pin))
+        .route("/v1/room/by-pin", get(routes::by_pin))
         .route("/v1/room", get(routes::room_view))
         .route("/v1/room/light", post(routes::light))
         .route("/v1/room/join", post(routes::join))
