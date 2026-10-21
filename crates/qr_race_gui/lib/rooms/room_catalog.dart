@@ -36,8 +36,8 @@ class RoomCatalog {
 }
 
 class RoomChoice {
-  const RoomChoice({required this.address, this.pin});
+  const RoomChoice({required this.address});
 
   final String address;
-  final String? pin;
 }
+

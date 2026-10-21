@@ -167,8 +167,12 @@ trusted network.
 
 ### Pairing PIN
 
-- `POST /v1/rooms` body may include `"pin": "1234"`. The host sets the pair code while creating the room.
-- `POST /v1/rooms/pin` body `{ "address": "东京A区1B级103房", "pin": "1234" }` changes it (host only).
-- `GET /v1/room/by-pin?pin=1234` returns `{ "address": "..." }` for the lobby PIN entry.
+The PIN path is independent of the address path: a host starts a room with only a
+PIN, and a member enters it with only the same PIN.
 
-PINs are four ASCII digits, unique among rooms, and persisted with the room in SQLite.
+- `POST /v1/rooms/start-by-pin` body `{ "pin": "1234" }`: returns `{ "address": "...", "created": true|false }`. If the PIN is unused the server allocates the first free fixed-inventory room, creates and lights it, and sets the PIN. If the PIN already exists it returns that room.
+- `POST /v1/rooms/pin` body `{ "address": "...", "pin": "1234" }` changes the PIN of an existing room (host only).
+- `GET /v1/room/by-pin?pin=1234` resolves a PIN without creating anything.
+
+PINs are four ASCII digits, unique among rooms, and persisted in SQLite `room_pins`. Address-based create/enter remains a separate path and does not carry a PIN.
+

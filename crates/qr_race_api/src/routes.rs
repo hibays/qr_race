@@ -9,14 +9,15 @@ use axum::http::StatusCode;
 use axum::http::header;
 use axum::http::request::Parts;
 use data_encoding::BASE64;
-use qr_race_core::{CoreError, RelayEntry, RoomAddress, UserId};
+use qr_race_core::{Capital, CoreError, RelayEntry, RoomAddress, UserId};
 use qr_race_hub::{RelayRequest, RoomEvent, generate_token, generate_totp_secret_base32};
 use serde::{Deserialize, Serialize};
 
 use crate::AppState;
 use crate::dto::{
     AuthRequest, AuthResponse, CreateRoomRequest, LobbyDto, LobbyRoomDto, PinRoomResponse,
-    RelayBody, RelayDto, RoomViewDto, SetPinRequest, TargetRequest, WsTicketResponse,
+    PinStartRequest, PinStartResponse, RelayBody, RelayDto, RoomViewDto, SetPinRequest,
+    TargetRequest, WsTicketResponse,
 };
 use crate::error::ApiError;
 
@@ -103,6 +104,31 @@ pub async fn create_room(
     let _ = state.subscribe(&address);
     state.publish(&address, &events);
     Ok((StatusCode::CREATED, Json(address)))
+}
+
+pub async fn start_by_pin(
+    State(state): State<Arc<AppState>>,
+    Authed(user): Authed,
+    Json(body): Json<PinStartRequest>,
+) -> Result<Json<PinStartResponse>, ApiError> {
+    validate_pin(&body.pin)?;
+    let mut hub = state.hub.lock().expect("hub lock");
+    if let Some(address) = hub.resolve_pin(&body.pin) {
+        return Ok(Json(PinStartResponse {
+            address: address.to_string(),
+            created: false,
+        }));
+    }
+    let address = inventory_addresses()
+        .find(|address| !hub.room_exists(address))
+        .ok_or_else(|| ApiError::Conflict("no free room left in the inventory".into()))?;
+    hub.create_room(address.clone(), user.clone())?;
+    hub.light_room(&user, &address)?;
+    hub.set_pin(&user, &address, &body.pin)?;
+    Ok(Json(PinStartResponse {
+        address: address.to_string(),
+        created: true,
+    }))
 }
 
 pub async fn set_pin(
@@ -286,6 +312,40 @@ pub async fn relay(
         .map(|relay: RelayEntry| RelayDto::from(&relay))
         .ok_or_else(|| ApiError::BadRequest("relay was not published".into()))?;
     Ok(Json(relay))
+}
+
+fn inventory_addresses() -> impl Iterator<Item = RoomAddress> {
+    let mut addresses = Vec::new();
+    for (capital, districts, levels, floors) in [
+        (Capital::Tokyo, &["A", "B"][..], 12usize, 6usize),
+        (Capital::Kyoto, &["Z"][..], 8usize, 5usize),
+    ] {
+        for district in districts {
+            for level in 0..levels {
+                let level = match capital {
+                    Capital::Tokyo => format!(
+                        "{}{}",
+                        level / 2 + 1,
+                        if level % 2 == 0 { "A" } else { "B" }
+                    ),
+                    Capital::Kyoto => ((b'A' + level as u8) as char).to_string(),
+                };
+                for floor in 1..=floors {
+                    for unit in 1..=9 {
+                        if let Ok(address) = RoomAddress::new(
+                            capital,
+                            *district,
+                            &level,
+                            format!("{floor}{unit:02}"),
+                        ) {
+                            addresses.push(address);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    addresses.into_iter()
 }
 
 fn validate_pin(pin: &str) -> Result<(), ApiError> {

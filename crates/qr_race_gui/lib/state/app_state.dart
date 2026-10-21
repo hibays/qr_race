@@ -191,6 +191,23 @@ class AppState extends ChangeNotifier {
     }
   }
 
+  Future<String?> startByPin(String pin) async {
+    final client = api;
+    if (client == null) return null;
+    try {
+      final started = await client.startByPin(pin);
+      final entered = await enterRoom(started.address);
+      if (!entered) return null;
+      pairingPin = started.created ? pin : null;
+      notifyListeners();
+      return started.address;
+    } catch (e) {
+      error = _describe(e);
+      notifyListeners();
+      return null;
+    }
+  }
+
   Future<String?> resolvePin(String pin) async {
     final client = api;
     if (client == null) return null;

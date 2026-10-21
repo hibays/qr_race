@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import '../api/api_client.dart';
 import '../api/connect_link.dart';
 import '../state/app_state.dart';
+import 'pin_dialog.dart';
 import '../state/relay_slot.dart';
 import 'open_link_sheet.dart';
 import 'qr_image.dart';
@@ -126,33 +127,11 @@ class _RoomScreenState extends State<RoomScreen> {
   }
 
   Future<void> _setPin() async {
-    final controller = TextEditingController(text: widget.state.pairingPin ?? '');
-    final pin = await showDialog<String>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('设置 4 位配对码'),
-        content: TextField(
-          controller: controller,
-          keyboardType: TextInputType.number,
-          maxLength: 4,
-          autofocus: true,
-          decoration: const InputDecoration(hintText: '0000'),
-        ),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context), child: const Text('取消')),
-          FilledButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.length == 4 && int.tryParse(value) != null) {
-                Navigator.pop(context, value);
-              }
-            },
-            child: const Text('保存'),
-          ),
-        ],
-      ),
+    final pin = await showPinDialog(
+      context,
+      title: '设置 4 位配对码',
+      initial: widget.state.pairingPin ?? '',
     );
-    controller.dispose();
     if (pin == null || !mounted) return;
     await widget.state.setPin(pin);
     if (mounted && widget.state.error != null) {
@@ -733,4 +712,6 @@ class _UnlitBanner extends StatelessWidget {
     );
   }
 }
+
+
 

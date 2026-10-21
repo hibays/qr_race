@@ -1,5 +1,3 @@
-import 'dart:math';
-
 import 'package:flutter/material.dart';
 
 import 'room_catalog.dart';
@@ -30,25 +28,6 @@ class _RoomPickerDialogState extends State<_RoomPickerDialog> {
   String _district = 'A';
   String _level = '1A';
   String _room = '101';
-  final _pin = TextEditingController();
-
-  @override
-  void initState() {
-    super.initState();
-    if (widget.mode == RoomPickerMode.create) {
-      _pin.text = _randomPin();
-    }
-  }
-
-  @override
-  void dispose() {
-    _pin.dispose();
-    super.dispose();
-  }
-
-  static String _randomPin() {
-    return Random.secure().nextInt(10000).toString().padLeft(4, '0');
-  }
 
   void _changeCapital(String value) {
     setState(() {
@@ -138,18 +117,6 @@ class _RoomPickerDialogState extends State<_RoomPickerDialog> {
                   style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
                 ),
               ),
-              if (widget.mode == RoomPickerMode.create) ...[
-                const SizedBox(height: 14),
-                TextField(
-                  controller: _pin,
-                  keyboardType: TextInputType.number,
-                  maxLength: 4,
-                  decoration: const InputDecoration(
-                    labelText: '4 位配对码',
-                    helperText: '房间成员可凭此码进入；可修改',
-                  ),
-                ),
-              ],
             ],
           ),
         ),
@@ -161,18 +128,7 @@ class _RoomPickerDialogState extends State<_RoomPickerDialog> {
         ),
         FilledButton(
           onPressed: () {
-            final pin = _pin.text.trim();
-            if (widget.mode == RoomPickerMode.create &&
-                (pin.length != 4 || int.tryParse(pin) == null)) {
-              return;
-            }
-            Navigator.pop(
-              context,
-              RoomChoice(
-                address: _address,
-                pin: widget.mode == RoomPickerMode.create ? pin : null,
-              ),
-            );
+            Navigator.pop(context, RoomChoice(address: _address));
           },
           child: Text(widget.mode == RoomPickerMode.create ? '创建并点亮' : '进入'),
         ),
@@ -181,36 +137,5 @@ class _RoomPickerDialogState extends State<_RoomPickerDialog> {
   }
 }
 
-Future<String?> showPinEntry(BuildContext context) {
-  final controller = TextEditingController();
-  return showDialog<String>(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('输入 4 位配对码'),
-      content: TextField(
-        controller: controller,
-        autofocus: true,
-        keyboardType: TextInputType.number,
-        maxLength: 4,
-        decoration: const InputDecoration(hintText: '0000'),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('取消'),
-        ),
-        FilledButton(
-          onPressed: () {
-            final pin = controller.text.trim();
-            if (pin.length == 4 && int.tryParse(pin) != null) {
-              Navigator.pop(context, pin);
-            }
-          },
-          child: const Text('进入'),
-        ),
-      ],
-    ),
-  ).whenComplete(controller.dispose);
-}
 
 

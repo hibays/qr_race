@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
 import '../rooms/room_picker.dart';
+import 'pin_dialog.dart';
 import '../state/app_state.dart';
 import 'connect_screen.dart';
 import 'room_screen.dart';
@@ -50,13 +51,13 @@ class _LobbyScreenState extends State<LobbyScreen> {
   }
 
   Future<void> _enterByPin() async {
-    final pin = await showPinEntry(context);
+    final pin = await showPinDialog(context, title: '输入 4 位配对码');
     if (pin == null || !mounted) return;
-    final address = await widget.state.resolvePin(pin);
+    final address = await widget.state.startByPin(pin);
     if (address == null) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.state.error ?? '没有这个配对码')),
+        SnackBar(content: Text(widget.state.error ?? '配对码开房失败')),
       );
       return;
     }
@@ -67,10 +68,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final choice = await showRoomPicker(context, mode: RoomPickerMode.create);
     if (choice == null || !mounted) return;
 
-    final error = await widget.state.createAndLight(
-      choice.address,
-      pin: choice.pin,
-    );
+    final error = await widget.state.createAndLight(choice.address);
     if (!mounted) return;
     if (error != null) {
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
@@ -103,7 +101,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
             icon: const Icon(Icons.add),
           ),
           IconButton(
-            tooltip: '配对码进入',
+            tooltip: 'PIN 开房/进房',
             onPressed: _enterByPin,
             icon: const Icon(Icons.pin_outlined),
           ),
@@ -276,4 +274,9 @@ class _CenteredNote extends StatelessWidget {
     );
   }
 }
+
+
+
+
+
 

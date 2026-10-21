@@ -52,6 +52,17 @@ pub struct PinRoomResponse {
 }
 
 #[derive(Debug, Deserialize)]
+pub struct PinStartRequest {
+    pub pin: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PinStartResponse {
+    pub address: String,
+    pub created: bool,
+}
+
+#[derive(Debug, Deserialize)]
 pub struct TargetRequest {
     pub target: UserId,
 }

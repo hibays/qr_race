@@ -106,6 +106,14 @@ class ApiClient {
     return body['address'] as String;
   }
 
+  Future<({String address, bool created})> startByPin(String pin) async {
+    final body = await _post('/v1/rooms/start-by-pin', body: {'pin': pin});
+    return (
+      address: body['address'] as String,
+      created: body['created'] as bool? ?? false,
+    );
+  }
+
 
   Future<void> lightRoom(String address) async {
     await _post('/v1/room/light', query: {'address': address});
@@ -340,6 +348,7 @@ class Relay {
     return '$hour:$minute';
   }
 }
+
 
 
 

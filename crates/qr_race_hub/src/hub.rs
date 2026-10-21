@@ -222,6 +222,10 @@ impl Hub {
     pub fn resolve_pin(&self, pin: &str) -> Option<RoomAddress> {
         self.pins.get(pin).cloned()
     }
+
+    pub fn room_exists(&self, address: &RoomAddress) -> bool {
+        self.rooms.contains_key(address)
+    }
     pub fn light_room(
         &mut self,
         actor: &UserId,

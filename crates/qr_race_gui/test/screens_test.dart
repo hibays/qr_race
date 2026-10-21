@@ -133,11 +133,11 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('创建房间'), findsOneWidget);
 
-    await tester.enterText(find.byType(TextField), '西京Z区B级103房');
     await tester.tap(find.text('创建并点亮'));
     await tester.pumpAndSettle();
 
     expect(find.text('离线演示模式不能建房'), findsOneWidget);
   });
 }
+
 
