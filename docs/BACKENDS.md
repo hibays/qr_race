@@ -11,7 +11,7 @@ target can swap one without changing the lobby/room/relay code.
 | WASM (`wasm32-unknown-unknown`) | lele AOT Rust codegen | `getUserMedia` → canvas → WASM memory | `qr_race_detect_lele` WASM detector runs when zxing-wasm misses; zxing-wasm decodes the candidates |
 | Android | ONNX Runtime 1.29 through `ort` rc15; XNNPACK EP configurable | Camera2 YUV → JNI → Rust `&[u8]`; Camera2 `SurfaceTexture` → Flutter Texture | ORT build and Texture preview work on device |
 | iOS/macOS | ONNX Runtime CoreML EP | AVFoundation/CVPixelBuffer → Rust; Metal texture | capture-apple not implemented |
-| Windows/Linux/macOS desktop | `ort` rc15 / Candle | nokhwa (MediaFoundation/V4L2/AVFoundation) | `ort` rc15 is the current desktop backend; Candle is optional/future |
+| Windows/Linux/macOS desktop | `ort` rc15 | nokhwa (MediaFoundation/V4L2/AVFoundation) | `ort` rc15 is the current desktop backend |
 
 `st-zrt` was evaluated as the universal native runtime. It is not a viable
 single choice: its supported release lines do not cover iOS/CoreML, and
@@ -33,12 +33,10 @@ versus ~8 ms on the ORT CPU EP.
 | `detect-lele` | `qr_race_detect_lele` | real WASM crate: 384 detector + lele AOT, no zxing-cpp |
 | `detect-ort` | `qr_race_wechat::backend::ort` | native product backend (ort rc15 + ORT 1.29) |
 | `detect-stzrt` | benchmark only (`tools/backend_bench/stzrt`) | comparison only; cannot coexist with ort |
-| `detect-candle` | not implemented | optional desktop backend |
 | `capture-core` | `qr_race_capture` | frame format + `CaptureSource` trait + pacer |
 | `capture-desktop` | `qr_race_capture_desktop` | nokhwa backends |
 | `capture-android` | Kotlin `CameraCapture` + JNI in `qr_race_ffi` | extract into a dedicated crate/module; keep the zero-copy YUV path |
 | `capture-apple` | absent | AVFoundation/CVPixelBuffer |
-| `capture-wasm` | JS `getUserMedia` + `zxing-wasm` bridge | WebGL texture → WASM memory; lele inference |
 | `bindings-flutter` | `qr_race_ffi` C ABI + method channel/Texture widgets | keep; expose the new backend/capture capabilities |
 
 The important invariant stays unchanged: **camera frames never enter Dart**.
@@ -82,15 +80,16 @@ tools/backend_bench/stzrt
 2. Split `qr_race_scan` into `scan-pipeline` + `decode-zxing`, keeping
    `qr_race_scan` as a re-export facade so callers do not change.
 3. Create one `detect-*` crate per runtime. This is the only way to let ORT,
-   lele and Candle coexist without Cargo's `links` collision.
+   lele coexist without Cargo's `links` collision.
 4. Move Android capture out of `qr_race_ffi` into `capture-android`; keep the
    Kotlin `SurfaceTexture`/YUV bridge as its native implementation.
-5. Add `capture-apple`/`capture-wasm` behind the same `CaptureSource` contract.
+5. Add `capture-apple` behind the same `CaptureSource` contract.
 6. Keep `bindings-flutter` thin: method channel + texture ids + JSON state only.
 
 The native product now uses `ort` rc15 + ORT 1.29 on Android and desktop;
 `st-zrt` remains only in the benchmark tool. WASM/lele and the capture splits
 above are the remaining steps.
+
 
 
 

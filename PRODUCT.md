@@ -63,7 +63,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 
 **工程结构**
 
-- 采集与推理按平台分层：capture-core / capture-android / capture-apple / capture-desktop / capture-wasm / capture 聚合层；CNN 后端同法分层。
+- 采集与推理按平台分层：capture-core / capture-android / capture-apple / capture-desktop / capture 聚合层；扫描编排统一在 `qr_race_pipeline`，zxing 只解码、CNN 只检测/超分。
 - Web（wasm）客户端承担实时采集扫码，与原生端同功能，不是只做展示与接力。
 - Rust workspace：`crates/` 下分 crate；最外层 `src/` 是唯一的 server 二进制。
 - 可扩展但不做 Python 模组：保留 Rust trait、领域事件、协议与客户端导航等扩展点；移除 RustPython 运行时、模组上传/选择 UI 与 mod 产品承诺。
@@ -106,6 +106,7 @@ Rust workspace（edition 2024）。`crates/` 下按职责拆 crate，最外层 `
 3. **房间是真实地点。** 京、区、级、房对应现实场地，房间码是鉴权路径的一部分；成员可以在别处，接力让这种分离成立。
 4. **原生深度，薄接缝。** 帧与推理留在原生层，Flutter 只负责界面；模块在 server 与 client 两端都可拔插，接口要窄、可替换。
 5. **生产即标准。** TDD、可复现的基准、明确的许可与安全边界；不拿演示级实现充数。
+
 
 
 

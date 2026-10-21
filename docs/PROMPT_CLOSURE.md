@@ -13,7 +13,7 @@ status document, not a claim that every requirement is complete.
 | 4 | Multi-code / parallel crop decode | Partial | desktop `thread::scope`; mobile serial |
 | 5 | WeChat detector + SR + decode | Done (own pipeline) | `qr_race_wechat`, ort rc15 native |
 | 6 | Far/small-code scan-rate gain | Done (sample) | far QR decoded; zxing-cpp + color device run: fast p50 8.3 ms / p95 21.1 ms at 1920×1440 |
-| 7 | CNN backend speed selection | Done (tested: ort/st-zrt) | ort 6.3 ms CNN / 19.1 ms tiled desktop; st-zrt benchmarked at parity; Candle future |
+| 7 | CNN backend speed selection | Done (tested: ort/st-zrt) | ort 6.3 ms CNN / 19.1 ms tiled desktop; st-zrt benchmarked at parity; WASM lele fallback live |
 | 8 | Camera capture: Android | Done | 2K request (2560×1440, fallback), Y/U/V color planes → JNI → Rust; full-screen UI |
 | 9 | Camera capture: desktop | Done | nokhwa backend |
 | 10 | Camera capture: Web | Done (fake camera) | zxing-wasm reader; fake-camera hit 640×480/1.7 ms; physical hit pending |
@@ -61,8 +61,7 @@ Device-only checks:
 2. **Apple capture.** `qr_race_capture_apple` + AVFoundation, then the same
    frame-never-in-Dart contract.
 3. **Optional follow-ups.** st-zrt is benchmark-only (same ORT kernels, no
-   native advantage); lele is the WASM AOT path; Candle is the remaining
-   desktop option. Keep the `Net` trait for future backends.
+   native advantage); lele is the WASM AOT path. Keep the `Net` trait for future backends.
 
 ## Four-layer closure view
 
@@ -71,6 +70,7 @@ Device-only checks:
 - **Service layer:** rooms/roles/relay/auth/TLS/WS; token-only login.
 - **Product layer:** Flutter UI, auto-publish, invites, deep links, deployment;
   Python modules are explicitly out of scope, with Rust extension seams kept.
+
 
 
 

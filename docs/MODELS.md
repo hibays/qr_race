@@ -38,7 +38,7 @@ for the detector heads, or a comparison against an OpenCV 4 environment.
   as fallback. Real 1920×1440 run: fast p50 8.3 ms / p95 21.1 ms, CNN 9.5 ms.
   `ort` rc15 loads ONNX Runtime 1.29 dynamically. Desktop: detect 384 p50
   6.3 ms, 2×2 tiled far p50 19.1 ms. `st-zrt` is benchmark-only; lele is the
-  WASM AOT direction; Candle is future. `OrtNet` and `LeleNet` implement the
+  WASM AOT direction. `OrtNet` and `LeleNet` implement the
   same `Net` trait.
 - **Far/small:** a live 11-vmin PC-screen QR decoded
   `https://example.test/far-small-live` at 1280×720 through the tiled path.
@@ -65,6 +65,7 @@ ONNX Runtime 1.29 (MIT) is not vendored; the Android
 build packages `jniLibs/<abi>/libonnxruntime.so` from
 `com.microsoft.onnxruntime:onnxruntime-android:1.29.0`; `ort` loads it
 dynamically. Desktop packages the same ORT 1.29 DLL next to the executable.
+
 
 
 
