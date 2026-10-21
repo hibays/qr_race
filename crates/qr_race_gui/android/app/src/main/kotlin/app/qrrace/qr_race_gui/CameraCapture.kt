@@ -31,10 +31,12 @@ class CameraCapture(
     private var reader: ImageReader? = null
     private val busy = AtomicBoolean(false)
     private var sensorOrientation = 90
+    @Volatile private var stopped = false
 
     @SuppressLint("MissingPermission")
     fun start(requestedWidth: Int, requestedHeight: Int) {
-        if (camera != null) return
+        if (camera != null || thread != null) return
+        stopped = false
         val worker = HandlerThread("qr-camera").also { it.start() }
         thread = worker
         val callbackHandler = Handler(worker.looper)
@@ -57,6 +59,10 @@ class CameraCapture(
         try {
             manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(device: CameraDevice) {
+                    if (stopped) {
+                        device.close()
+                        return
+                    }
                     camera = device
                     val targets = buildList {
                         add(surface)
@@ -66,6 +72,10 @@ class CameraCapture(
                         targets,
                         object : CameraCaptureSession.StateCallback() {
                             override fun onConfigured(configured: CameraCaptureSession) {
+                                if (stopped || camera !== device) {
+                                    configured.close()
+                                    return
+                                }
                                 session = configured
                                 val request = device.createCaptureRequest(
                                     CameraDevice.TEMPLATE_PREVIEW,
@@ -115,6 +125,7 @@ class CameraCapture(
     }
 
     fun stop() {
+        stopped = true
         try {
             session?.stopRepeating()
             session?.close()
@@ -255,4 +266,5 @@ class CameraCapture(
         }
     }
 }
+
 

@@ -143,18 +143,6 @@ class MainActivity : FlutterActivity() {
 
     override fun onResume() {
         super.onResume()
-        if (captureActive && capture == null && isGranted()) {
-            // The old SurfaceTexture can remain black after the Flutter engine
-            // detaches on pause. Recreate it and let Dart pick up the new id.
-            previewTexture?.release()
-            previewTexture = null
-            val texture = ensurePreviewTexture()
-            texture.surfaceTexture().setDefaultBufferSize(captureWidth, captureHeight)
-            capture = CameraCapture(
-                this,
-                Surface(texture.surfaceTexture()),
-            ).also { it.start(captureWidth, captureHeight) }
-        }
     }
 
     private fun ensurePreviewTexture(): TextureRegistry.SurfaceTextureEntry {
@@ -288,5 +276,6 @@ class MainActivity : FlutterActivity() {
         startActivity(intent)
     }
 }
+
 
 

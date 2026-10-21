@@ -38,6 +38,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
   bool _requesting = true;
   String _backendName = 'hybrid';
   bool _listOnly = false;
+  bool _paused = false;
 
   @override
   void initState() {
@@ -129,7 +130,10 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
-    if (state == AppLifecycleState.resumed) {
+    if (state == AppLifecycleState.paused) {
+      _paused = true;
+    } else if (state == AppLifecycleState.resumed && _paused) {
+      _paused = false;
       _controller?.restartCamera();
     }
   }
@@ -1020,6 +1024,7 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
 
 
 
