@@ -19,6 +19,9 @@ single choice: its supported release lines do not cover iOS/CoreML, and
 refuses to resolve a graph containing both even behind target-specific features.
 The native product therefore standardizes on `ort` rc15 + ONNX Runtime 1.29;
 `st-zrt` remains only as a benchmark comparison. lele is reserved for WASM.
+XNNPACK and CoreML session-options hooks are compiled in; XNNPACK is opt-in
+(`QR_ORT_EP=xnnpack`) because the OPD2413 384 graph measured ~21 ms with it
+versus ~8 ms on the ORT CPU EP.
 
 ## Crate layout: current → target
 
@@ -88,4 +91,5 @@ tools/backend_bench/stzrt
 The native product now uses `ort` rc15 + ORT 1.29 on Android and desktop;
 `st-zrt` remains only in the benchmark tool. WASM/lele and the capture splits
 above are the remaining steps.
+
 

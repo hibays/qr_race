@@ -117,11 +117,16 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                 // The fast path gets RGB from Camera2. On a miss, retry the RGB
                 // frame with zxing-cpp's harder reader before waking the CNN;
                 // this is the main recognition-rate lever for dim/far codes.
+                let fast_scale = if frame.width >= 1600 { 3 } else { 1 };
                 let mut color_hits = if fast_enabled {
                     frame
                         .color
                         .as_deref()
-                        .and_then(|rgb| decoder.decode_rgb(rgb, frame.width, frame.height).ok())
+                        .and_then(|rgb| {
+                            decoder
+                                .decode_rgb_scaled(rgb, frame.width, frame.height, fast_scale)
+                                .ok()
+                        })
                         .unwrap_or_default()
                 } else {
                     Vec::new()
@@ -131,10 +136,13 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                         .color
                         .as_deref()
                         .and_then(|rgb| {
-                            hard_decoder.decode_rgb(rgb, frame.width, frame.height).ok()
+                            hard_decoder
+                                .decode_rgb_scaled(rgb, frame.width, frame.height, fast_scale)
+                                .ok()
                         })
                         .unwrap_or_default();
                 }
+                let color_fast = fast_enabled && !color_hits.is_empty();
                 let outcome = if fast_enabled && color_hits.is_empty() {
                     engine.scan(&gray)
                 } else {
@@ -149,7 +157,7 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                         // One color decode can miss a second code at the frame
                         // edge. Retry the luma fast path and merge by raw bytes
                         // before falling through to CNN.
-                        if fast_enabled && base_hits.len() < 2 {
+                        if color_fast && base_hits.len() < 2 && frame_seq.is_multiple_of(64) {
                             if let Ok(extra) = engine.scan(&gray) {
                                 for hit in extra.hits {
                                     if !base_hits.iter().any(|existing| {
@@ -172,7 +180,11 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                                 let cnn_started = Instant::now();
                                 // Most CNN passes use 384; every fourth pass
                                 // spends the 768 detector for far/small codes.
-                                let target = if frame_seq % 8 == 0 { 768 } else { 384 };
+                                let target = if frame_seq.is_multiple_of(256) {
+                                    768
+                                } else {
+                                    384
+                                };
                                 let cnn = tiered.scan_cnn_at(&gray, target);
                                 ran_cnn = true;
                                 let cnn_ms = cnn_started.elapsed().as_secs_f64() * 1000.0;

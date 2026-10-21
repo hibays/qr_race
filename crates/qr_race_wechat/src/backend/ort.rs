@@ -6,6 +6,9 @@
 
 use std::sync::{Mutex, OnceLock};
 
+#[cfg(any(target_os = "android", target_os = "macos", target_os = "ios"))]
+use std::num::NonZeroUsize;
+
 use ort::session::Session;
 use ort::value::Tensor;
 
@@ -26,8 +29,45 @@ fn environment() -> &'static ort::environment::Environment {
 
 impl OrtNet {
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, String> {
-        let session = Session::builder(environment())
-            .and_then(|mut builder| builder.commit_from_memory(bytes))
+        let builder = Session::builder(environment())
+            .map_err(|error| format!("ort: session builder: {error}"))?;
+
+        // XNNPACK is opt-in: on OPD2413 the 384 graph ran at ~21 ms with
+        // XNNPACK versus ~8 ms on the ORT CPU EP, so it is not the default.
+        // `QR_ORT_EP=xnnpack` selects it for A/B runs.
+        #[cfg(all(target_os = "android", feature = "xnnpack"))]
+        let builder = if std::env::var("QR_ORT_EP").as_deref() == Ok("xnnpack") {
+            match builder.with_execution_providers([ort::ep::XNNPACK::default()
+                .with_intra_op_num_threads(NonZeroUsize::new(4).unwrap())
+                .build()])
+            {
+                Ok(builder) => builder,
+                Err(error) => {
+                    eprintln!("ort: XNNPACK unavailable ({error}); using CPU");
+                    Session::builder(environment())
+                        .map_err(|error| format!("ort: session builder: {error}"))?
+                }
+            }
+        } else {
+            builder
+        };
+
+        #[cfg(all(any(target_os = "macos", target_os = "ios"), feature = "coreml"))]
+        let builder = match builder.with_execution_providers([ort::ep::CoreML::default()
+            .with_compute_units(ort::ep::coreml::ComputeUnits::All)
+            .build()])
+        {
+            Ok(builder) => builder,
+            Err(error) => {
+                eprintln!("ort: CoreML unavailable ({error}); using CPU");
+                Session::builder(environment())
+                    .map_err(|error| format!("ort: session builder: {error}"))?
+            }
+        };
+
+        let mut builder = builder;
+        let session = builder
+            .commit_from_memory(bytes)
             .map_err(|error| format!("ort: cannot load model: {error}"))?;
         Ok(Self {
             session: Mutex::new(session),

@@ -86,6 +86,46 @@ impl ZxingDecoder {
         }
     }
 
+    /// Decodes a downscaled RGB frame and maps hit points back to full
+    /// resolution. The fast path runs at half size on 2K camera frames; the CNN
+    /// and SR path still use the full-resolution grayscale frame.
+    pub fn decode_rgb_scaled(
+        &self,
+        data: &[u8],
+        width: u32,
+        height: u32,
+        factor: u32,
+    ) -> Result<Vec<ScanHit>, ScanError> {
+        if factor <= 1 {
+            return self.decode_rgb(data, width, height);
+        }
+        let full = (width as usize)
+            .saturating_mul(height as usize)
+            .saturating_mul(3);
+        if data.len() < full {
+            return Err(ScanError::Decode("short RGB frame".into()));
+        }
+        let small_width = width / factor;
+        let small_height = height / factor;
+        let mut small = vec![0u8; small_width as usize * small_height as usize * 3];
+        for y in 0..small_height as usize {
+            let src = (y * factor as usize) * width as usize * 3;
+            let dst = y * small_width as usize * 3;
+            for x in 0..small_width as usize {
+                let from = src + x * factor as usize * 3;
+                small[dst + x * 3..dst + x * 3 + 3].copy_from_slice(&data[from..from + 3]);
+            }
+        }
+        let mut hits = self.decode_rgb(&small, small_width, small_height)?;
+        for hit in &mut hits {
+            for point in &mut hit.points {
+                point[0] *= factor as f32;
+                point[1] *= factor as f32;
+            }
+        }
+        Ok(hits)
+    }
+
     /// Decodes a tightly packed RGB frame, preserving chroma for the detector.
     pub fn decode_rgb(
         &self,

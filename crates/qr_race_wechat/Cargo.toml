@@ -9,8 +9,10 @@ license.workspace = true
 doctest = false
 
 [features]
-default = ["ort"]
+default = ["ort", "xnnpack", "coreml"]
 ort = ["dep:ort"]
+xnnpack = []
+coreml = []
 lele = ["dep:lele"]
 
 [dependencies]
@@ -18,7 +20,7 @@ qr_race_scan.workspace = true
 cvlite = { path = "../cvlite" }
 zxing-cpp = { version = "0.5.3", default-features = false }
 lele = { version = "=0.1.15", default-features = false, optional = true }
-ort = { version = "=2.0.0-rc.15", default-features = false, features = ["load-dynamic"], optional = true }
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["load-dynamic", "xnnpack", "coreml"], optional = true }
 
 [dev-dependencies]
 qrcode = "0.14"
@@ -31,5 +33,7 @@ zxing-cpp = { version = "0.5.3", default-features = false, features = ["bundled"
 
 [build-dependencies]
 lele = { version = "=0.1.15", features = ["compiler"] }
+
+
 
 

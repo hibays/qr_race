@@ -31,10 +31,10 @@ serde_json.workspace = true
 [target.'cfg(target_os = "android")'.dependencies]
 jni = "0.21"
 # ONNX Runtime 1.29 is packaged per ABI and loaded dynamically by ort.
-qr_race_wechat = { workspace = true, default-features = false, features = ["ort"] }
+qr_race_wechat = { workspace = true, default-features = false, features = ["ort", "xnnpack"] }
 
 [target.'cfg(not(target_os = "android"))'.dependencies]
-qr_race_wechat = { workspace = true, default-features = false, features = ["ort"] }
+qr_race_wechat = { workspace = true, default-features = false, features = ["ort", "xnnpack"] }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = [
@@ -45,6 +45,7 @@ windows-sys = { version = "0.61", features = [
 
 [dev-dependencies]
 qrcode = "0.14"
+
 
 
 
