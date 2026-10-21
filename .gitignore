@@ -12,3 +12,5 @@ crates/qr_race_gui/android/app/src/main/jniLibs/**/*.so
 tools/backend_bench/*/target/
 tools/backend_bench/*/Cargo.lock
 
+
+/crates/qr_race_gui/web/scan/lele/

@@ -1,0 +1,21 @@
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[package]
+name = "qr_race_detect_lele"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[features]
+default = []
+wasm = ["dep:wasm-bindgen"]
+
+[dependencies]
+cvlite = { path = "../cvlite" }
+lele = { version = "=0.1.15", default-features = false }
+wasm-bindgen = { version = "0.2", optional = true }
+
+[build-dependencies]
+lele = { version = "=0.1.15", features = ["compiler"] }
+

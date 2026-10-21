@@ -7,6 +7,7 @@ members = [
     "crates/qr_race_fixtures",
     "crates/qr_race_capture",
     "crates/qr_race_capture_desktop",
+    "crates/qr_race_detect_lele",
     "crates/qr_race_ffi",
     "crates/qr_race_hub",
     "crates/qr_race_store",
@@ -81,3 +82,4 @@ overflow-checks = true
 [profile.release]
 lto = true
 codegen-units = 1
+

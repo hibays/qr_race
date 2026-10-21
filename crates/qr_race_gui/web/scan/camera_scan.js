@@ -9,9 +9,11 @@ import {
   prepareZXingModule as prepareWriter,
   writeBarcode,
 } from './zxing-wasm/writer/index.js';
+import initLele, { detect as leleDetect } from './lele/qr_race_detect_lele.js';
 
 const readerWasm = new URL('./zxing_reader.wasm', import.meta.url).href;
 const writerWasm = new URL('./zxing_writer.wasm', import.meta.url).href;
+const leleWasm = new URL('./lele/qr_race_detect_lele_bg.wasm', import.meta.url).href;
 
 const locate = (wasm) => (path, prefix) =>
   path.endsWith('.wasm') ? wasm : prefix + path;
@@ -25,13 +27,17 @@ window.qrRaceScanReady = Promise.all([
     overrides: { locateFile: locate(writerWasm) },
     fireImmediately: true,
   }),
-]).then(() => true);
+]).then(async () => {
+  await initLele({ module_or_path: leleWasm });
+  return true;
+});
 
 let stream = null;
 let video = null;
 let canvas = null;
 let running = false;
 let lastScan = 0;
+let leleCanvas = null;
 
 function ensureCanvas() {
   if (!canvas) {
@@ -40,6 +46,75 @@ function ensureCanvas() {
     canvas.height = 480;
   }
   return canvas;
+}
+
+function ensureLeleCanvas() {
+  if (!leleCanvas) {
+    leleCanvas = document.createElement('canvas');
+    leleCanvas.width = 384;
+    leleCanvas.height = 384;
+  }
+  return leleCanvas;
+}
+
+// lele runs the WeChat 384 detector on a downscaled grayscale frame; zxing-wasm
+// decodes each candidate crop at full resolution. This is the WASM counterpart
+// of the native tiered path.
+async function leleFallback(imageData, width, height) {
+  const c = ensureLeleCanvas();
+  const ctx = c.getContext('2d', { willReadFrequently: true });
+  ctx.drawImage(video, 0, 0, c.width, c.height);
+  const pixels = ctx.getImageData(0, 0, c.width, c.height).data;
+  const gray = new Uint8Array(c.width * c.height);
+  for (let i = 0, p = 0; i < gray.length; i++, p += 4) {
+    gray[i] = (pixels[p] * 77 + pixels[p + 1] * 150 + pixels[p + 2] * 29) >> 8;
+  }
+  const boxes = leleDetect(gray, c.width, c.height);
+  const hits = [];
+  const crop = document.createElement('canvas');
+  const cropCtx = crop.getContext('2d', { willReadFrequently: true });
+  for (let i = 0; i + 7 < boxes.length; i += 8) {
+    const x0 = Math.max(0, (boxes[i] / c.width) * width);
+    const y0 = Math.max(0, (boxes[i + 1] / c.height) * height);
+    const x1 = Math.min(width, (boxes[i + 4] / c.width) * width);
+    const y1 = Math.min(height, (boxes[i + 5] / c.height) * height);
+    const padX = (x1 - x0) * 0.1;
+    const padY = (y1 - y0) * 0.1;
+    const left = Math.max(0, Math.floor(x0 - padX));
+    const top = Math.max(0, Math.floor(y0 - padY));
+    const right = Math.min(width, Math.ceil(x1 + padX));
+    const bottom = Math.min(height, Math.ceil(y1 + padY));
+    const w = right - left;
+    const h = bottom - top;
+    if (w < 16 || h < 16) continue;
+    if (crop.width !== w || crop.height !== h) {
+      crop.width = w;
+      crop.height = h;
+    }
+    cropCtx.drawImage(video, left, top, w, h, 0, 0, w, h);
+    const cropImage = cropCtx.getImageData(0, 0, w, h);
+    const found = await readBarcodes(cropImage, {
+      formats: ['QRCode'],
+      tryHarder: true,
+      maxNumberOfSymbols: 1,
+    });
+    for (const result of found) {
+      hits.push({
+        text: result.text,
+        raw_b64: base64(result.bytes || new TextEncoder().encode(result.text || '')),
+        format: result.format,
+        points: result.position
+          ? [
+              [result.position.topLeft.x + left, result.position.topLeft.y + top],
+              [result.position.topRight.x + left, result.position.topRight.y + top],
+              [result.position.bottomRight.x + left, result.position.bottomRight.y + top],
+              [result.position.bottomLeft.x + left, result.position.bottomLeft.y + top],
+            ]
+          : [],
+      });
+    }
+  }
+  return hits;
 }
 
 function base64(bytes) {
@@ -69,6 +144,9 @@ async function scanFrame(onJson) {
       tryHarder: true,
       maxNumberOfSymbols: 8,
     });
+    if (results.length === 0) {
+      results = await leleFallback(image, width, height);
+    }
   } catch (e) {
     error = String(e && e.message ? e.message : e);
   }
@@ -169,3 +247,4 @@ window.qrRaceQrWebp = async function (text) {
   );
   return new Uint8Array(await blob.arrayBuffer());
 };
+

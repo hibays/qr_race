@@ -8,7 +8,7 @@ target can swap one without changing the lobby/room/relay code.
 
 | Target | Inference | Capture | Status |
 |---|---|---|---|
-| WASM (`wasm32-unknown-unknown`) | lele AOT Rust codegen | `getUserMedia` → WebGL texture → WASM memory | Web UI currently uses `zxing-wasm`; lele WASM split still to do |
+| WASM (`wasm32-unknown-unknown`) | lele AOT Rust codegen | `getUserMedia` → canvas → WASM memory | `qr_race_detect_lele` WASM detector runs when zxing-wasm misses; zxing-wasm decodes the candidates |
 | Android | ONNX Runtime 1.29 through `ort` rc15; XNNPACK EP configurable | Camera2 YUV → JNI → Rust `&[u8]`; Camera2 `SurfaceTexture` → Flutter Texture | ORT build and Texture preview work on device |
 | iOS/macOS | ONNX Runtime CoreML EP | AVFoundation/CVPixelBuffer → Rust; Metal texture | capture-apple not implemented |
 | Windows/Linux/macOS desktop | `ort` rc15 / Candle | nokhwa (MediaFoundation/V4L2/AVFoundation) | `ort` rc15 is the current desktop backend; Candle is optional/future |
@@ -30,7 +30,7 @@ versus ~8 ms on the ORT CPU EP.
 | `scan-core` | `qr_race_scan::{GrayFrame, Decoder, Detector, ScanHit}` | extract the pure data/traits; keep `qr_race_scan` as the facade |
 | `scan-pipeline` | `qr_race_scan::ScanEngine` | move orchestration/NMS/ROI/rayon decode here |
 | `decode-zxing` | `qr_race_scan::ZxingDecoder` | keep; wrap C++ zxing-cpp, no platform capture dependency |
-| `detect-lele` | `qr_race_wechat::backend::lele` | AOT codegen; suitable for WASM |
+| `detect-lele` | `qr_race_detect_lele` | real WASM crate: 384 detector + lele AOT, no zxing-cpp |
 | `detect-ort` | `qr_race_wechat::backend::ort` | native product backend (ort rc15 + ORT 1.29) |
 | `detect-stzrt` | benchmark only (`tools/backend_bench/stzrt`) | comparison only; cannot coexist with ort |
 | `detect-candle` | not implemented | optional desktop backend |
@@ -91,5 +91,6 @@ tools/backend_bench/stzrt
 The native product now uses `ort` rc15 + ORT 1.29 on Android and desktop;
 `st-zrt` remains only in the benchmark tool. WASM/lele and the capture splits
 above are the remaining steps.
+
 
 
