@@ -6,7 +6,7 @@
 
 ## 现在有什么（M0–M30）
 
-工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/桌面与 Android 一键自部署）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建 + zxing-wasm 浏览器扫码/WebP 二维码、内置自签名 HTTPS、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android App（内置 Rust 服务端、Camera2→Rust 扫码、权限/所有文件访问引导、二维码显示）、按前缀的自动发布与动态槽位、外部 App scheme 跳转、纯 Rust qrcode 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）、自实现微信 CNN 分层流水线（zxing-cpp 快路径 → CNN 384 → 全分辨率 crop → 小码 SR → 分块远码检测）已落地；Android 用 st-zrt；解码/WeChat crop 已统一为 zxing-cpp，Camera2 改为 YUV 彩色三平面，Android 预览改为 Flutter Texture；OnePlus 真机 1920×1440 已复测 fast p50 8.3ms/p95 21.1ms，Apple 采集仍缺失。
+工作区、领域模型、扫码流水线与基准、鉴权与房间服务、HTTP/WS 传输、采集核心与桌面相机后端、参考客户端、Flutter 客户端（连接/大厅/房间/房主流程/扫码页/桌面与 Android 一键自部署）、原生扫描会话 FFI、SQLite 持久化、粗到精扫描流水线、Flutter Web 构建 + zxing-wasm 浏览器扫码/WebP 二维码、内置自签名 HTTPS、CLI 与 Flutter 的自签名证书信任（指纹固定）、Android App（内置 Rust 服务端、Camera2→Rust 扫码、权限/所有文件访问引导、二维码显示）、按前缀的自动发布与动态槽位、外部 App scheme 跳转、纯 Rust qrcode 生成二维码（2048² 无损 WebP，参数对齐 rcrm bridge）、程序化扰动纹理套件、WeChat Caffe 权重自行转 ONNX（SR 数值对齐，检测器 raw heads）、自实现微信 CNN 分层流水线（zxing-cpp 快路径 → CNN 384 → 全分辨率 crop → 小码 SR → 分块远码检测）已落地；Android/桌面用 ort rc15；解码/WeChat crop 已统一为 zxing-cpp，Camera2 改为 YUV 彩色三平面，Android 预览改为 Flutter Texture；OnePlus 真机 1920×1440 已复测 fast p50 8.3ms/p95 21.1ms，Apple 采集仍缺失。
 
 ```
 crates/
@@ -20,7 +20,7 @@ crates/
 ├── qr_race_store/             SQLite 持久化：房间、成员/角色、接力
 ├── qr_race_tls/               自签名证书生成/复用 + hyper-util TLS 服务循环
 ├── qr_race_api/               HTTP + WebSocket 传输：会话、房间 API、事件广播
-├── qr_race_wechat/            自实现微信检测/超分流水线（Android st-zrt / 桌面 lele AOT）
+├── qr_race_wechat/            自实现微信检测/超分流水线（Android/桌面 ort rc15 + ORT 1.29；lele 为 WASM 方向）
 ├── cvlite/                     vendored 上游图像缩放/颜色工具（WeChat pipeline 依赖）
 ├── qr_race_cli/               扫描客户端（bin: qr_scan）：图片或相机 → 登录 → 发布接力
 ├── qr_race_gui/               Flutter 客户端：连接、大厅、房间接力墙、扫码页（手机/桌面同套界面）
@@ -77,7 +77,7 @@ tools/qr_bench.html            手工双码测试台（浏览器打开，用手�
 - **完整取景**：相机按传感器比例 `BoxFit.contain` 显示全部画面（黑边而不是裁掉边缘），结果面板悬浮在底部；多码时每个码都有命中框和内容气泡，并显示“已广播到房间/广播中/离线”。
 - **CNN**：fast miss 后进入 WeChat 检测器（384×384），候选框回全分辨率 crop，再由 zxing-cpp 解码；小 crop 按需跑 SR；
 - **远码**：每第 4 次 CNN 把画面切成 2×2 重叠块，各送 384 检测，保留小模块；
-- **后端**：Android 用 st-zrt + ONNX Runtime 1.29（真机 CNN 9.5ms）；桌面用 lele AOT（detect 384 p50 19.7ms，2×2 远码 p50 53.3ms）；后端矩阵与 crate 拆分计划见 [docs/BACKENDS.md](docs/BACKENDS.md)；
+- **后端**：Android 与桌面统一用 `ort` 2.0.0-rc.15 + ONNX Runtime 1.29；桌面 CNN 384 p50 6.3ms、2×2 远码 p50 19.1ms，真机 CNN 9.5ms；lele 保留为 WASM AOT 方向；后端矩阵与 crate 拆分计划见 [docs/BACKENDS.md](docs/BACKENDS.md)；
 - **帧不进 Dart**：Camera2 Y 平面经 JNI 进 Rust，Dart 只轮询命中和统计。
 
 实拍远码 `https://example.test/far-small-live` 在 1280×720 下命中，HUD 显示
@@ -89,7 +89,7 @@ vendored 来源见 [docs/VENDORED.md](docs/VENDORED.md)。
 
 | 目标 | 状态 | 命令 |
 |---|---|---|
-| Windows 桌面 | 可用（含原生相机 + FFI 扫码） | `pwsh scripts/build_windows.ps1` → `dist/windows/*.zip` |
+| Windows 桌面 | 可用（含原生相机 + FFI 扫码 + ORT DLL） | `pwsh scripts/build_windows.ps1` → `dist/windows/*.zip` |
 | Web | 可用；扫码/二维码走 vendored zxing-wasm，需 HTTPS 或 localhost | `pwsh scripts/build_web.ps1` → `dist/web/*.zip` |
 | Android | 内置服务端、Camera2→Rust 扫码；**arm64-v8a / armeabi-v7a / x86_64 分架构 APK** | `pwsh scripts/build_android.ps1` → `dist/android/*-<abi>-release.apk` |
 | Linux | 脚本提供；需在 Linux 主机执行 | `bash scripts/build_linux.sh` |
@@ -110,7 +110,7 @@ Android 构建需要接受 SDK licenses（`flutter doctor --android-licenses`）
 
 两者共享 ORT kernel，差异在噪声范围内。复现：`pwsh -File scripts/bench_backends.ps1`。
 
-目标矩阵是 WASM lele、Android st-zrt/ORT（XNNPACK/CoreML EP）、桌面 ort/candle；`ort-sys` 与 `st-zrt-sys` 都声明 `links = "onnxruntime"`，不能在同一 Cargo graph 里共存，因此必须拆成独立 `detect-*` crate。迁移顺序与 capture/scan 边界见 [docs/BACKENDS.md](docs/BACKENDS.md)。
+目标矩阵是 WASM lele、Android/桌面 ORT（XNNPACK/CoreML EP）、桌面可选 candle；`ort-sys` 与 `st-zrt-sys` 都声明 `links = "onnxruntime"`，不能在同一 Cargo graph 里共存，因此必须拆成独立 `detect-*` crate。迁移顺序与 capture/scan 边界见 [docs/BACKENDS.md](docs/BACKENDS.md)。
 ## 持久化
 
 - `database` 配置指向 SQLite 文件；房间（成员、角色、加入密码哈希）与接力写穿到库，重启后原样恢复，接力 id 继续增长（不会重号）。
@@ -254,10 +254,13 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [x] M30 Android Camera2 → JNI → Rust 扫描：真机 1920×1440、fast p50 8.3ms/p95 21.1ms，实拍二维码命中；自动发布、前缀动态槽位、外部 App scheme 跳转、连接链接预填
 - [x] M31 每房间动态成员：房主专用 `/v1/room/guest` 生成临时身份，邀请链接直接进房；服务端不再要求预置“成员账号”
 - [x] M32 桌面自部署进 bridge：Rust 通过 Windows Job Object 持有 server 子进程，关闭 GUI 自动清理；配置/SQLite 复用；桌面 CJK 字体回退对齐 rcrm；TOTP 2FA 从产品与初版需求移除
-- [x] M33 自实现 WeChat 分层：st-zrt CNN 384 → 全分辨率 crop → 小码 SR → 2×2 分块远码检测；vendored cvlite；真机旧 rxing 数据 fast p50 6.8ms、CNN p50 5.5ms、远码分块 p50 21.4ms（zxing-cpp/彩色相机真机已复测：1920×1440 fast p50 8.3ms、p95 21.1ms、预览 Flutter Texture）
+- [x] M33 自实现 WeChat 分层：ort CNN 384 → 全分辨率 crop → 小码 SR → 2×2 分块远码检测；vendored cvlite；真机旧 rxing 数据 fast p50 6.8ms、CNN p50 5.5ms、远码分块 p50 21.4ms（zxing-cpp/彩色相机真机已复测：1920×1440 fast p50 8.3ms、p95 21.1ms、预览 Flutter Texture）
 - [ ] Apple 采集（AVFoundation）
 - [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
 - [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+
+
+
 
 
 

@@ -10,13 +10,13 @@ finished product.
 |---|---|---|
 | Rust format | `cargo fmt --all -- --check` | clean |
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
-| Rust tests | `cargo test --workspace` | **134 passed** |
+| Rust tests | `$env:ORT_DYLIB_PATH=".refs/ort129-root/lib/onnxruntime.dll"; cargo test --workspace` | **134 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
 | Flutter tests | `flutter test` | **29 passed** |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `flutter build web --release` | built; scan/QR use vendored zxing-wasm |
 | Android packages | `pwsh scripts/build_android.ps1` | 3 split release APKs: arm64-v8a 59.6 MB, armeabi-v7a 45.3 MB, x86_64 67.6 MB; each contains FFI/ZXing/ORT/libc++ for its ABI |
-| Windows package | `pwsh scripts/build_windows.ps1` | portable ZIP 25.2 MB with `qr_race_gui.exe`, `qr_race_ffi.dll`, `qr_race_server.exe` |
+| Windows package | `pwsh scripts/build_windows.ps1` | portable ZIP 26.3 MB with `qr_race_gui.exe`, `qr_race_ffi.dll`, `qr_race_server.exe`, `onnxruntime.dll` |
 | Web package | `pwsh scripts/build_web.ps1` | ZIP 14.4 MB |
 | Binary policy | `git ls-files` | no native `.so`/`.dll`/APK/ZIP committed; `dist/` and `jniLibs/**/*.so` ignored |
 | Android device | OnePlus PLF110, demo room, 2K | 1920×1440 selected; fast p50 **8.3 ms**, p95 **21.1 ms**, CNN 6.1 ms; 1289 frames, dropped 5 |
@@ -76,7 +76,7 @@ finished product.
 
 - `qr_race_wechat` is our implementation under `crates/`, not a dependency on
   the registry `wxscan` crate. ONNX weights load from `include_bytes!`; Android
-  uses st-zrt (ONNX Runtime 1.29), desktop lele AOT. Tests cover the full pipeline, the tiered fast path
+  uses ort rc15 + ONNX Runtime 1.29 on both native targets. Tests cover the full pipeline, the tiered fast path
   and a small synthetic symbol through the CNN path.
 - Pre-migration device (OnePlus PLF110, rxing) HUD: clear-code fast path 2.9–6.8 ms; CNN
   384 5.5–15.9 ms; tiled far-code pass 21.4 ms (within the 60 ms budget).
@@ -253,6 +253,9 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
+
+
 
 
 

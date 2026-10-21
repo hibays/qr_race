@@ -47,6 +47,11 @@ if (-not (Test-Path (Join-Path $releaseDir "qr_race_gui.exe"))) {
 }
 Copy-Item $dll $releaseDir -Force
 Copy-Item $server $releaseDir -Force
+$ortDll = Join-Path $root ".refs/ort129-root/lib/onnxruntime.dll"
+if (-not (Test-Path $ortDll)) {
+    throw "onnxruntime.dll 1.29 missing at $ortDll; run scripts/bench_backends.ps1 once or download the ORT NuGet package"
+}
+Copy-Item $ortDll $releaseDir -Force
 
 Write-Host "[3/3] Packaging portable ZIP..." -ForegroundColor Yellow
 $zip = Join-Path $dist "qr_race-$version-windows-x64-$mode.zip"
@@ -54,4 +59,5 @@ if (Test-Path $zip) { Remove-Item $zip -Force }
 Compress-Archive -Path (Join-Path $releaseDir "*") -DestinationPath $zip -CompressionLevel Optimal
 Write-Host ("  -> {0} ({1:N1} MB)" -f $zip, ((Get-Item $zip).Length / 1MB)) -ForegroundColor Green
 Write-Host "Windows artifact: $zip" -ForegroundColor Cyan
+
 

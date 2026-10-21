@@ -9,15 +9,16 @@ target can swap one without changing the lobby/room/relay code.
 | Target | Inference | Capture | Status |
 |---|---|---|---|
 | WASM (`wasm32-unknown-unknown`) | lele AOT Rust codegen | `getUserMedia` → WebGL texture → WASM memory | Web UI currently uses `zxing-wasm`; lele WASM split still to do |
-| Android | ONNX Runtime through `st-zrt`; XNNPACK/CoreML provider hooks | Camera2 YUV → JNI → Rust `&[u8]`; Camera2 `SurfaceTexture` → Flutter Texture | st-zrt/ORT 1.29 and Texture preview work on device |
+| Android | ONNX Runtime 1.29 through `ort` rc15; XNNPACK EP configurable | Camera2 YUV → JNI → Rust `&[u8]`; Camera2 `SurfaceTexture` → Flutter Texture | ORT build and Texture preview work on device |
 | iOS/macOS | ONNX Runtime CoreML EP | AVFoundation/CVPixelBuffer → Rust; Metal texture | capture-apple not implemented |
-| Windows/Linux/macOS desktop | `ort` rc15 / Candle; lele remains an AOT option | nokhwa (MediaFoundation/V4L2/AVFoundation) | lele is the current desktop default; `ort` rc15 benchmark tool is in `tools/backend_bench/ort` |
+| Windows/Linux/macOS desktop | `ort` rc15 / Candle | nokhwa (MediaFoundation/V4L2/AVFoundation) | `ort` rc15 is the current desktop backend; Candle is optional/future |
 
-The mobile/desktop distinction matters: `st-zrt-sys` and `ort-sys` both declare
-`links = "onnxruntime"`. Cargo refuses to resolve a graph containing both, even
-when they are optional features. They therefore belong in **separate backend
-crates**, not behind two features on the same crate. That is the main reason to
-adopt the `detect-*` split below.
+`st-zrt` was evaluated as the universal native runtime. It is not a viable
+single choice: its supported release lines do not cover iOS/CoreML, and
+`st-zrt-sys` plus `ort-sys` both declare `links = "onnxruntime"`, so Cargo
+refuses to resolve a graph containing both even behind target-specific features.
+The native product therefore standardizes on `ort` rc15 + ONNX Runtime 1.29;
+`st-zrt` remains only as a benchmark comparison. lele is reserved for WASM.
 
 ## Crate layout: current → target
 
@@ -27,8 +28,8 @@ adopt the `detect-*` split below.
 | `scan-pipeline` | `qr_race_scan::ScanEngine` | move orchestration/NMS/ROI/rayon decode here |
 | `decode-zxing` | `qr_race_scan::ZxingDecoder` | keep; wrap C++ zxing-cpp, no platform capture dependency |
 | `detect-lele` | `qr_race_wechat::backend::lele` | AOT codegen; suitable for WASM |
-| `detect-stzrt` | `qr_race_wechat::backend::st_zrt` | Android ORT 1.29; add XNNPACK/CoreML EP configuration where available |
-| `detect-ort` | not in the product crate | new desktop backend using `ort` rc15; benchmark tool exists |
+| `detect-ort` | `qr_race_wechat::backend::ort` | native product backend (ort rc15 + ORT 1.29) |
+| `detect-stzrt` | benchmark only (`tools/backend_bench/stzrt`) | comparison only; cannot coexist with ort |
 | `detect-candle` | not implemented | optional desktop backend |
 | `capture-core` | `qr_race_capture` | frame format + `CaptureSource` trait + pacer |
 | `capture-desktop` | `qr_race_capture_desktop` | nokhwa backends |
@@ -78,12 +79,13 @@ tools/backend_bench/stzrt
 2. Split `qr_race_scan` into `scan-pipeline` + `decode-zxing`, keeping
    `qr_race_scan` as a re-export facade so callers do not change.
 3. Create one `detect-*` crate per runtime. This is the only way to let ORT,
-   st-zrt, lele and Candle coexist in the workspace without Cargo's `links`
-   collision.
+   lele and Candle coexist without Cargo's `links` collision.
 4. Move Android capture out of `qr_race_ffi` into `capture-android`; keep the
    Kotlin `SurfaceTexture`/YUV bridge as its native implementation.
 5. Add `capture-apple`/`capture-wasm` behind the same `CaptureSource` contract.
 6. Keep `bindings-flutter` thin: method channel + texture ids + JSON state only.
 
-Until steps 1–3 land, the product continues to use `lele` on desktop and
-`st-zrt` on Android; the `ort` rc15 path is benchmarked but not the default.
+The native product now uses `ort` rc15 + ORT 1.29 on Android and desktop;
+`st-zrt` remains only in the benchmark tool. WASM/lele and the capture splits
+above are the remaining steps.
+

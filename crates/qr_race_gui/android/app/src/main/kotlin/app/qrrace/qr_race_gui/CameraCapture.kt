@@ -242,6 +242,12 @@ class CameraCapture(
 
         init {
             try {
+                // Load ORT into the app namespace before dynamic loading by soname.
+                System.loadLibrary("onnxruntime")
+            } catch (error: UnsatisfiedLinkError) {
+                Log.e(TAG, "onnxruntime not packaged", error)
+            }
+            try {
                 System.loadLibrary("qr_race_ffi")
             } catch (error: UnsatisfiedLinkError) {
                 Log.e(TAG, "qr_race_ffi not packaged", error)
@@ -249,3 +255,4 @@ class CameraCapture(
         }
     }
 }
+

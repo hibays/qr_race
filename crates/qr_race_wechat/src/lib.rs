@@ -2,7 +2,7 @@
 #![allow(clippy::all)] // ported algorithm modules are kept close to upstream
 
 //! WeChat `wechat_qrcode` detector + super-resolution, implemented in this
-//! crate with a lele AOT backend (desktop) or st-zrt/ORT (Android) over our converted weights.
+//! crate with an ort/ORT backend on native targets and a lele AOT option for WASM.
 //!
 //! The pipeline modules (`detector`, `scale`, `decodermgr`, `wechat_qrcode`)
 //! are a studied port of OpenCV contrib's `wechat_qrcode` and the Apache-2.0

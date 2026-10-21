@@ -133,11 +133,11 @@ The scan worker runs tiers:
    four overlapping 2×2 tiles and run each through the same 384 detector. This
    preserves small modules without needing a dynamic-shape model.
 
-The backend sits behind `crate::net::Net`: Android uses `StZrtNet` with ONNX
-Runtime 1.29 through `st-zrt` (`libonnxruntime.so` packaged in `jniLibs`); desktop uses the AOT-generated lele backend as fallback. `st-zrt` sessions run through `&self`, so the
-pipeline no longer needs a mutex around inference.
+The backend sits behind `crate::net::Net`: Android uses `OrtNet` with ONNX
+Runtime 1.29 through `ort` rc15 (`libonnxruntime.so`/DLL packaged per target).
+`st-zrt` is benchmark-only; lele is the WASM direction.
 
-Device HUD (OnePlus PLF110, st-zrt): 1920×1440 fast p50 8.3 ms / p95 21.1 ms;
+Device HUD (OnePlus PLF110, ORT): 1920×1440 fast p50 8.3 ms / p95 21.1 ms;
 CNN 9.5 ms in the live camera run. A 11-vmin QR on the PC
 screen decoded `https://example.test/far-small-live` at 1280×720 in the tiled
 path, under the 60 ms CNN budget. Clear codes stay on the fast path.
@@ -164,12 +164,13 @@ measured runs. 640×480 is available with
 
 `models/detect.onnx` and `models/sr.onnx` are loaded from `include_bytes!` by
 `qr_race_wechat`. The pipeline is real: prior decode/NMS, full-resolution crop,
-zxing-cpp decode, and on-demand SR run on device. Android uses the st-zrt session
-against ONNX Runtime 1.29 `libonnxruntime.so` (measured CNN 9.5 ms on the OnePlus); desktop keeps
-the AOT-generated lele backend as the fallback. The fast zxing-cpp path remains the 30 fps target; the
+zxing-cpp decode, and on-demand SR run on device. Android uses the ort session
+against ONNX Runtime 1.29 `libonnxruntime.so` (measured CNN 9.5 ms on the OnePlus); desktop uses the same `ort` + ONNX Runtime 1.29 backend. The fast zxing-cpp path remains the 30 fps target; the
 real 1920×1440 device run measured fast p50 8.3 ms / p95 21.1 ms.
 
 TFLite/FFI upstream crates are not built. See `docs/MODELS.md` and `docs/VENDORED.md`.
+
+
 
 
 

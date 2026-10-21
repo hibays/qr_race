@@ -6,8 +6,9 @@ fn main() {
     println!("cargo:rerun-if-changed=../../models/detect.onnx");
     println!("cargo:rerun-if-changed=../../models/sr.onnx");
 
-    // Android uses st-zrt; only desktop compiles the AOT backend.
-    if env::var("CARGO_CFG_TARGET_OS").as_deref() == Ok("android") {
+    // Native targets use ort. lele is compiled only for WASM (or an explicit
+    // lele feature build).
+    if env::var("CARGO_FEATURE_LELE").is_err() {
         return;
     }
 

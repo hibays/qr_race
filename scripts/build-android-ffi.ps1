@@ -66,7 +66,6 @@ $ortRoot = Join-Path $root ".refs\ort-android-1.29.0\$Abi"
 if (-not (Test-Path (Join-Path $ortRoot "lib\libonnxruntime.so"))) {
     throw "ONNX Runtime 1.29 $Abi lib missing; run scripts/fetch-android-deps.ps1"
 }
-$env:ST_ZRT_ORT_PATH = $ortRoot
 
 Write-Host "building qr_race_ffi for $target ($Abi)..." -ForegroundColor Cyan
 Push-Location $root
@@ -92,6 +91,7 @@ $cxxAbi = switch ($Abi) {
 $cxx = Join-Path $ndk.FullName "toolchains\llvm\prebuilt\windows-x86_64\sysroot\usr\lib\$cxxAbi\libc++_shared.so"
 if (Test-Path $cxx) { Copy-Item $cxx $dest -Force }
 Write-Host "packaged $dest (ffi, ZXing, onnxruntime, libc++)" -ForegroundColor Green
+
 
 
 
