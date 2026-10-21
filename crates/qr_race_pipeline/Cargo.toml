@@ -1,0 +1,13 @@
+[package]
+name = "qr_race_pipeline"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+
+[dev-dependencies]
+qrcode = "0.14"
+
+[dependencies]
+qr_race_scan.workspace = true
+qr_race_wechat.workspace = true
+

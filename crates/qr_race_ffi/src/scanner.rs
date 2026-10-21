@@ -8,7 +8,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use data_encoding::BASE64;
 use qr_race_capture::{CaptureConfig, CaptureSession, CaptureSource, GrayFrame};
-use qr_race_scan::{ScanEngine, ZxingDecoder};
+use qr_race_pipeline::{ScanMode, ScanPipeline};
 use serde::Serialize;
 
 const PREVIEW_INTERVAL: Duration = Duration::from_millis(90);
@@ -137,17 +137,17 @@ pub fn run_source_with_backend<S: CaptureSource>(
             return;
         }
     };
-    let engine = ScanEngine::new(Box::new(ZxingDecoder::new()));
-    let tiered = if backend == 1 {
-        None
-    } else {
-        match qr_race_wechat::TieredScanner::new() {
-            Ok(scanner) => Some(scanner),
-            Err(error) => {
-                fail(&shared, format!("wechat backend: {error}"));
-                return;
-            }
+    let pipeline = match ScanPipeline::new() {
+        Ok(pipeline) => pipeline,
+        Err(error) => {
+            fail(&shared, format!("scan pipeline: {error}"));
+            return;
         }
+    };
+    let scan_mode = match backend {
+        1 => ScanMode::Zxing,
+        2 => ScanMode::Cnn,
+        _ => ScanMode::Hybrid,
     };
     let mut frame_seq: u64 = 0;
     let mut last_preview: Option<Instant> = None;
@@ -175,29 +175,12 @@ pub fn run_source_with_backend<S: CaptureSource>(
 
         let started = Instant::now();
         frame_seq += 1;
-        let mut hits: Vec<(String, Vec<u8>)> = if backend == 2 {
-            Vec::new()
-        } else {
-            match engine.scan(&frame) {
-                Ok(outcome) => outcome
-                    .hits
-                    .into_iter()
-                    .map(|hit| (hit.text, hit.raw))
-                    .collect(),
-                Err(error) => {
-                    fail(&shared, format!("scan: {error}"));
-                    return;
-                }
-            }
-        };
-        if hits.is_empty()
-            && backend != 1
-            && (backend == 2 || frame_seq.is_multiple_of(2))
-            && let Some(tiered) = &tiered
-        {
-            let cnn = tiered.scan_cnn_at(&frame, 384);
-            hits.extend(cnn.hits.into_iter().map(|hit| (hit.text, hit.raw)));
-        }
+        let outcome = pipeline.scan(&frame, None, scan_mode, frame_seq);
+        let hits: Vec<(String, Vec<u8>)> = outcome
+            .hits
+            .into_iter()
+            .map(|hit| (hit.text, hit.raw))
+            .collect();
         let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
 
         {

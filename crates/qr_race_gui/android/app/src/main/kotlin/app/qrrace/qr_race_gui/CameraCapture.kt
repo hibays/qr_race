@@ -3,11 +3,13 @@ package app.qrrace.qr_race_gui
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.ImageFormat
+import android.graphics.Rect
 import android.hardware.camera2.CameraCaptureSession
 import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraDevice
 import android.hardware.camera2.CameraManager
 import android.hardware.camera2.CaptureRequest
+import android.hardware.camera2.params.MeteringRectangle
 import android.media.ImageReader
 import android.os.Handler
 import android.os.HandlerThread
@@ -15,6 +17,7 @@ import android.util.Log
 import android.util.Size
 import java.util.concurrent.atomic.AtomicBoolean
 import kotlin.math.abs
+import kotlin.math.sqrt
 
 /**
  * Camera2 YUV capture. The Y plane is handed to Rust through JNI; no frame ever
@@ -32,6 +35,12 @@ class CameraCapture(
     private val busy = AtomicBoolean(false)
     private var sensorOrientation = 90
     @Volatile private var stopped = false
+    private var activeArray: Rect? = null
+    private var imageSurface: android.view.Surface? = null
+    @Volatile private var trackCx = 0.5f
+    @Volatile private var trackCy = 0.5f
+    @Volatile private var trackW = 1f
+    @Volatile private var trackH = 1f
 
     @SuppressLint("MissingPermission")
     fun start(requestedWidth: Int, requestedHeight: Int) {
@@ -49,6 +58,7 @@ class CameraCapture(
         }
         val characteristics = manager.getCameraCharacteristics(cameraId)
         sensorOrientation = characteristics.get(CameraCharacteristics.SENSOR_ORIENTATION) ?: 90
+        activeArray = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
         val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val size = chooseSize(map, requestedWidth, requestedHeight)
 
@@ -56,6 +66,7 @@ class CameraCapture(
             it.setOnImageAvailableListener({ source -> onImage(source) }, callbackHandler)
         }
         val surface = reader!!.surface
+        imageSurface = surface
         try {
             manager.openCamera(cameraId, object : CameraDevice.StateCallback() {
                 override fun onOpened(device: CameraDevice) {
@@ -77,22 +88,12 @@ class CameraCapture(
                                     return
                                 }
                                 session = configured
-                                val request = device.createCaptureRequest(
-                                    CameraDevice.TEMPLATE_PREVIEW,
-                                ).apply {
-                                    addTarget(surface)
-                                    previewSurface?.let { addTarget(it) }
-                                    set(
-                                        CaptureRequest.CONTROL_AF_MODE,
-                                        CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
-                                    )
-                                    set(
-                                        CaptureRequest.CONTROL_AE_MODE,
-                                        CaptureRequest.CONTROL_AE_MODE_ON,
-                                    )
-                                }
                                 try {
-                                    configured.setRepeatingRequest(request.build(), null, callbackHandler)
+                                    configured.setRepeatingRequest(
+                                        buildRequest(device) ?: return,
+                                        null,
+                                        callbackHandler,
+                                    )
                                 } catch (error: Exception) {
                                     Log.e(TAG, "setRepeatingRequest failed", error)
                                 }
@@ -121,6 +122,72 @@ class CameraCapture(
             Log.e(TAG, "camera permission missing", error)
         } catch (error: Exception) {
             Log.e(TAG, "openCamera failed", error)
+        }
+    }
+
+    private fun buildRequest(device: CameraDevice): CaptureRequest? {
+        val target = imageSurface ?: return null
+        val builder = device.createCaptureRequest(CameraDevice.TEMPLATE_PREVIEW)
+        builder.addTarget(target)
+        previewSurface?.let { builder.addTarget(it) }
+        builder.set(
+            CaptureRequest.CONTROL_AF_MODE,
+            CaptureRequest.CONTROL_AF_MODE_CONTINUOUS_PICTURE,
+        )
+        builder.set(CaptureRequest.CONTROL_AE_MODE, CaptureRequest.CONTROL_AE_MODE_ON)
+        val active = activeArray
+        if (active != null && trackW in 0.0001f..0.9999f) {
+            val area = (trackW * trackH).coerceIn(0.0001f, 1f)
+            val zoom = (1.0f / sqrt(area)).coerceIn(1.0f, 2.5f)
+            if (zoom > 1.05f) {
+                val cropW = (active.width() / zoom).toInt().coerceAtLeast(1)
+                val cropH = (active.height() / zoom).toInt().coerceAtLeast(1)
+                val cx = active.left + (trackCx * active.width()).toInt()
+                val cy = active.top + (trackCy * active.height()).toInt()
+                val left = (cx - cropW / 2).coerceIn(active.left, active.right - cropW)
+                val top = (cy - cropH / 2).coerceIn(active.top, active.bottom - cropH)
+                val crop = Rect(left, top, left + cropW, top + cropH)
+                builder.set(CaptureRequest.SCALER_CROP_REGION, crop)
+                // Continuous AF with the metering region on the candidate box.
+                val af = MeteringRectangle(crop, MeteringRectangle.METERING_WEIGHT_MAX)
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(af))
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(af))
+            }
+        }
+        return builder.build()
+    }
+
+    /** Called from Dart with normalized candidate-box center/size. */
+    fun trackDetections(cx: Float, cy: Float, w: Float, h: Float) {
+        handler?.post {
+            if (stopped) return@post
+            trackCx = cx.coerceIn(0f, 1f)
+            trackCy = cy.coerceIn(0f, 1f)
+            trackW = w.coerceIn(0f, 1f)
+            trackH = h.coerceIn(0f, 1f)
+            applyRepeating()
+        }
+    }
+
+    fun clearTracking() {
+        handler?.post {
+            if (stopped) return@post
+            trackCx = 0.5f
+            trackCy = 0.5f
+            trackW = 1f
+            trackH = 1f
+            applyRepeating()
+        }
+    }
+
+    private fun applyRepeating() {
+        val configured = session ?: return
+        val device = camera ?: return
+        val request = buildRequest(device) ?: return
+        try {
+            configured.setRepeatingRequest(request, null, handler)
+        } catch (error: Exception) {
+            Log.e(TAG, "zoom request failed", error)
         }
     }
 
@@ -266,5 +333,7 @@ class CameraCapture(
         }
     }
 }
+
+
 
 

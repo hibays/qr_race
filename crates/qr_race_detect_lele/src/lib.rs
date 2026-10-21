@@ -76,4 +76,3 @@ pub fn detect(gray: &[u8], width: usize, height: usize) -> Result<Vec<f32>, Stri
         Ok(boxes.into_iter().flatten().collect())
     })
 }
-

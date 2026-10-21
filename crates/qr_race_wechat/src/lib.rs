@@ -30,6 +30,41 @@ use qr_race_scan::{Decoder, GrayFrame, ScanHit, ZxingDecoder};
 use scale::super_scale::SuperScale;
 use wechat_qrcode::WeChatQRCode;
 
+pub use detector::ssd_detector::QuadPoints as CnnQuad;
+
+/// CNN-only engine: detection + super resolution, no decoder.
+pub struct CnnEngine {
+    inner: WeChatQRCode<DefaultNet>,
+}
+
+impl CnnEngine {
+    pub fn new() -> Result<Self, String> {
+        let detector = DefaultNet::from_bytes(DETECT_ONNX)?;
+        let sr = DefaultNet::from_bytes(SR_ONNX)?;
+        Ok(Self {
+            inner: WeChatQRCode::new(Some(detector), Some(sr)),
+        })
+    }
+
+    pub fn detect(
+        &self,
+        gray: &[u8],
+        width: usize,
+        height: usize,
+        target: usize,
+    ) -> Vec<QuadPoints> {
+        self.inner.detect_candidates_at(gray, width, height, target)
+    }
+    pub fn super_resolve(
+        &self,
+        crop: &[u8],
+        width: usize,
+        height: usize,
+    ) -> Option<(Vec<u8>, usize, usize)> {
+        self.inner.super_resolve_crop(crop, width, height)
+    }
+}
+
 const DETECT_ONNX: &[u8] = include_bytes!("../../../models/detect.onnx");
 const SR_ONNX: &[u8] = include_bytes!("../../../models/sr.onnx");
 

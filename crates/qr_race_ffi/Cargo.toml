@@ -17,6 +17,7 @@ crate-type = ["cdylib", "rlib"]
 data-encoding.workspace = true
 image = { version = "0.25", default-features = false, features = ["jpeg"] }
 qr_race_capture.workspace = true
+qr_race_pipeline.workspace = true
 qr_race_capture_desktop = { workspace = true, optional = true }
 qr_race_embedded.workspace = true
 qr_race_qr.workspace = true
@@ -45,6 +46,7 @@ windows-sys = { version = "0.61", features = [
 
 [dev-dependencies]
 qrcode = "0.14"
+
 
 
 

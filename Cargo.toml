@@ -8,6 +8,7 @@ members = [
     "crates/qr_race_capture",
     "crates/qr_race_capture_desktop",
     "crates/qr_race_detect_lele",
+    "crates/qr_race_pipeline",
     "crates/qr_race_ffi",
     "crates/qr_race_hub",
     "crates/qr_race_store",
@@ -33,6 +34,7 @@ rust-version = "1.85"
 qr_race_core = { path = "crates/qr_race_core" }
 qr_race_scan = { path = "crates/qr_race_scan" }
 qr_race_wechat = { path = "crates/qr_race_wechat" }
+qr_race_pipeline = { path = "crates/qr_race_pipeline" }
 qr_race_qr = { path = "crates/qr_race_qr" }
 qr_race_fixtures = { path = "crates/qr_race_fixtures" }
 qr_race_capture = { path = "crates/qr_race_capture" }
@@ -82,4 +84,5 @@ overflow-checks = true
 [profile.release]
 lto = true
 codegen-units = 1
+
 

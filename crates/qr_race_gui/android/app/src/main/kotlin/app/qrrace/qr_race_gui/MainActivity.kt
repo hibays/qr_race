@@ -86,6 +86,19 @@ class MainActivity : FlutterActivity() {
                         ).also { it.start(width, height) }
                         result.success(texture.id())
                     }
+                    "trackDetections" -> {
+                        capture?.trackDetections(
+                            (call.argument<Double>("cx") ?: 0.5).toFloat(),
+                            (call.argument<Double>("cy") ?: 0.5).toFloat(),
+                            (call.argument<Double>("w") ?: 1.0).toFloat(),
+                            (call.argument<Double>("h") ?: 1.0).toFloat(),
+                        )
+                        result.success(null)
+                    }
+                    "clearTracking" -> {
+                        capture?.clearTracking()
+                        result.success(null)
+                    }
                     "stopCapture" -> {
                         captureActive = false
                         capture?.stop()
@@ -276,6 +289,7 @@ class MainActivity : FlutterActivity() {
         startActivity(intent)
     }
 }
+
 
 
 

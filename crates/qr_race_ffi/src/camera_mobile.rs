@@ -10,8 +10,7 @@ use std::time::{Instant, SystemTime, UNIX_EPOCH};
 
 use data_encoding::BASE64;
 use qr_race_capture::GrayFrame;
-use qr_race_scan::{ScanEngine, ZxingDecoder};
-use qr_race_wechat::TieredScanner;
+use qr_race_pipeline::{ScanMode, ScanPipeline};
 use serde::Serialize;
 
 const MAX_HITS: usize = 8;
@@ -101,10 +100,21 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
     let join = match std::thread::Builder::new()
         .name("qr-scanner-android".to_string())
         .spawn(move || {
-            let decoder = ZxingDecoder::new();
-            let hard_decoder = ZxingDecoder::new().try_harder(true);
-            let engine = ScanEngine::new(Box::new(decoder.clone()));
-            let tiered = TieredScanner::new().ok();
+            let pipeline = match ScanPipeline::new() {
+                Ok(pipeline) => pipeline,
+                Err(error) => {
+                    if let Ok(mut state) = worker_shared.lock() {
+                        state.error = Some(format!("scan pipeline: {error}"));
+                        state.running = false;
+                    }
+                    return;
+                }
+            };
+            let scan_mode = match mode {
+                1 => ScanMode::Zxing,
+                2 => ScanMode::Cnn,
+                _ => ScanMode::Hybrid,
+            };
             let mut frame_seq: u64 = 0;
             while let Ok(frame) = rx.recv() {
                 let Ok(gray) = GrayFrame::new(frame.width, frame.height, frame.data) else {
@@ -112,159 +122,77 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                 };
                 let started = Instant::now();
                 frame_seq += 1;
-                let fast_enabled = mode != 2;
-                let cnn_enabled = mode != 1;
-                // The fast path gets RGB from Camera2. On a miss, retry the RGB
-                // frame with zxing-cpp's harder reader before waking the CNN;
-                // this is the main recognition-rate lever for dim/far codes.
-                let fast_scale = if frame.width >= 1600 { 3 } else { 1 };
-                let mut color_hits = if fast_enabled {
-                    frame
-                        .color
-                        .as_deref()
-                        .and_then(|rgb| {
-                            decoder
-                                .decode_rgb_scaled(rgb, frame.width, frame.height, fast_scale)
-                                .ok()
-                        })
-                        .unwrap_or_default()
-                } else {
-                    Vec::new()
-                };
-                if fast_enabled && color_hits.is_empty() {
-                    color_hits = frame
-                        .color
-                        .as_deref()
-                        .and_then(|rgb| {
-                            hard_decoder
-                                .decode_rgb_scaled(rgb, frame.width, frame.height, fast_scale)
-                                .ok()
-                        })
-                        .unwrap_or_default();
-                }
-                let color_fast = fast_enabled && !color_hits.is_empty();
-                let outcome = if fast_enabled && color_hits.is_empty() {
-                    engine.scan(&gray)
-                } else {
-                    Ok(qr_race_scan::ScanOutcome {
-                        hits: color_hits,
-                        ..Default::default()
-                    })
-                };
-                match outcome {
-                    Ok(outcome) => {
-                        let mut base_hits = outcome.hits;
-                        // One color decode can miss a second code at the frame
-                        // edge. Retry the luma fast path and merge by raw bytes
-                        // before falling through to CNN.
-                        if color_fast && base_hits.len() < 2 && frame_seq.is_multiple_of(64) {
-                            if let Ok(extra) = engine.scan(&gray) {
-                                for hit in extra.hits {
-                                    if !base_hits.iter().any(|existing| {
-                                        existing.raw == hit.raw || existing.text == hit.text
-                                    }) {
-                                        base_hits.push(hit);
-                                    }
-                                }
-                            }
-                        }
-                        let mut hits: Vec<(String, Vec<u8>, Vec<[f32; 2]>)> = base_hits
-                            .into_iter()
-                            .map(|hit| (hit.text, hit.raw, hit.points))
-                            .collect();
-                        // Tiered fallback: mode 0 runs it every other miss;
-                        // mode 2 (WeChat) runs it on every frame.
-                        let mut ran_cnn = false;
-                        if cnn_enabled && hits.is_empty() && (mode == 2 || frame_seq % 2 == 0) {
-                            if let Some(tiered) = &tiered {
-                                let cnn_started = Instant::now();
-                                // Most CNN passes use 384; every fourth pass
-                                // spends the 768 detector for far/small codes.
-                                let target = if frame_seq.is_multiple_of(256) {
-                                    768
-                                } else {
-                                    384
-                                };
-                                let cnn = tiered.scan_cnn_at(&gray, target);
-                                ran_cnn = true;
-                                let cnn_ms = cnn_started.elapsed().as_secs_f64() * 1000.0;
-                                let detections = cnn.detections.clone();
-                                hits.extend(
-                                    cnn.hits
-                                        .into_iter()
-                                        .map(|hit| (hit.text, hit.raw, hit.points)),
-                                );
-                                if let Ok(mut state) = worker_shared.lock() {
-                                    state.wechat_runs += 1;
-                                    state.wechat_ms_last = cnn_ms;
-                                    state.last_tier = Some(cnn.tier.to_string());
-                                    state.detections = detections;
-                                }
-                            }
-                        }
-                        let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
-                        if let Ok(mut state) = worker_shared.lock() {
-                            state.frames += 1;
-                            state.scans += 1;
-                            state.scan_ms_last = elapsed_ms;
-                            state.scan_ms_total += elapsed_ms;
-                            state.max_ms = state.max_ms.max(elapsed_ms);
-                            state.latencies.push(elapsed_ms);
-                            if state.latencies.len() > 512 {
-                                state.latencies.remove(0);
-                            }
-                            state.width = frame.width;
-                            state.height = frame.height;
-                            state.rotation = frame.rotation;
-                            if !ran_cnn {
-                                state.detections.clear();
-                            }
-                            let at_ms = now_ms();
-                            state.latest_seq += 1;
-                            state.latest = hits
-                                .iter()
-                                .map(|(text, raw, points)| Hit {
-                                    text: text.clone(),
-                                    raw_b64: BASE64.encode(raw),
-                                    at_ms,
-                                    last_seq: state.latest_seq,
-                                    points: points.clone(),
-                                })
-                                .collect();
-                            let hit_seq = state.latest_seq;
-                            for (text, raw, points) in hits {
-                                let raw_b64 = BASE64.encode(&raw);
-                                if let Some(existing) = state
-                                    .hits
-                                    .iter_mut()
-                                    .find(|hit| hit.raw_b64 == raw_b64 || hit.text == text)
-                                {
-                                    existing.at_ms = at_ms;
-                                    existing.last_seq = hit_seq;
-                                    existing.points = points;
-                                    continue;
-                                }
-                                state.hits.insert(
-                                    0,
-                                    Hit {
-                                        text,
-                                        raw_b64,
-                                        at_ms,
-                                        last_seq: hit_seq,
-                                        points,
-                                    },
-                                );
-                                state.hits.truncate(MAX_HITS);
-                                state.hit_count += 1;
-                            }
-                        }
+                let outcome = pipeline.scan(&gray, frame.color.as_deref(), scan_mode, frame_seq);
+                let ran_cnn = outcome.tier.starts_with("cnn");
+                let detections = outcome.detections.clone();
+                let hits: Vec<(String, Vec<u8>, Vec<[f32; 2]>)> = outcome
+                    .hits
+                    .into_iter()
+                    .map(|hit| (hit.text, hit.raw, hit.points))
+                    .collect();
+                if ran_cnn {
+                    if let Ok(mut state) = worker_shared.lock() {
+                        state.wechat_runs += 1;
+                        state.wechat_ms_last = outcome.detect_ms + outcome.decode_ms;
+                        state.last_tier = Some(outcome.tier.to_string());
                     }
-                    Err(error) => {
-                        if let Ok(mut state) = worker_shared.lock() {
-                            state.error = Some(format!("scan: {error}"));
-                            state.running = false;
+                }
+                let elapsed_ms = started.elapsed().as_secs_f64() * 1000.0;
+                if let Ok(mut state) = worker_shared.lock() {
+                    state.frames += 1;
+                    state.scans += 1;
+                    state.scan_ms_last = elapsed_ms;
+                    state.scan_ms_total += elapsed_ms;
+                    state.max_ms = state.max_ms.max(elapsed_ms);
+                    state.latencies.push(elapsed_ms);
+                    if state.latencies.len() > 512 {
+                        state.latencies.remove(0);
+                    }
+                    state.width = frame.width;
+                    state.height = frame.height;
+                    state.rotation = frame.rotation;
+                    if ran_cnn {
+                        state.detections = detections;
+                    } else {
+                        state.detections.clear();
+                    }
+                    let at_ms = now_ms();
+                    state.latest_seq += 1;
+                    state.latest = hits
+                        .iter()
+                        .map(|(text, raw, points)| Hit {
+                            text: text.clone(),
+                            raw_b64: BASE64.encode(raw),
+                            at_ms,
+                            last_seq: state.latest_seq,
+                            points: points.clone(),
+                        })
+                        .collect();
+                    let hit_seq = state.latest_seq;
+                    for (text, raw, points) in hits {
+                        let raw_b64 = BASE64.encode(&raw);
+                        if let Some(existing) = state
+                            .hits
+                            .iter_mut()
+                            .find(|hit| hit.raw_b64 == raw_b64 || hit.text == text)
+                        {
+                            existing.at_ms = at_ms;
+                            existing.last_seq = hit_seq;
+                            existing.points = points;
+                            continue;
                         }
-                        break;
+                        state.hits.insert(
+                            0,
+                            Hit {
+                                text,
+                                raw_b64,
+                                at_ms,
+                                last_seq: hit_seq,
+                                points,
+                            },
+                        );
+                        state.hits.truncate(MAX_HITS);
+                        state.hit_count += 1;
                     }
                 }
             }

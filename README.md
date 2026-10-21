@@ -20,7 +20,9 @@ crates/
 ├── qr_race_store/             SQLite 持久化：房间、成员/角色、接力
 ├── qr_race_tls/               自签名证书生成/复用 + hyper-util TLS 服务循环
 ├── qr_race_api/               HTTP + WebSocket 传输：会话、房间 API、事件广播
-├── qr_race_wechat/            自实现微信检测/超分流水线（Android/桌面 ort rc15 + ORT 1.29）\n├── qr_race_detect_lele/       lele AOT WASM 384 检测器（无 zxing-cpp）
+├── qr_race_wechat/            自实现微信检测/超分流水线（Android/桌面 ort rc15 + ORT 1.29）
+├── qr_race_detect_lele/       lele AOT WASM 384 检测器（无 zxing-cpp）
+├── qr_race_pipeline/          统一扫描编排：zxing 全帧解码 + CNN 仅检测/超分 + ROI 解码
 ├── cvlite/                     vendored 上游图像缩放/颜色工具（WeChat pipeline 依赖）
 ├── qr_race_cli/               扫描客户端（bin: qr_scan）：图片或相机 → 登录 → 发布接力
 ├── qr_race_gui/               Flutter 客户端：连接、大厅、房间接力墙、扫码页（手机/桌面同套界面）
@@ -77,7 +79,7 @@ tools/qr_bench.html            手工双码测试台（浏览器打开，用手�
 - **完整取景**：相机按传感器比例 `BoxFit.contain` 显示全部画面（黑边而不是裁掉边缘），结果面板悬浮在底部；多码时每个码都有命中框和内容气泡，并显示“已广播到房间/广播中/离线”。
 - **CNN**：fast miss 后进入 WeChat 检测器（384×384），候选框回全分辨率 crop，再由 zxing-cpp 解码；小 crop 按需跑 SR；
 - **远码**：每第 4 次 CNN 把画面切成 2×2 重叠块，各送 384 检测，保留小模块；
-- **后端**：Android 与桌面统一用 `ort` 2.0.0-rc.15 + ONNX Runtime 1.29；桌面 CNN 384 p50 6.3ms、2×2 远码 p50 19.1ms，真机 OPD2413 快路径 **11.4ms**、p95 **27.5ms**（此前 luma 全帧重试 + 每 8 帧 768 导致 p95 80ms），CNN 8.6ms；lele 已作为独立 `qr_race_detect_lele` WASM 检测器接入 Web 的 zxing miss 回退；后端矩阵与 crate 拆分计划见 [docs/BACKENDS.md](docs/BACKENDS.md)；
+- **后端与扫描**：Android/桌面统一 `ort` rc15 + ORT 1.29；`qr_race_pipeline` 统一编排 zxing 全帧解码与 CNN 仅检测/超分，CNN 命中框再交给 zxing 解码；真机 OPD2413 快路径 **9.3–11.4ms**、p95 **22.8–27.5ms**，CNN 8–9ms；lele 作为 `qr_race_detect_lele` WASM 检测器接入 Web；后端矩阵与 crate 拆分计划见 [docs/BACKENDS.md](docs/BACKENDS.md)；
 - **帧不进 Dart**：Camera2 Y 平面经 JNI 进 Rust，Dart 只轮询命中和统计。
 
 实拍远码 `https://example.test/far-small-live` 在 1280×720 下命中，HUD 显示
@@ -258,6 +260,8 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [ ] Apple 采集（AVFoundation）
 - [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
 - [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+
+
 
 
 

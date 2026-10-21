@@ -181,6 +181,48 @@ impl<N: Net> WeChatQRCode<N> {
         self.detect_and_decode_gray(&gray, width, height)
     }
 
+    /// Candidate boxes from the CNN detector, without decoding. This is the
+    /// only detection capability the unified scan pipeline consumes.
+    pub fn detect_candidates(&self, img: &[u8], width: usize, height: usize) -> Vec<QuadPoints> {
+        self.detect(img, width, height)
+    }
+
+    /// Same detector at an explicit square input size (384 or 768).
+    pub fn detect_candidates_at(
+        &self,
+        img: &[u8],
+        width: usize,
+        height: usize,
+        target: usize,
+    ) -> Vec<QuadPoints> {
+        let Some(detector) = self.detector.as_ref() else {
+            return Vec::new();
+        };
+        detector
+            .forward(img, width, height, target, target)
+            .unwrap_or_default()
+    }
+
+    /// Super-resolves a crop when the SR model is loaded; returns the input
+    /// unchanged when it is not.
+    pub fn super_resolve_crop(
+        &self,
+        img: &[u8],
+        width: usize,
+        height: usize,
+    ) -> Option<(Vec<u8>, usize, usize)> {
+        if !self.use_nn_sr {
+            return None;
+        }
+        let (out, w, h) = self
+            .super_resolution
+            .process_image_scale(img, width, height, 2.0, true, 160);
+        if w == width && h == height {
+            return None;
+        }
+        Some((out, w, h))
+    }
+
     fn detect(&self, img: &[u8], width: usize, height: usize) -> Vec<QuadPoints> {
         if let Some(detector) = self.detector.as_ref() {
             // The converted detector has a fixed 384x384 input. Upstream's

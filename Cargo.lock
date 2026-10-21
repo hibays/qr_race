@@ -2105,6 +2105,7 @@ dependencies = [
  "qr_race_capture",
  "qr_race_capture_desktop",
  "qr_race_embedded",
+ "qr_race_pipeline",
  "qr_race_qr",
  "qr_race_scan",
  "qr_race_tls",
@@ -2137,6 +2138,15 @@ dependencies = [
  "sha2",
  "subtle",
  "thiserror 2.0.21",
+]
+
+[[package]]
+name = "qr_race_pipeline"
+version = "0.1.0"
+dependencies = [
+ "qr_race_scan",
+ "qr_race_wechat",
+ "qrcode",
 ]
 
 [[package]]

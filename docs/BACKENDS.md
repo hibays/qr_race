@@ -28,7 +28,7 @@ versus ~8 ms on the ORT CPU EP.
 | Target crate | Current implementation | Action |
 |---|---|---|
 | `scan-core` | `qr_race_scan::{GrayFrame, Decoder, Detector, ScanHit}` | extract the pure data/traits; keep `qr_race_scan` as the facade |
-| `scan-pipeline` | `qr_race_scan::ScanEngine` | move orchestration/NMS/ROI/rayon decode here |
+| `scan-pipeline` | `qr_race_pipeline::ScanPipeline` + `qr_race_scan::ScanEngine` | unified zxing full-frame decode, CNN detect/SR only, ROI decode |
 | `decode-zxing` | `qr_race_scan::ZxingDecoder` | keep; wrap C++ zxing-cpp, no platform capture dependency |
 | `detect-lele` | `qr_race_detect_lele` | real WASM crate: 384 detector + lele AOT, no zxing-cpp |
 | `detect-ort` | `qr_race_wechat::backend::ort` | native product backend (ort rc15 + ORT 1.29) |
@@ -91,6 +91,7 @@ tools/backend_bench/stzrt
 The native product now uses `ort` rc15 + ORT 1.29 on Android and desktop;
 `st-zrt` remains only in the benchmark tool. WASM/lele and the capture splits
 above are the remaining steps.
+
 
 
 
