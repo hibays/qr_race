@@ -138,7 +138,7 @@ class CameraCapture(
         val active = activeArray
         if (active != null && trackW in 0.0001f..0.9999f) {
             val area = (trackW * trackH).coerceIn(0.0001f, 1f)
-            val zoom = (1.0f / sqrt(area)).coerceIn(1.0f, 2.5f)
+            val zoom = (1.0f / sqrt(area)).coerceIn(1.0f, 2.0f)
             if (zoom > 1.05f) {
                 val cropW = (active.width() / zoom).toInt().coerceAtLeast(1)
                 val cropH = (active.height() / zoom).toInt().coerceAtLeast(1)
@@ -152,6 +152,12 @@ class CameraCapture(
                 val af = MeteringRectangle(crop, MeteringRectangle.METERING_WEIGHT_MAX)
                 builder.set(CaptureRequest.CONTROL_AF_REGIONS, arrayOf(af))
                 builder.set(CaptureRequest.CONTROL_AE_REGIONS, arrayOf(af))
+            } else {
+                // Clear the previous crop explicitly; omitting the key would
+                // leave the last zoom active forever.
+                builder.set(CaptureRequest.SCALER_CROP_REGION, active)
+                builder.set(CaptureRequest.CONTROL_AF_REGIONS, emptyArray<MeteringRectangle>())
+                builder.set(CaptureRequest.CONTROL_AE_REGIONS, emptyArray<MeteringRectangle>())
             }
         }
         return builder.build()
@@ -295,15 +301,12 @@ class CameraCapture(
         val sizes = map?.getOutputSizes(ImageFormat.YUV_420_888)
         if (sizes.isNullOrEmpty()) return Size(width, height)
         sizes.firstOrNull { it.width == width && it.height == height }?.let { return it }
-        // Prefer the largest supported size that does not exceed the requested
-        // 2K target. This avoids picking 4K on devices that also expose 1080p.
         sizes.filter { it.width <= width && it.height <= height }
             .maxByOrNull { it.width.toLong() * it.height }
             ?.let { return it }
         return sizes.minByOrNull { abs(it.width - width) + abs(it.height - height) }
             ?: Size(width, height)
     }
-
     private external fun nativePushFrame(
         width: Int,
         height: Int,
@@ -333,6 +336,7 @@ class CameraCapture(
         }
     }
 }
+
 
 
 

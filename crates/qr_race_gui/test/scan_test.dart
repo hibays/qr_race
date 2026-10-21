@@ -105,7 +105,7 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('the scan screen requests 2K and can switch backends', (tester) async {
+  testWidgets('the scan screen requests 4:3 2K and can switch backends', (tester) async {
     final backend = RecordingBackend();
     await tester.pumpWidget(
       MaterialApp(
@@ -121,7 +121,7 @@ void main() {
     await tester.pump();
     await tester.pump(const Duration(milliseconds: 20));
 
-    expect(backend.width, 2560);
+    expect(backend.width, 1920);
     expect(backend.height, 1440);
     expect(backend.backend, 'hybrid');
 
@@ -253,3 +253,4 @@ class RecordingBackend implements ScannerBackend {
   @override
   void dispose() {}
 }
+

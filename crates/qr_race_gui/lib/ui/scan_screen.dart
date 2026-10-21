@@ -39,6 +39,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
   String _backendName = 'hybrid';
   bool _listOnly = false;
   bool _paused = false;
+  bool _fullFrame = true;
 
   @override
   void initState() {
@@ -76,7 +77,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
     try {
       final controller = ScanController(
         backend: widget.backend ?? createScannerBackend(),
-        width: const int.fromEnvironment('SCAN_WIDTH', defaultValue: 2560),
+        width: const int.fromEnvironment('SCAN_WIDTH', defaultValue: 1920),
         height: const int.fromEnvironment('SCAN_HEIGHT', defaultValue: 1440),
         backendName: _backendName,
       );
@@ -169,6 +170,11 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
             ],
           ),
           IconButton(
+            tooltip: _fullFrame ? '铺满屏幕' : '显示全画幅',
+            onPressed: () => setState(() => _fullFrame = !_fullFrame),
+            icon: Icon(_fullFrame ? Icons.fullscreen : Icons.fit_screen),
+          ),
+          IconButton(
             tooltip: _listOnly ? '显示相机' : '只看结果',
             onPressed: () => setState(() => _listOnly = !_listOnly),
             icon: Icon(_listOnly ? Icons.camera_alt_outlined : Icons.view_list_outlined),
@@ -212,8 +218,9 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
                         return _Body(
                           controller: controller,
                           listOnly: _listOnly,
-                          onToggleList: () =>
-                              setState(() => _listOnly = !_listOnly),
+                          onToggleList: () => setState(() => _listOnly = !_listOnly),
+                          fullFrame: _fullFrame,
+                          onToggleFullFrame: () => setState(() => _fullFrame = !_fullFrame),
                         );
                       },
                     ),
@@ -290,11 +297,16 @@ class _Body extends StatelessWidget {
     required this.controller,
     required this.listOnly,
     required this.onToggleList,
+    required this.fullFrame,
+    required this.onToggleFullFrame,
   });
+
 
   final ScanController controller;
   final bool listOnly;
   final VoidCallback onToggleList;
+  final bool fullFrame;
+  final VoidCallback onToggleFullFrame;
 
   @override
   Widget build(BuildContext context) {
@@ -309,6 +321,11 @@ class _Body extends StatelessWidget {
         ),
       );
     }
+    final media = MediaQuery.sizeOf(context);
+    final landscape = media.width > media.height;
+    final previewRotation = landscape ? 90 : 90;
+    final source = _SourceSize.of(snapshot, previewRotation);
+    final previewFit = landscape && !fullFrame ? BoxFit.cover : BoxFit.contain;
     return Stack(
       children: [
         Positioned.fill(
@@ -317,12 +334,12 @@ class _Body extends StatelessWidget {
             child: controller.previewTextureId != null
                 ? ClipRect(
                     child: FittedBox(
-                      fit: BoxFit.contain,
+                      fit: previewFit,
                       child: RotatedBox(
-                        quarterTurns: 0,
+                        quarterTurns: landscape ? 3 : 0,
                         child: SizedBox(
-                          width: (snapshot?.height ?? 1440).toDouble(),
-                          height: (snapshot?.width ?? 1920).toDouble(),
+                          width: landscape ? (snapshot?.width ?? 1920).toDouble() : source.width,
+                          height: landscape ? (snapshot?.height ?? 1440).toDouble() : source.height,
                           child: Texture(
                             textureId: controller.previewTextureId!,
                           ),
@@ -333,7 +350,7 @@ class _Body extends StatelessWidget {
                 : snapshot?.preview != null
                     ? Image.memory(
                         snapshot!.preview!,
-                        fit: BoxFit.contain,
+                        fit: previewFit,
                         gaplessPlayback: true,
                       )
                     : const _CameraPlaceholder(),
@@ -361,8 +378,10 @@ class _Body extends StatelessWidget {
           child: _HitOverlay(
             controller: controller,
             snapshot: snapshot,
-            rotation: controller.previewTextureId != null ? 90 : (snapshot?.rotation ?? 0),
-            contain: controller.previewTextureId != null,
+            rotation: controller.previewTextureId != null
+                ? previewRotation
+                : (snapshot?.rotation ?? 0),
+            contain: controller.previewTextureId != null && previewFit == BoxFit.contain,
           ),
         ),
         Positioned(
@@ -1024,6 +1043,17 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
+
+
+
+
+
+
+
+
+
+
 
 
 
