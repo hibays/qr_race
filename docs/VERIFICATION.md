@@ -19,7 +19,7 @@ finished product.
 | Windows package | `pwsh scripts/build_windows.ps1` | portable ZIP 26.3 MB with `qr_race_gui.exe`, `qr_race_ffi.dll`, `qr_race_server.exe`, `onnxruntime.dll` |
 | Web package | `pwsh scripts/build_web.ps1` | ZIP 14.4 MB |
 | Binary policy | `git ls-files` | no native `.so`/`.dll`/APK/ZIP committed; `dist/` and `jniLibs/**/*.so` ignored |
-| Android device | OnePlus PLF110, demo room, 2K | 1920×1440 selected; fast p50 **8.3 ms**, p95 **21.1 ms**, CNN 6.1 ms; 1289 frames, dropped 5 |
+| Android device | OnePlus PLF110 (2K phone) / OPD2413 tablet | 1920×1440 selected; PLF110 fast p50 8.3 ms/p95 21.1 ms; OPD2413 ORT scanner CNN **7.0 ms**, no Camera2 lifecycle crash |
 | Android overlay | same device | hit quadrilateral + CNN candidate box follow the newest frame; bubble shows content and `离线 · 未广播` |
 | Android resume | WeChat → back to scanner | Camera2 reopened automatically; frames resumed at 527 after resume |
 | Android backend switch | UI menu → zxing-only | frames reset and CNN counter disappeared, confirming a real backend restart |
@@ -253,6 +253,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 
