@@ -119,7 +119,7 @@ Android 构建需要接受 SDK licenses（`flutter doctor --android-licenses`）
 - PIN 是独立路径：房主输入 4 位 PIN 即自动分配固定房间并点亮，成员输入同一 PIN 即进入；地址选择/创建仍保留，但不再携带 PIN。
 - 服务器地址与证书指纹保存在本机；大厅设置页可修改，token 不落盘。
 - 采集候选框会回传 Camera2：候选过小时自动数字变焦，并把 AF/AE 区域设到候选框；预览 overlay 同时做自动定位。
-- 相机按屏幕方向响应：横屏使用 4:3 1920×1440 输入、旋转为横向；默认「全画幅」保留完整视场，右上角可切换铺满屏幕。
+- 相机按原生 `sensorOrientation` 响应：4:3 1920×1440 输入，`PreviewGeometry` 同时驱动预览与框选投影，并覆盖 0/90/180/270 与 contain/cover 的回归测试；默认「全画幅」保留完整视场，右上角可切换铺满屏幕。
 
 ## 持久化
 
@@ -268,6 +268,7 @@ Windows x64，`--release`，合成干净帧，未接入 CNN 检测器（耗时�
 - [ ] Apple 采集（AVFoundation）
 - [ ] Web/wasm 实时采集扫码（已有内核/探针，浏览器矩阵未全验）
 - [ ] 真实相机 p95/丢帧 trace 与远码检测率 sweep
+
 
 
 

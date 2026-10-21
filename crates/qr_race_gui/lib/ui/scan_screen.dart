@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../native/camera_permission.dart';
+import '../native/preview_geometry.dart';
 import '../native/scanner_backend.dart';
 import '../state/app_state.dart';
 import '../state/relay_slot.dart';
@@ -323,7 +324,7 @@ class _Body extends StatelessWidget {
     }
     final media = MediaQuery.sizeOf(context);
     final landscape = media.width > media.height;
-    final previewRotation = landscape ? 90 : 90;
+    final previewRotation = snapshot?.rotation ?? 90;
     final source = _SourceSize.of(snapshot, previewRotation);
     final previewFit = landscape && !fullFrame ? BoxFit.cover : BoxFit.contain;
     return Stack(
@@ -336,7 +337,7 @@ class _Body extends StatelessWidget {
                     child: FittedBox(
                       fit: previewFit,
                       child: RotatedBox(
-                        quarterTurns: landscape ? 3 : 0,
+                        quarterTurns: quarterTurnsForRotation(previewRotation),
                         child: SizedBox(
                           width: landscape ? (snapshot?.width ?? 1920).toDouble() : source.width,
                           height: landscape ? (snapshot?.height ?? 1440).toDouble() : source.height,
@@ -617,33 +618,13 @@ List<Offset> _mapPoints(
   bool contain,
 ) {
   if (points.isEmpty || snapshot == null) return const [];
-  final degrees = ((rotation % 360) + 360) % 360;
-  final w = snapshot.width.toDouble();
-  final h = snapshot.height.toDouble();
-  final scale = contain
-      ? ((view.width / source.width) < (view.height / source.height)
-          ? view.width / source.width
-          : view.height / source.height)
-      : ((view.width / source.width) > (view.height / source.height)
-          ? view.width / source.width
-          : view.height / source.height);
-  final drawn = Size(source.width * scale, source.height * scale);
-  final offset = Offset(
-    (view.width - drawn.width) / 2,
-    (view.height - drawn.height) / 2,
-  );
-  return [
-    for (final raw in points)
-      () {
-        final rotated = switch (degrees) {
-          90 => Offset(h - 1 - raw.$2, raw.$1),
-          180 => Offset(w - 1 - raw.$1, h - 1 - raw.$2),
-          270 => Offset(raw.$2, w - 1 - raw.$1),
-          _ => Offset(raw.$1, raw.$2),
-        };
-        return offset + Offset(rotated.dx * scale, rotated.dy * scale);
-      }(),
-  ];
+  return PreviewGeometry(
+    frameWidth: snapshot.width,
+    frameHeight: snapshot.height,
+    rotation: rotation,
+    view: view,
+    contain: contain,
+  ).mapPoints(points);
 }
 
 class _DetectionBoxPainter extends CustomPainter {
@@ -1043,6 +1024,9 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
+
+
 
 
 
