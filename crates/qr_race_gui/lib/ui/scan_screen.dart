@@ -414,6 +414,31 @@ class _MatrixBoxPainter extends CustomPainter {
     if (matrix == null || matrix.length != 16 || frameW <= 0 || frameH <= 0) {
       return;
     }
+    for (final box in snapshot?.detections ?? const []) {
+      if (box.length < 4) continue;
+      final path = Path();
+      for (var i = 0; i < box.length; i++) {
+        final point = projectPreviewPoint(
+          matrix,
+          box[i].$1 / frameW,
+          box[i].$2 / frameH,
+          size,
+        );
+        if (i == 0) {
+          path.moveTo(point.dx, point.dy);
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+      path.close();
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 2
+          ..color = const Color(0xFF6FE7FF),
+      );
+    }
     final hits = snapshot?.latestHits ?? const <ScanHit>[];
     for (final hit in hits) {
       if (hit.points.isEmpty) continue;
@@ -437,12 +462,38 @@ class _MatrixBoxPainter extends CustomPainter {
           ..color = accent,
       );
     }
+    for (final box in snapshot?.detections ?? const []) {
+      if (box.length < 4) continue;
+      final path = Path();
+      for (var i = 0; i < box.length; i++) {
+        final point = projectPreviewPoint(
+          matrix,
+          box[i].$1 / frameW,
+          box[i].$2 / frameH,
+          size,
+        );
+        if (i == 0) {
+          path.moveTo(point.dx, point.dy);
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+      path.close();
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 3
+          ..color = const Color(0xFF6FE7FF),
+      );
+    }
   }
 
   @override
   bool shouldRepaint(covariant _MatrixBoxPainter old) =>
       old.snapshot?.previewMatrix != snapshot?.previewMatrix ||
-      old.snapshot?.latestHits != snapshot?.latestHits;
+      old.snapshot?.latestHits != snapshot?.latestHits ||
+      old.snapshot?.detections != snapshot?.detections;
 }
 
 class _HitBubbles extends StatelessWidget {
@@ -858,6 +909,8 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
+
 
 
 
