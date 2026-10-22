@@ -55,11 +55,20 @@ pub trait QrDetector: Send + Sync {
         width: usize,
         height: usize,
     ) -> Option<(Vec<u8>, usize, usize)>;
+
+    fn process_scale(
+        &self,
+        crop: &[u8],
+        width: usize,
+        height: usize,
+        scale: f32,
+    ) -> (Vec<u8>, usize, usize);
 }
 
 pub struct ZxingBackend {
     fast: ZxingDecoder,
     hard: ZxingDecoder,
+    hard_binarizers: Vec<ZxingDecoder>,
 }
 
 impl ZxingBackend {
@@ -67,6 +76,20 @@ impl ZxingBackend {
         Self {
             fast: ZxingDecoder::new(),
             hard: ZxingDecoder::new().try_harder(true),
+            hard_binarizers: vec![
+                ZxingDecoder::new()
+                    .try_harder(true)
+                    .binarizer(qr_race_scan::Binarizer::LocalAverage),
+                ZxingDecoder::new()
+                    .try_harder(true)
+                    .binarizer(qr_race_scan::Binarizer::GlobalHistogram),
+                ZxingDecoder::new()
+                    .try_harder(true)
+                    .binarizer(qr_race_scan::Binarizer::FixedThreshold),
+                ZxingDecoder::new()
+                    .try_harder(true)
+                    .binarizer(qr_race_scan::Binarizer::BoolCast),
+            ],
         }
     }
 }
@@ -103,6 +126,12 @@ impl QrDecoder for ZxingBackend {
         let Ok(frame) = GrayFrame::new(width as u32, height as u32, data.to_vec()) else {
             return Vec::new();
         };
+        for decoder in &self.hard_binarizers {
+            let hits = decoder.decode(&frame).unwrap_or_default();
+            if !hits.is_empty() {
+                return hits;
+            }
+        }
         self.hard.decode(&frame).unwrap_or_default()
     }
 }
@@ -131,6 +160,16 @@ impl QrDetector for CnnBackend {
         height: usize,
     ) -> Option<(Vec<u8>, usize, usize)> {
         self.inner.super_resolve(crop, width, height)
+    }
+
+    fn process_scale(
+        &self,
+        crop: &[u8],
+        width: usize,
+        height: usize,
+        scale: f32,
+    ) -> (Vec<u8>, usize, usize) {
+        self.inner.process_scale(crop, width, height, scale)
     }
 }
 
@@ -209,17 +248,33 @@ impl ScanPipeline {
                 let Some((crop, cw, ch, ox, oy)) = crop_quad(frame, quad) else {
                     continue;
                 };
-                let (decoded, sw, sh) = if (cw * ch) < 160 * 160 {
-                    match detector.super_resolve(&crop, cw, ch) {
-                        Some((up, uw, uh)) => {
-                            sr_used = true;
-                            (self.decoder.decode_crop(&up, uw, uh), uw, uh)
-                        }
-                        None => (self.decoder.decode_crop(&crop, cw, ch), cw, ch),
-                    }
+                let scales: &[f32] = if cw < 320 || ch < 320 {
+                    &[1.0, 2.0, 0.5]
+                } else if cw < 640 && ch < 640 {
+                    &[1.0, 0.5]
                 } else {
-                    (self.decoder.decode_crop(&crop, cw, ch), cw, ch)
+                    &[0.5, 1.0]
                 };
+                let mut decoded = Vec::new();
+                let mut sw = cw;
+                let mut sh = ch;
+                for &scale in scales {
+                    if scale == 1.0 {
+                        decoded = self.decoder.decode_crop(&crop, cw, ch);
+                    } else {
+                        let (scaled, ow, oh) =
+                            detector.process_scale(&crop, cw, ch, scale);
+                        if scale == 2.0 && ow > cw {
+                            sr_used = true;
+                        }
+                        decoded = self.decoder.decode_crop(&scaled, ow, oh);
+                        sw = ow;
+                        sh = oh;
+                    }
+                    if !decoded.is_empty() {
+                        break;
+                    }
+                }
                 let sx = sw as f32 / cw as f32;
                 let sy = sh as f32 / ch as f32;
                 for mut hit in decoded {
@@ -323,3 +378,8 @@ mod tests {
         assert!(outcome.detections.is_empty());
     }
 }
+
+
+
+
+

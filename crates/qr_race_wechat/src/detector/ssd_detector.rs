@@ -52,14 +52,22 @@ impl<N: Net> SSDDetector<N> {
         target_height: usize,
     ) -> Result<Vec<QuadPoints>, String> {
         let t0 = crate::clock::Instant::now();
-        let input = resize(
-            img,
-            img_w,
-            img_h,
-            target_width,
-            target_height,
-            Interpolation::Cubic,
-        );
+        // Keep the frame aspect ratio; upstream shrinks to the target area
+        // instead of stretching a 4:3 frame into a square.
+        let scale = (target_width as f32 / img_w as f32)
+            .min(target_height as f32 / img_h as f32)
+            .min(1.0);
+        let draw_w = ((img_w as f32 * scale).round() as usize).max(1);
+        let draw_h = ((img_h as f32 * scale).round() as usize).max(1);
+        let offset_x = (target_width - draw_w) / 2;
+        let offset_y = (target_height - draw_h) / 2;
+        let resized = resize(img, img_w, img_h, draw_w, draw_h, Interpolation::Cubic);
+        let mut input = vec![0u8; target_width * target_height];
+        for y in 0..draw_h {
+            let src = y * draw_w;
+            let dst = (y + offset_y) * target_width + offset_x;
+            input[dst..dst + draw_w].copy_from_slice(&resized[src..src + draw_w]);
+        }
         let blob = blob_from_gray(&input, 1.0 / 255.0);
         let t1 = crate::clock::Instant::now();
         let outs = self
@@ -111,10 +119,22 @@ impl<N: Net> SSDDetector<N> {
             if d.label != 1.0 || d.score <= 1e-5 {
                 continue;
             }
-            let x0 = clip(d.xmin * img_w as f32, 0.0, img_w as f32 - 1.0);
-            let y0 = clip(d.ymin * img_h as f32, 0.0, img_h as f32 - 1.0);
-            let x1 = clip(d.xmax * img_w as f32, 0.0, img_w as f32 - 1.0);
-            let y1 = clip(d.ymax * img_h as f32, 0.0, img_h as f32 - 1.0);
+            let to_img = |nx: f32, ny: f32| {
+                (
+                    clip(
+                        (nx * target_width as f32 - offset_x as f32) / scale,
+                        0.0,
+                        img_w as f32 - 1.0,
+                    ),
+                    clip(
+                        (ny * target_height as f32 - offset_y as f32) / scale,
+                        0.0,
+                        img_h as f32 - 1.0,
+                    ),
+                )
+            };
+            let (x0, y0) = to_img(d.xmin, d.ymin);
+            let (x1, y1) = to_img(d.xmax, d.ymax);
             point_list.push([(x0, y0), (x1, y0), (x1, y1), (x0, y1)]);
         }
         Ok(point_list)
@@ -152,3 +172,5 @@ pub fn take_stage_us() -> (u64, u64, u64, u64, u64, u64) {
         STAGE_INPUT_H.load(Relaxed),
     )
 }
+
+

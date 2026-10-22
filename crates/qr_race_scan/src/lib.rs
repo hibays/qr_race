@@ -13,6 +13,7 @@ mod frame;
 mod image_io;
 mod timing;
 
+pub use zxingcpp::Binarizer;
 pub use decoder::{ScanHit, ZxingDecoder};
 pub use detector::{BilinearSuperResolver, PyramidDetector, pyramid_engine};
 pub use engine::{
@@ -25,3 +26,4 @@ pub use image_io::{load_gray_bytes, load_gray_file};
 
 /// The three stages every measured scan reports.
 pub const PIPELINE_STAGES: [&str; 3] = ["detect", "super_res", "decode"];
+

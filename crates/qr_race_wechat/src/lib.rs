@@ -41,9 +41,11 @@ impl CnnEngine {
     pub fn new() -> Result<Self, String> {
         let detector = DefaultNet::from_bytes(DETECT_ONNX)?;
         let sr = DefaultNet::from_bytes(SR_ONNX)?;
-        Ok(Self {
-            inner: WeChatQRCode::new(Some(detector), Some(sr)),
-        })
+        let mut inner = WeChatQRCode::new(Some(detector), Some(sr));
+        if let Some(params) = inner.detection_params_mut() {
+            params.confidence_threshold = 0.1;
+        }
+        Ok(Self { inner })
     }
 
     pub fn detect(
@@ -62,6 +64,16 @@ impl CnnEngine {
         height: usize,
     ) -> Option<(Vec<u8>, usize, usize)> {
         self.inner.super_resolve_crop(crop, width, height)
+    }
+
+    pub fn process_scale(
+        &self,
+        crop: &[u8],
+        width: usize,
+        height: usize,
+        scale: f32,
+    ) -> (Vec<u8>, usize, usize) {
+        self.inner.process_scale(crop, width, height, scale)
     }
 }
 
@@ -494,3 +506,5 @@ mod tests {
         );
     }
 }
+
+

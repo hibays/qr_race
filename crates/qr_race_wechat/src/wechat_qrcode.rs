@@ -203,6 +203,18 @@ impl<N: Net> WeChatQRCode<N> {
             .unwrap_or_default()
     }
 
+    /// Applies one of the upstream decode scales (1.0, 2.0 or 0.5) to a crop.
+    pub fn process_scale(
+        &self,
+        img: &[u8],
+        width: usize,
+        height: usize,
+        scale: f32,
+    ) -> (Vec<u8>, usize, usize) {
+        self.super_resolution
+            .process_image_scale(img, width, height, scale, self.use_nn_sr, 160)
+    }
+
     /// Super-resolves a crop when the SR model is loaded; returns the input
     /// unchanged when it is not.
     pub fn super_resolve_crop(
@@ -470,3 +482,4 @@ pub fn take_decode_stage_us() -> (u64, u64, u64, u64, u64) {
         DEC_LAST_H.load(Relaxed),
     )
 }
+

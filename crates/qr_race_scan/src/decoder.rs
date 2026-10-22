@@ -1,6 +1,6 @@
 //! zxing-cpp-backed decoding. The engine sees only hits; the crate stays here.
 
-use zxingcpp::{Barcode, BarcodeFormat, ImageFormat, ImageView};
+use zxingcpp::{Barcode, BarcodeFormat, Binarizer, ImageFormat, ImageView};
 
 use crate::engine::Decoder;
 use crate::error::ScanError;
@@ -45,6 +45,7 @@ impl From<Barcode> for ScanHit {
 pub struct ZxingDecoder {
     qr_only: bool,
     try_harder: bool,
+    binarizer: Binarizer,
 }
 
 impl Default for ZxingDecoder {
@@ -58,6 +59,7 @@ impl ZxingDecoder {
         Self {
             qr_only: true,
             try_harder: false,
+            binarizer: Binarizer::LocalAverage,
         }
     }
 
@@ -73,11 +75,17 @@ impl ZxingDecoder {
         self
     }
 
+    pub fn binarizer(mut self, binarizer: Binarizer) -> Self {
+        self.binarizer = binarizer;
+        self
+    }
+
     fn reader(&self) -> zxingcpp::BarcodeReader {
         let reader = zxingcpp::read()
             .try_harder(self.try_harder)
             .try_rotate(false)
             .try_downscale(false)
+            .binarizer(self.binarizer)
             .max_number_of_symbols(8);
         if self.qr_only {
             reader.formats([BarcodeFormat::QRCode])
@@ -167,3 +175,4 @@ impl Decoder for ZxingDecoder {
         "zxing-cpp"
     }
 }
+
