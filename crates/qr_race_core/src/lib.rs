@@ -11,6 +11,9 @@ pub mod room;
 
 pub use address::{Capital, RoomAddress};
 pub use error::CoreError;
-pub use relay::{Compression, MAX_UPLOAD_BYTES, PayloadKind, RelayEntry, RelayId, UserId};
+pub use relay::{
+    CONTENT_HASH_BYTES, Compression, MAX_UPLOAD_BYTES, PayloadKind, RelayEntry, RelayId, UserId,
+    content_hash,
+};
 pub use role::{Privileges, RoomAbility, RoomRole};
 pub use room::{Room, RoomState, SecretHash};

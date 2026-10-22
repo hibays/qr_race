@@ -7,12 +7,11 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
-use data_encoding::HEXLOWER;
 use qr_race_core::{
     Compression, CoreError, PayloadKind, RelayEntry, RelayId, Room, RoomAddress, RoomRole, UserId,
+    content_hash,
 };
 use qr_race_store::{Store, StoreError};
-use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::clock::Clock;
@@ -572,10 +571,6 @@ impl Hub {
             .get_mut(address)
             .ok_or_else(|| HubError::RoomNotFound(address.clone()))
     }
-}
-
-fn content_hash(payload: &[u8]) -> String {
-    HEXLOWER.encode(&Sha256::digest(payload))
 }
 
 fn storage_error(error: StoreError) -> HubError {

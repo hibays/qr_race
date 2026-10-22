@@ -94,6 +94,7 @@ pub struct RelayDto {
     pub kind: PayloadKind,
     pub compression: Compression,
     pub created_at_ms: u64,
+    pub hash: String,
     pub payload_b64: String,
 }
 
@@ -106,6 +107,7 @@ impl From<&RelayEntry> for RelayDto {
             kind: entry.kind,
             compression: entry.compression,
             created_at_ms: entry.created_at_ms,
+            hash: qr_race_core::content_hash(&entry.payload),
             payload_b64: BASE64.encode(&entry.payload),
         }
     }

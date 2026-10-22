@@ -83,6 +83,18 @@ class ApiClient {
     );
   }
 
+  /// One round trip for create/light/join + snapshot + WebSocket ticket.
+  Future<RoomEntry> openRoom(String address, {String? pin}) async {
+    final body = await _post(
+      '/v1/rooms/open',
+      body: {'address': address, 'pin': ?pin},
+    );
+    return RoomEntry(
+      room: RoomView.fromJson(body['room'] as Map<String, dynamic>),
+      ticket: body['ticket'] as String,
+    );
+  }
+
   /// Host-only: mints a fresh member identity for this room. The guest is a
   /// real server account, but its token is only shared in the invite.
   Future<GuestAccount> createGuest(String address) async {
@@ -349,6 +361,7 @@ class Relay {
     required this.kind,
     required this.payloadB64,
     required this.createdAtMs,
+    this.hash,
   });
 
   factory Relay.fromJson(Map<String, dynamic> json) => Relay(
@@ -357,6 +370,7 @@ class Relay {
     kind: json['kind'] as String? ?? 'text',
     payloadB64: json['payload_b64'] as String,
     createdAtMs: json['created_at_ms'] as int,
+    hash: json['hash'] as String?,
   );
 
   final String id;
@@ -364,6 +378,7 @@ class Relay {
   final String kind;
   final String payloadB64;
   final int createdAtMs;
+  final String? hash;
 
   List<int> get payloadBytes => base64Decode(payloadB64);
 
@@ -373,6 +388,7 @@ class Relay {
     kind: kind,
     payloadB64: payloadB64,
     createdAtMs: createdAtMs ?? this.createdAtMs,
+    hash: hash,
   );
 
   /// Best-effort display text; the bytes are the authoritative payload.

@@ -6,7 +6,18 @@
 
 use std::sync::Arc;
 
+use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
+
+/// Stable content id: BLAKE3 truncated to 96 bits, lowercase hex (24 chars).
+/// Short enough for a compact heartbeat, wide enough to avoid practical
+/// collisions inside one room.
+pub const CONTENT_HASH_BYTES: usize = 12;
+
+pub fn content_hash(payload: &[u8]) -> String {
+    let digest = blake3::hash(payload);
+    HEXLOWER.encode(&digest.as_bytes()[..CONTENT_HASH_BYTES])
+}
 
 use crate::address::RoomAddress;
 use crate::error::CoreError;
@@ -92,6 +103,14 @@ mod tests {
 
     fn room() -> RoomAddress {
         RoomAddress::new(Capital::Tokyo, "A", "1B", "103").unwrap()
+    }
+
+    #[test]
+    fn content_hash_is_blake3_96_bits() {
+        let hash = content_hash(b"same content");
+        assert_eq!(hash.len(), CONTENT_HASH_BYTES * 2);
+        assert_eq!(hash, content_hash(b"same content"));
+        assert_ne!(hash, content_hash(b"different"));
     }
 
     #[test]

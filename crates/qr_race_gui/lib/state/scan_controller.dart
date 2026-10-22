@@ -1,6 +1,5 @@
 import 'dart:async';
 
-import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
@@ -180,12 +179,12 @@ class ScanController extends ChangeNotifier {
         final pending = _queue.removeAt(0);
         try {
           if (pending.hash == null) {
-            await pending.api.publishRelay(
+            final relay = await pending.api.publishRelay(
               pending.address,
               payload: pending.hit.raw,
             );
-            final hash = sha256.convert(pending.hit.raw).toString();
-            _hashBySlot[pending.slot] = hash;
+            final hash = relay.hash;
+            if (hash != null) _hashBySlot[pending.slot] = hash;
             _keyBySlot[pending.slot] = pending.hit.key;
             _published.add(pending.hit.key);
             _publishedTexts.add(pending.hit.text);

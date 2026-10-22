@@ -199,16 +199,10 @@ class AppState extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      try {
-        await client.createRoom(address, pin: pin);
-      } on ApiException catch (e) {
-        if (e.status != 409) rethrow;
-      }
-      try {
-        await client.lightRoom(address);
-      } on ApiException catch (e) {
-        if (e.status != 409) rethrow;
-      }
+      final entry = await client.openRoom(address, pin: pin);
+      room = entry.room;
+      _roomAddress = address;
+      await _subscribe(client, address, entry.ticket);
       pairingPin = pin;
       notifyListeners();
       return null;

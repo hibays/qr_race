@@ -49,6 +49,7 @@ qr_race_cli = { path = "crates/qr_race_cli" }
 yuv = "0.8"
 clap = { version = "4", features = ["derive"] }
 data-encoding = "2"
+blake3 = "1.8"
 hmac = "0.13"
 percent-encoding = "2"
 rand = "0.10"

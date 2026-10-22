@@ -238,6 +238,45 @@ pub async fn enter(
     }))
 }
 
+/// Create-or-reopen a room, light it, join, and return the first snapshot and
+/// WebSocket ticket in one round trip.
+pub async fn open_room(
+    State(state): State<Arc<AppState>>,
+    Authed(user): Authed,
+    Json(body): Json<CreateRoomRequest>,
+) -> Result<Json<EnterResponse>, ApiError> {
+    let address = parse_address(&body.address)?;
+    if let Some(pin) = body.pin.as_deref() {
+        validate_pin(pin)?;
+    }
+    let (view, events) = {
+        let mut hub = state.hub.lock().expect("hub lock");
+        let mut events = Vec::new();
+        if !hub.room_exists(&address) {
+            events.extend(hub.create_room(address.clone(), user.clone())?);
+            if let Some(pin) = body.pin.as_deref() {
+                hub.set_pin(&user, &address, pin)?;
+            }
+        }
+        let lit = hub.room(&address).is_some_and(|room| room.is_lit());
+        if !lit {
+            events.extend(hub.light_room(&user, &address)?);
+        }
+        events.extend(hub.join(user.clone(), &address)?);
+        let view = hub.view(&user, &address)?;
+        (view, events)
+    };
+    // The channel exists from the moment the room does.
+    let _ = state.subscribe(&address);
+    state.publish(&address, &events);
+    let (ticket, expires_at_ms) = state.issue_ticket(user);
+    Ok(Json(EnterResponse {
+        room: RoomViewDto::from(&view),
+        ticket,
+        expires_at_ms,
+    }))
+}
+
 #[derive(Serialize)]
 pub struct GuestResponse {
     user_id: String,

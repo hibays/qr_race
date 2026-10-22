@@ -192,6 +192,44 @@ async fn auth_reports_whether_the_account_is_an_admin() {
 }
 
 #[tokio::test]
+async fn open_room_creates_lights_and_enters_in_one_request() {
+    let (app, clock, _state) = fixture();
+    let host = authenticate(&app, &clock, HOST_TOKEN, HOST_SECRET).await;
+
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            "/v1/rooms/open",
+            Some(&host),
+            Some(json!({ "address": ADDRESS })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["room"]["label"], ADDRESS);
+    assert_eq!(body["room"]["lit"], true);
+    assert!(
+        body["ticket"]
+            .as_str()
+            .is_some_and(|ticket| !ticket.is_empty())
+    );
+
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            "/v1/rooms/open",
+            Some(&host),
+            Some(json!({ "address": ADDRESS })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["room"]["label"], ADDRESS);
+}
+
+#[tokio::test]
 async fn the_mvp_flow_runs_over_http() {
     let (app, clock, state) = fixture();
 
@@ -276,6 +314,10 @@ async fn the_mvp_flow_runs_over_http() {
     assert_eq!(status, StatusCode::OK);
     assert_eq!(relay["id"], "r-1");
     assert_eq!(relay["payload_b64"], payload_b64);
+    assert_eq!(
+        relay["hash"].as_str().expect("hash").len(),
+        qr_race_core::CONTENT_HASH_BYTES * 2
+    );
 
     let (status, view) = send(
         &app,
