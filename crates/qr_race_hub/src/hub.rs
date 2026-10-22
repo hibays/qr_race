@@ -161,6 +161,7 @@ impl Hub {
             .room_pins()
             .map_err(storage_error)?
             .into_iter()
+            .filter(|(_, address)| rooms.contains_key(address))
             .collect();
         let mut epochs = BTreeMap::new();
         for address in rooms.keys() {
@@ -233,6 +234,8 @@ impl Hub {
                 .into());
             }
         }
+        self.pins
+            .retain(|_, existing| self.rooms.contains_key(existing));
         if let Some(existing) = self.pins.get(pin)
             && existing != address
         {
@@ -832,6 +835,11 @@ mod tests {
         hub.set_pin(&host(), &address(), "1234").unwrap();
         hub.close_room(&address()).unwrap();
         assert_eq!(hub.resolve_pin("1234"), None);
+        assert_eq!(
+            store.room_pin("1234").unwrap(),
+            None,
+            "PIN row must be removed with the room"
+        );
 
         let reloaded = Hub::with_store(Arc::new(clock), store).unwrap();
         assert_eq!(reloaded.resolve_pin("1234"), None);

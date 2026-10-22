@@ -38,8 +38,14 @@ pub async fn room_events(
             .ok_or_else(|| ApiError::NotFound("room disappeared".into()))?
     };
 
+    let Some(socket_id) = state.room_socket_opened(&address, generation) else {
+        return Err(ApiError::NotFound("room incarnation is gone".into()));
+    };
+    if state.room_epoch(&address) != Some(generation) {
+        state.room_socket_closed(&address, generation, socket_id);
+        return Err(ApiError::NotFound("room disappeared".into()));
+    }
     let receiver = state.subscribe(&address);
-    let socket_id = state.room_socket_opened(&address, generation);
     let live_state = state.clone();
     let live_address = address.clone();
     Ok(ws.on_upgrade(move |socket| {

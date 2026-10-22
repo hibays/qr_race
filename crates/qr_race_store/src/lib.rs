@@ -159,19 +159,21 @@ impl Store {
     }
 
     pub fn delete_room(&self, address: &RoomAddress) -> Result<(), StoreError> {
-        let connection = self.lock()?;
-        connection.execute(
+        let mut connection = self.lock()?;
+        let transaction = connection.transaction()?;
+        transaction.execute(
             "DELETE FROM relays WHERE room = ?1",
             params![address.to_string()],
         )?;
-        connection.execute(
+        transaction.execute(
             "DELETE FROM rooms WHERE address = ?1",
             params![address.to_string()],
         )?;
-        connection.execute(
+        transaction.execute(
             "DELETE FROM room_pins WHERE address = ?1",
             params![address.to_string()],
         )?;
+        transaction.commit()?;
         Ok(())
     }
 

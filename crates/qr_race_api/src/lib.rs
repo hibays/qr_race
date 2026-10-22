@@ -63,21 +63,28 @@ impl AppState {
         })
     }
 
-    pub fn room_socket_opened(&self, address: &RoomAddress, generation: u64) -> u64 {
+    pub fn room_socket_opened(&self, address: &RoomAddress, generation: u64) -> Option<u64> {
         let socket_id = self.next_socket.fetch_add(1, Ordering::Relaxed);
         let mut sockets = self.room_sockets.lock().expect("room sockets lock");
-        let presence = sockets
-            .entry(address.clone())
-            .or_insert_with(|| RoomPresence {
-                generation,
-                sockets: HashSet::new(),
-            });
-        if presence.generation != generation {
+        let Some(presence) = sockets.get_mut(address) else {
+            sockets.insert(
+                address.clone(),
+                RoomPresence {
+                    generation,
+                    sockets: HashSet::from([socket_id]),
+                },
+            );
+            return Some(socket_id);
+        };
+        if generation < presence.generation {
+            return None;
+        }
+        if generation > presence.generation {
             presence.generation = generation;
             presence.sockets.clear();
         }
         presence.sockets.insert(socket_id);
-        socket_id
+        Some(socket_id)
     }
 
     /// Drops one socket. A socket from an older incarnation of the same address
@@ -295,7 +302,9 @@ mod tests {
             hub.light_room(&host, &address).unwrap();
         }
         let old_epoch = state.room_epoch(&address).unwrap();
-        let old_socket = state.room_socket_opened(&address, old_epoch);
+        let old_socket = state
+            .room_socket_opened(&address, old_epoch)
+            .expect("old socket");
 
         {
             let mut hub = state.hub.lock().expect("hub");
@@ -305,7 +314,13 @@ mod tests {
         }
         let new_epoch = state.room_epoch(&address).unwrap();
         assert_ne!(new_epoch, old_epoch);
-        let new_socket = state.room_socket_opened(&address, new_epoch);
+        let new_socket = state
+            .room_socket_opened(&address, new_epoch)
+            .expect("new socket");
+        assert!(
+            state.room_socket_opened(&address, old_epoch).is_none(),
+            "late old-generation socket must be rejected"
+        );
 
         state.room_socket_closed(&address, old_epoch, old_socket);
         assert!(
