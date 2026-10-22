@@ -19,7 +19,7 @@ lele = ["dep:lele"]
 qr_race_scan.workspace = true
 cvlite = { path = "../cvlite" }
 zxing-cpp = { version = "0.5.3", default-features = false }
-lele = { version = "=0.1.15", default-features = false, optional = true }
+lele = { version = "=0.1.16", default-features = false, optional = true }
 ort = { version = "=2.0.0-rc.15", default-features = false, features = ["load-dynamic", "xnnpack", "coreml"], optional = true }
 
 [dev-dependencies]
@@ -32,7 +32,9 @@ zxing-cpp = { version = "0.5.3", default-features = false, features = ["bundled"
 
 
 [build-dependencies]
-lele = { version = "=0.1.15", features = ["compiler"] }
+lele = { version = "=0.1.16", features = ["compiler"] }
+
+
 
 
 

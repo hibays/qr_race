@@ -9,14 +9,15 @@ void main() {
   test('server, fingerprint and token survive save/load', () async {
     SharedPreferences.setMockInitialValues({});
     await ServerSettings.save(
-      server: 'http://<REDACTED_HOST>:8100',
+      server: 'https://race.example.test:8443',
       fingerprint: 'abc123',
       token: 'token-value',
     );
 
     final loaded = await ServerSettings.load();
-    expect(loaded.server, 'http://<REDACTED_HOST>:8100');
+    expect(loaded.server, 'https://race.example.test:8443');
     expect(loaded.fingerprint, 'abc123');
     expect(loaded.token, 'token-value');
   });
 }
+

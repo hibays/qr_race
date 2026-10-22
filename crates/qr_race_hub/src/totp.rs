@@ -4,7 +4,7 @@
 //! the construction's security comes from the HMAC key, not the hash's collision
 //! resistance. Six digits, 30-second steps, one step of clock skew.
 
-use hmac::{Hmac, Mac};
+use hmac::{Hmac, KeyInit, Mac};
 use sha1::Sha1;
 use subtle::ConstantTimeEq;
 
@@ -137,3 +137,4 @@ mod tests {
         assert!(code.bytes().all(|byte| byte.is_ascii_digit()));
     }
 }
+

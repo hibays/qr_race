@@ -25,7 +25,7 @@ class ConnectScreen extends StatefulWidget {
 
 class _ConnectScreenState extends State<ConnectScreen> {
   final _formKey = GlobalKey<FormState>();
-  final _server = TextEditingController(text: 'http://127.0.0.1:8080');
+  final _server = TextEditingController();
   final _fingerprint = TextEditingController();
   final _token = TextEditingController();
   String? _linkRoom;
@@ -325,6 +325,7 @@ class _LinkDialogState extends State<_LinkDialog> {
     );
   }
 }
+
 
 
 

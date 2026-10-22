@@ -11,7 +11,7 @@
 
 [package]
 edition = "2021"
-rust-version = "1.85"
+rust-version = "1.99"
 name = "cvlite"
 version = "0.1.0"
 build = false
@@ -54,4 +54,5 @@ features = [
     "jpeg",
 ]
 default-features = false
+
 

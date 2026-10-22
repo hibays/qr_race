@@ -28,7 +28,7 @@ exclude = [
 version = "0.1.0"
 edition = "2024"
 license = "Apache-2.0"
-rust-version = "1.85"
+rust-version = "1.99"
 
 [workspace.dependencies]
 qr_race_core = { path = "crates/qr_race_core" }
@@ -49,14 +49,14 @@ qr_race_cli = { path = "crates/qr_race_cli" }
 yuv = "0.8"
 clap = { version = "4", features = ["derive"] }
 data-encoding = "2"
-hmac = "0.12"
+hmac = "0.13"
 percent-encoding = "2"
-rand = "0.9"
-reqwest = { version = "0.12", default-features = false, features = ["json"] }
+rand = "0.10"
+reqwest = { version = "0.13", default-features = false, features = ["json"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
-sha1 = "0.10"
-sha2 = "0.10"
+sha1 = "0.11"
+sha2 = "0.11"
 subtle = "2"
 thiserror = "2"
 tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal", "sync", "time"] }
@@ -65,6 +65,7 @@ tokio = { version = "1", features = ["macros", "net", "rt-multi-thread", "signal
 name = "qr_race_server"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 
 [dependencies]
@@ -84,5 +85,7 @@ overflow-checks = true
 [profile.release]
 lto = true
 codegen-units = 1
+
+
 
 

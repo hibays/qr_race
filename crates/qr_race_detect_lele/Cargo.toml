@@ -13,9 +13,11 @@ wasm = ["dep:wasm-bindgen"]
 
 [dependencies]
 cvlite = { path = "../cvlite" }
-lele = { version = "=0.1.15", default-features = false }
+lele = { version = "=0.1.16", default-features = false }
 wasm-bindgen = { version = "0.2", optional = true }
 
 [build-dependencies]
-lele = { version = "=0.1.15", features = ["compiler"] }
+lele = { version = "=0.1.16", features = ["compiler"] }
+
+
 

@@ -29,9 +29,7 @@ class ServerSettings {
         final values = await _channel.invokeMapMethod<String, String>('load');
         if (values != null) {
           return ServerSettings(
-            server: values['server']?.isNotEmpty == true
-                ? values['server']!
-                : 'http://127.0.0.1:8080',
+            server: values['server'] ?? '',
             fingerprint: values['fingerprint'] ?? '',
             token: values['token'] ?? '',
           );
@@ -43,14 +41,14 @@ class ServerSettings {
     try {
       final prefs = await SharedPreferences.getInstance();
       return ServerSettings(
-        server: prefs.getString(_serverKey) ?? 'http://127.0.0.1:8080',
+        server: prefs.getString(_serverKey) ?? '',
         fingerprint: prefs.getString(_fingerprintKey) ?? '',
         token: prefs.getString(_tokenKey) ?? '',
       );
     } catch (_) {
       // A broken platform prefs store must not block the connect screen.
       return const ServerSettings(
-        server: 'http://127.0.0.1:8080',
+        server: '',
         fingerprint: '',
       );
     }
@@ -83,4 +81,5 @@ class ServerSettings {
     }
   }
 }
+
 
