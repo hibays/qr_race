@@ -40,7 +40,6 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
   String _backendName = 'hybrid';
   bool _listOnly = false;
   bool _paused = false;
-  bool _fullFrame = true;
 
   @override
   void initState() {
@@ -170,16 +169,6 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
               PopupMenuItem(value: 'wechat', child: Text('微信 CNN（自实现）')),
             ],
           ),
-          IconButton(
-            tooltip: _fullFrame ? '铺满屏幕' : '显示全画幅',
-            onPressed: () => setState(() => _fullFrame = !_fullFrame),
-            icon: Icon(_fullFrame ? Icons.fullscreen : Icons.fit_screen),
-          ),
-          IconButton(
-            tooltip: _listOnly ? '显示相机' : '只看结果',
-            onPressed: () => setState(() => _listOnly = !_listOnly),
-            icon: Icon(_listOnly ? Icons.camera_alt_outlined : Icons.view_list_outlined),
-          ),
         ],
         title: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
@@ -220,8 +209,6 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
                           controller: controller,
                           listOnly: _listOnly,
                           onToggleList: () => setState(() => _listOnly = !_listOnly),
-                          fullFrame: _fullFrame,
-                          onToggleFullFrame: () => setState(() => _fullFrame = !_fullFrame),
                         );
                       },
                     ),
@@ -298,16 +285,12 @@ class _Body extends StatelessWidget {
     required this.controller,
     required this.listOnly,
     required this.onToggleList,
-    required this.fullFrame,
-    required this.onToggleFullFrame,
   });
 
 
   final ScanController controller;
   final bool listOnly;
   final VoidCallback onToggleList;
-  final bool fullFrame;
-  final VoidCallback onToggleFullFrame;
 
   @override
   Widget build(BuildContext context) {
@@ -325,7 +308,7 @@ class _Body extends StatelessWidget {
     final media = MediaQuery.sizeOf(context);
     final landscape = media.width > media.height;
 
-    final previewFit = landscape && !fullFrame ? BoxFit.cover : BoxFit.contain;
+    const previewFit = BoxFit.contain;
     return Stack(
       children: [
         Positioned.fill(
@@ -386,6 +369,16 @@ class _Body extends StatelessWidget {
             ),
           ),
         ),
+        if (!listOnly && (snapshot?.latestHits.isNotEmpty ?? false))
+          Positioned(
+            left: 12,
+            right: 12,
+            top: 96,
+            child: _LatestHitBubble(
+              hit: controller.snapshot!.latestHits.first,
+              published: controller.isPublished(controller.snapshot!.latestHits.first),
+            ),
+          ),
         Positioned(
           left: 12,
           bottom: 12,
@@ -449,6 +442,45 @@ class _MatrixBoxPainter extends CustomPainter {
   bool shouldRepaint(covariant _MatrixBoxPainter old) =>
       old.snapshot?.previewMatrix != snapshot?.previewMatrix ||
       old.snapshot?.latestHits != snapshot?.latestHits;
+}
+
+class _LatestHitBubble extends StatelessWidget {
+  const _LatestHitBubble({required this.hit, required this.published});
+  final ScanHit hit;
+  final bool published;
+
+  @override
+  Widget build(BuildContext context) {
+    final text = hit.text.isEmpty ? '（二进制内容）' : hit.text;
+    return Align(
+      alignment: Alignment.topCenter,
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: 0.78),
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: accent.withValues(alpha: 0.7)),
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              text,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(color: Colors.white, fontSize: 13),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              published ? '已广播到房间' : '离线 · 未广播',
+              style: TextStyle(color: published ? accent : Colors.white70, fontSize: 11),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
 }
 
 class _CameraPlaceholder extends StatelessWidget {
@@ -764,6 +796,8 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
+
 
 
 
