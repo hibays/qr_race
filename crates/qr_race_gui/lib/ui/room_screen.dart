@@ -6,7 +6,6 @@ import 'package:flutter/services.dart';
 import '../api/api_client.dart';
 import '../api/connect_link.dart';
 import '../state/app_state.dart';
-import 'pin_dialog.dart';
 import '../state/relay_slot.dart';
 import 'open_link_sheet.dart';
 import 'qr_image.dart';
@@ -106,12 +105,6 @@ class _RoomScreenState extends State<RoomScreen> {
                 ),
               if (room != null && me?.role == 'host')
                 IconButton(
-                  tooltip: '设置配对码',
-                  onPressed: _setPin,
-                  icon: const Icon(Icons.pin_outlined),
-                ),
-              if (room != null && me?.role == 'host')
-                IconButton(
                   tooltip: '邀请成员',
                   onPressed: () => _invite(room),
                   icon: const Icon(Icons.person_add_alt_1_outlined),
@@ -150,7 +143,10 @@ class _RoomScreenState extends State<RoomScreen> {
                     if (!room.lit && me?.role == 'host')
                       _UnlitBanner(onLight: state.lightRoom),
                     Expanded(
-                      child: _RoomBody(state: state, room: room),
+                      child: RefreshIndicator(
+                        onRefresh: state.refreshRoom,
+                        child: _RoomBody(state: state, room: room),
+                      ),
                     ),
                   ],
                 ),
@@ -165,20 +161,6 @@ class _RoomScreenState extends State<RoomScreen> {
       if (member.user == userId) return member;
     }
     return null;
-  }
-
-  Future<void> _setPin() async {
-    final pin = await showPinDialog(
-      context,
-      title: '设置 4 位配对码',
-      initial: widget.state.pairingPin ?? '',
-    );
-    if (pin == null || !mounted) return;
-    await widget.state.setPin(pin);
-    if (mounted && widget.state.error != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(widget.state.error!)));
-    }
   }
 
   void _openScanner(String address) {
@@ -308,14 +290,17 @@ class _RoomBody extends StatelessWidget {
         }
         final activeGrid = active.isEmpty
             ? (inactive.isEmpty
-                  ? const _EmptyRelays()
-                  : const Center(
-                      child: Text(
-                        '暂无活跃码',
-                        style: TextStyle(color: muted, fontSize: 14),
+                  ? const _ScrollableFill(child: _EmptyRelays())
+                  : const _ScrollableFill(
+                      child: Center(
+                        child: Text(
+                          '暂无活跃码',
+                          style: TextStyle(color: muted, fontSize: 14),
+                        ),
                       ),
                     ))
             : GridView.builder(
+                physics: const AlwaysScrollableScrollPhysics(),
                 padding: const EdgeInsets.all(16),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
                   maxCrossAxisExtent: 280,
@@ -402,6 +387,22 @@ class _RoomBody extends StatelessWidget {
           ],
         );
       },
+    );
+  }
+}
+
+class _ScrollableFill extends StatelessWidget {
+  const _ScrollableFill({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [SizedBox(height: constraints.maxHeight, child: child)],
+      ),
     );
   }
 }

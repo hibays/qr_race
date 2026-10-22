@@ -72,9 +72,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final address = await widget.state.startByPin(pin);
     if (address == null) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.state.error ?? '配对码开房失败')),
-      );
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(SnackBar(content: Text(widget.state.error ?? '配对码开房失败')));
       return;
     }
     await _enter(address);
@@ -87,7 +87,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final error = await widget.state.createAndLight(choice.address);
     if (!mounted) return;
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     await _enter(choice.address);
@@ -179,17 +180,25 @@ class _LobbyScreenState extends State<LobbyScreen> {
           }
           if (state.lobby.isEmpty) {
             if (state.busy) {
-              return const Center(child: EchoSignal(size: 40, mode: EchoSignalMode.loading));
+              return const Center(
+                child: EchoSignal(size: 40, mode: EchoSignalMode.loading),
+              );
             }
-            return const _CenteredNote(
-              icon: Icons.meeting_room_outlined,
-              title: '大厅还没有点亮的房间',
-              body: '房主点亮房间后会出现在这里；也可以直接输入房间地址进入。',
+            return RefreshIndicator(
+              onRefresh: state.refreshLobby,
+              child: const _ScrollableFill(
+                child: _CenteredNote(
+                  icon: Icons.meeting_room_outlined,
+                  title: '大厅还没有点亮的房间',
+                  body: '房主点亮房间后会出现在这里；也可以直接输入房间地址进入。',
+                ),
+              ),
             );
           }
           return RefreshIndicator(
             onRefresh: state.refreshLobby,
             child: ListView.separated(
+              physics: const AlwaysScrollableScrollPhysics(),
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
               itemCount: state.lobby.length,
               separatorBuilder: (_, _) => const SizedBox(height: 10),
@@ -230,7 +239,10 @@ class _RoomCard extends StatelessWidget {
               Container(
                 width: 8,
                 height: 8,
-                decoration: const BoxDecoration(color: accent, shape: BoxShape.circle),
+                decoration: const BoxDecoration(
+                  color: accent,
+                  shape: BoxShape.circle,
+                ),
               ),
               const SizedBox(width: 12),
               Expanded(
@@ -239,7 +251,10 @@ class _RoomCard extends StatelessWidget {
                   children: [
                     Text(
                       room.label,
-                      style: const TextStyle(fontSize: 17, fontWeight: FontWeight.w600),
+                      style: const TextStyle(
+                        fontSize: 17,
+                        fontWeight: FontWeight.w600,
+                      ),
                     ),
                     const SizedBox(height: 4),
                     Text(
@@ -253,6 +268,22 @@ class _RoomCard extends StatelessWidget {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+class _ScrollableFill extends StatelessWidget {
+  const _ScrollableFill({required this.child});
+
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return LayoutBuilder(
+      builder: (context, constraints) => ListView(
+        physics: const AlwaysScrollableScrollPhysics(),
+        children: [SizedBox(height: constraints.maxHeight, child: child)],
       ),
     );
   }
@@ -286,7 +317,10 @@ class _CenteredNote extends StatelessWidget {
               Text(
                 title,
                 textAlign: TextAlign.center,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                style: const TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                ),
               ),
               const SizedBox(height: 8),
               Text(
@@ -294,10 +328,7 @@ class _CenteredNote extends StatelessWidget {
                 textAlign: TextAlign.center,
                 style: const TextStyle(color: muted, height: 1.5),
               ),
-              if (action != null) ...[
-                const SizedBox(height: 20),
-                action!,
-              ],
+              if (action != null) ...[const SizedBox(height: 20), action!],
             ],
           ),
         ),

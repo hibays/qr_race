@@ -8,11 +8,7 @@ import 'package:qr_race_gui/ui/room_screen.dart';
 import 'package:qr_race_gui/ui/theme.dart';
 
 void main() {
-  Future<void> pumpAt(
-    WidgetTester tester,
-    Size size,
-    Widget child,
-  ) async {
+  Future<void> pumpAt(WidgetTester tester, Size size, Widget child) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -21,7 +17,9 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets('room screen shows relays and members on desktop', (tester) async {
+  testWidgets('room screen shows relays and members on desktop', (
+    tester,
+  ) async {
     final state = AppState.demo();
     await pumpAt(
       tester,
@@ -33,6 +31,8 @@ void main() {
     expect(find.byType(QrImage), findsNWidgets(2));
     expect(find.text('mika'), findsOneWidget);
     expect(find.text('房间成员'), findsOneWidget);
+    expect(find.byTooltip('设置配对码'), findsNothing);
+    expect(find.byType(RefreshIndicator), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -51,7 +51,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('room screen shows relays and a member rail on a phone', (tester) async {
+  testWidgets('room screen shows relays and a member rail on a phone', (
+    tester,
+  ) async {
     final state = AppState.demo();
     await pumpAt(
       tester,
@@ -87,7 +89,9 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('the host can promote and demote from the member panel', (tester) async {
+  testWidgets('the host can promote and demote from the member panel', (
+    tester,
+  ) async {
     final state = AppState.demo();
     await pumpAt(
       tester,
@@ -193,6 +197,3 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 }
-
-
-

@@ -109,14 +109,6 @@ class ApiClient {
     await _post('/v1/room/leave', query: {'address': address});
   }
 
-  Future<void> createRoom(String address, {String? pin}) async {
-    await _post('/v1/rooms', body: {'address': address, 'pin': ?pin});
-  }
-
-  Future<void> setPin(String address, String pin) async {
-    await _post('/v1/rooms/pin', body: {'address': address, 'pin': pin});
-  }
-
   Future<String> resolvePin(String pin) async {
     final body = await _get('/v1/room/by-pin', query: {'pin': pin});
     return body['address'] as String;

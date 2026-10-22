@@ -224,20 +224,6 @@ class AppState extends ChangeNotifier {
     }
   }
 
-  Future<void> setPin(String pin) async {
-    final client = api;
-    final address = _roomAddress;
-    if (client == null || address == null) return;
-    try {
-      await client.setPin(address, pin);
-      pairingPin = pin;
-      notifyListeners();
-    } catch (e) {
-      error = _describe(e);
-      notifyListeners();
-    }
-  }
-
   Future<String?> startByPin(String pin) async {
     final client = api;
     if (client == null) return null;

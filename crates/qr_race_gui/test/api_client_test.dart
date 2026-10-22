@@ -25,11 +25,7 @@ void main() {
       if (request.url.path == '/v1/lobby') {
         return _json({
           'rooms': [
-            {
-              'label': '东京A区1B级103房',
-              'host': 'host-a',
-              'member_count': 2,
-            }
+            {'label': '东京A区1B级103房', 'host': 'host-a', 'member_count': 2},
           ],
         });
       }
@@ -42,7 +38,10 @@ void main() {
     final session = await api.authenticate(token: ' token ');
     expect(session.userId, 'host-a');
     expect(session.admin, isTrue);
-    expect(requests.first.headers['content-type'], contains('application/json'));
+    expect(
+      requests.first.headers['content-type'],
+      contains('application/json'),
+    );
 
     final rooms = await api.lobby();
     expect(rooms.single.label, '东京A区1B级103房');
@@ -51,7 +50,8 @@ void main() {
 
   test('server errors become ApiException with the server message', () async {
     final client = MockClient(
-      (_) async => _json({'error': 'totp code is invalid or expired'}, status: 401),
+      (_) async =>
+          _json({'error': 'totp code is invalid or expired'}, status: 401),
     );
     final api = ApiClient(baseUrl: 'http://example.test', httpClient: client);
 
@@ -60,8 +60,11 @@ void main() {
       throwsA(
         isA<ApiException>()
             .having((error) => error.status, 'status', 401)
-            .having((error) => error.message, 'message',
-                'totp code is invalid or expired'),
+            .having(
+              (error) => error.message,
+              'message',
+              'totp code is invalid or expired',
+            ),
       ),
     );
   });
@@ -74,21 +77,19 @@ void main() {
     });
     final api = ApiClient(baseUrl: 'http://example.test', httpClient: client);
 
-    await api.createRoom('东京A区1B级103房');
     await api.lightRoom('东京A区1B级103房');
     await api.promote('东京A区1B级103房', 'm-1');
     await api.demote('东京A区1B级103房', 'm-1');
 
-    expect(calls[0].url.path, '/v1/rooms');
-    expect(jsonDecode(calls[0].body)['address'], '东京A区1B级103房');
-    expect(calls[1].url.path, '/v1/room/light');
-    expect(calls[1].url.queryParameters['address'], '东京A区1B级103房');
-    expect(calls[2].url.path, '/v1/room/promote');
-    expect(jsonDecode(calls[2].body)['target'], 'm-1');
-    expect(calls[3].url.path, '/v1/room/demote');
+    expect(calls[0].url.path, '/v1/room/light');
+    expect(calls[0].url.queryParameters['address'], '东京A区1B级103房');
+    expect(calls[1].url.path, '/v1/room/promote');
+    expect(jsonDecode(calls[1].body)['target'], 'm-1');
+    expect(calls[2].url.path, '/v1/room/demote');
   });
 
-  test('a room view keeps the member flags and relay bytes', () async {    final client = MockClient((request) async {
+  test('a room view keeps the member flags and relay bytes', () async {
+    final client = MockClient((request) async {
       if (request.url.path == '/v1/room') {
         expect(request.url.queryParameters['address'], '西京Z区B级103房');
         return _json({
@@ -106,7 +107,7 @@ void main() {
               'kind': 'text',
               'payload_b64': base64Encode(utf8.encode('hello relay')),
               'created_at_ms': 1700000000000,
-            }
+            },
           ],
         });
       }
@@ -124,10 +125,15 @@ void main() {
     expect(room.relays.single.payloadBytes, utf8.encode('hello relay'));
   });
 
-  testWidgets('arbitrary text in the link dialog does not throw', (tester) async {
+  testWidgets('arbitrary text in the link dialog does not throw', (
+    tester,
+  ) async {
     final state = AppState();
     await tester.pumpWidget(
-      MaterialApp(theme: buildTheme(), home: ConnectScreen(state: state)),
+      MaterialApp(
+        theme: buildTheme(),
+        home: ConnectScreen(state: state),
+      ),
     );
 
     await tester.tap(find.text('从连接链接填充'));
@@ -142,7 +148,10 @@ void main() {
   testWidgets('the connect screen asks for server and token', (tester) async {
     final state = AppState();
     await tester.pumpWidget(
-      MaterialApp(theme: buildTheme(), home: ConnectScreen(state: state)),
+      MaterialApp(
+        theme: buildTheme(),
+        home: ConnectScreen(state: state),
+      ),
     );
 
     expect(
@@ -174,6 +183,3 @@ http.Response _json(Map<String, Object?> body, {int status = 200}) {
     headers: {'content-type': 'application/json; charset=utf-8'},
   );
 }
-
-
-
