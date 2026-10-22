@@ -131,7 +131,14 @@ class _ConnectScreenState extends State<ConnectScreen> {
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => LobbyScreen(state: widget.state)),
       );
+      return;
     }
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(widget.state.error ?? '连接失败'),
+        duration: const Duration(seconds: 6),
+      ),
+    );
   }
 
   @override

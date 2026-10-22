@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../api/api_client.dart';
@@ -19,10 +21,23 @@ class LobbyScreen extends StatefulWidget {
 }
 
 class _LobbyScreenState extends State<LobbyScreen> {
+  Timer? _refresh;
+
   @override
   void initState() {
     super.initState();
     widget.state.refreshLobby();
+    _refresh = Timer.periodic(const Duration(seconds: 5), (_) {
+      if (mounted && !widget.state.busy) {
+        widget.state.refreshLobby();
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _refresh?.cancel();
+    super.dispose();
   }
 
   Future<void> _disconnect() async {

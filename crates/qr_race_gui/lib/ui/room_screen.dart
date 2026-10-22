@@ -98,7 +98,6 @@ class _RoomScreenState extends State<RoomScreen> {
               : Column(
                   children: [
                     if (state.error != null) _ErrorBar(message: state.error!),
-                    if (!room.lit && me?.role == 'host')
                     if (state.pairingPin != null)
                       Container(
                         width: double.infinity,
@@ -109,6 +108,7 @@ class _RoomScreenState extends State<RoomScreen> {
                           style: const TextStyle(fontSize: 12),
                         ),
                       ),
+                    if (!room.lit && me?.role == 'host')
                       _UnlitBanner(onLight: state.lightRoom),
                     Expanded(child: _RoomBody(state: state, room: room)),
                   ],
