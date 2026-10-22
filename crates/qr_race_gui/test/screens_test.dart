@@ -125,6 +125,26 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('a lit room hides the light action', (tester) async {
+    final state = AppState.demo();
+    state.room = const RoomView(
+      label: '西京Z区B级103房',
+      lit: true,
+      host: 'host-a',
+      members: [RoomMember(user: 'host-a', role: 'host', lastRelay: null)],
+      relays: [],
+    );
+    await pumpAt(
+      tester,
+      const Size(1280, 800),
+      RoomScreen(state: state, address: '西京Z区B级103房'),
+    );
+
+    expect(find.textContaining('房间尚未点亮'), findsNothing);
+    expect(find.text('点亮'), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('creating a room explains offline demo mode', (tester) async {
     final state = AppState.demo();
     await pumpAt(tester, const Size(1280, 800), LobbyScreen(state: state));
