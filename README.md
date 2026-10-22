@@ -29,6 +29,8 @@ crates/
 └── qr_race_bench/             基准 CLI：生成 fixture、跑耗时分布、输出 JSON
 src/                           唯一的 server 二进制：serve / provision
 DEPLOY.md                      部署与真机测试：一键自部署、USB/Wi-Fi、权限、排错
+docs/BUILDING.md               构建、依赖锁定、Rust/Flutter 回归门禁
+docs/DEPLOY.md                 中心服务器 HTTPS、screen/systemd、AList 发布
 docs/API.md                    客户端契约（端点、状态码、事件、WS ticket）
 docs/PERF.md                   实测与解读（含相机采集数据）
 docs/ARCHITECTURE.md           客户端/相机/服务端/身份/动态码数据流与实测取舍
