@@ -370,13 +370,14 @@ class _Body extends StatelessWidget {
           ),
         ),
         if (!listOnly && (snapshot?.latestHits.isNotEmpty ?? false))
-          Positioned(
-            left: 12,
-            right: 12,
-            top: 96,
-            child: _LatestHitBubble(
-              hit: controller.snapshot!.latestHits.first,
-              published: controller.isPublished(controller.snapshot!.latestHits.first),
+          Positioned.fill(
+            child: IgnorePointer(
+              child: _HitBubbles(
+                snapshot: snapshot,
+                controller: controller,
+                view: media,
+                landscape: landscape,
+              ),
             ),
           ),
         Positioned(
@@ -444,40 +445,101 @@ class _MatrixBoxPainter extends CustomPainter {
       old.snapshot?.latestHits != snapshot?.latestHits;
 }
 
-class _LatestHitBubble extends StatelessWidget {
-  const _LatestHitBubble({required this.hit, required this.published});
+class _HitBubbles extends StatelessWidget {
+  const _HitBubbles({
+    required this.snapshot,
+    required this.controller,
+    required this.view,
+    required this.landscape,
+  });
+
+  final ScannerSnapshot? snapshot;
+  final ScanController controller;
+  final Size view;
+  final bool landscape;
+
+  @override
+  Widget build(BuildContext context) {
+    final matrix = snapshot?.previewMatrix;
+    final frameW = snapshot?.width ?? 0;
+    final frameH = snapshot?.height ?? 0;
+    final hits = snapshot?.latestHits ?? const <ScanHit>[];
+    if (matrix == null || matrix.length != 16 || frameW <= 0 || frameH <= 0) {
+      return const SizedBox.shrink();
+    }
+    final childW = landscape ? frameW.toDouble() : frameH.toDouble();
+    final childH = landscape ? frameH.toDouble() : frameW.toDouble();
+    final turns = landscape ? 3 : 0;
+    final rotated = turns == 3 ? Size(childH, childW) : Size(childW, childH);
+    final scale = (view.width / rotated.width) < (view.height / rotated.height)
+        ? view.width / rotated.width
+        : view.height / rotated.height;
+    final offset = Offset(
+      (view.width - rotated.width * scale) / 2,
+      (view.height - rotated.height * scale) / 2,
+    );
+    return Stack(
+      children: [
+        for (final hit in hits.take(3))
+          if (hit.points.isNotEmpty)
+            () {
+              final center = hit.points.fold<(double, double)>(
+                (0, 0),
+                (sum, p) => (sum.$1 + p.$1, sum.$2 + p.$2),
+              );
+              final childPoint = projectPreviewPoint(
+                matrix,
+                (center.$1 / hit.points.length) / frameW,
+                (center.$2 / hit.points.length) / frameH,
+                Size(childW, childH),
+              );
+              final rotatedPoint = turns == 3
+                  ? Offset(childPoint.dy, childW - childPoint.dx)
+                  : childPoint;
+              final point = offset + rotatedPoint * scale;
+              final published = controller.isPublished(hit);
+              return Positioned(
+                left: (point.dx - 90).clamp(8.0, view.width - 200),
+                top: (point.dy - 78).clamp(86.0, view.height - 120),
+                child: _HitTag(hit: hit, published: published),
+              );
+            }(),
+      ],
+    );
+  }
+}
+
+class _HitTag extends StatelessWidget {
+  const _HitTag({required this.hit, required this.published});
   final ScanHit hit;
   final bool published;
 
   @override
   Widget build(BuildContext context) {
-    final text = hit.text.isEmpty ? '（二进制内容）' : hit.text;
-    return Align(
-      alignment: Alignment.topCenter,
-      child: Container(
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.78),
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(color: accent.withValues(alpha: 0.7)),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              text,
-              maxLines: 2,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(color: Colors.white, fontSize: 13),
-            ),
-            const SizedBox(height: 4),
-            Text(
-              published ? '已广播到房间' : '离线 · 未广播',
-              style: TextStyle(color: published ? accent : Colors.white70, fontSize: 11),
-            ),
-          ],
-        ),
+    return Container(
+      constraints: const BoxConstraints(maxWidth: 200),
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 7),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.8),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: accent.withValues(alpha: 0.7)),
+      ),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            hit.text.isEmpty ? '（二进制内容）' : hit.text,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(color: Colors.white, fontSize: 12),
+          ),
+          const SizedBox(height: 2),
+          Text(
+            published ? '已广播到房间' : '离线 · 未广播',
+            style: TextStyle(color: published ? accent : Colors.white70, fontSize: 10),
+          ),
+        ],
       ),
     );
   }
@@ -796,6 +858,7 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
 
 
 
