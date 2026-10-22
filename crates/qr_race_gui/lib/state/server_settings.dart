@@ -12,19 +12,31 @@ class ServerSettings {
   final String fingerprint;
 
   static Future<ServerSettings> load() async {
-    final prefs = await SharedPreferences.getInstance();
-    return ServerSettings(
-      server: prefs.getString(_serverKey) ?? 'http://127.0.0.1:8080',
-      fingerprint: prefs.getString(_fingerprintKey) ?? '',
-    );
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      return ServerSettings(
+        server: prefs.getString(_serverKey) ?? 'http://127.0.0.1:8080',
+        fingerprint: prefs.getString(_fingerprintKey) ?? '',
+      );
+    } catch (_) {
+      // A broken platform prefs store must not block the connect screen.
+      return const ServerSettings(
+        server: 'http://127.0.0.1:8080',
+        fingerprint: '',
+      );
+    }
   }
 
   static Future<void> save({
     required String server,
     required String fingerprint,
   }) async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_serverKey, server.trim());
-    await prefs.setString(_fingerprintKey, fingerprint.trim());
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(_serverKey, server.trim());
+      await prefs.setString(_fingerprintKey, fingerprint.trim());
+    } catch (_) {
+      // Persisting convenience settings is best-effort; the session is live.
+    }
   }
 }
