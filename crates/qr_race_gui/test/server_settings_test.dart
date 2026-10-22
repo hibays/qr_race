@@ -1,0 +1,22 @@
+import 'package:flutter_test/flutter_test.dart';
+import 'package:shared_preferences/shared_preferences.dart';
+
+import 'package:qr_race_gui/state/server_settings.dart';
+
+void main() {
+  TestWidgetsFlutterBinding.ensureInitialized();
+
+  test('server, fingerprint and token survive save/load', () async {
+    SharedPreferences.setMockInitialValues({});
+    await ServerSettings.save(
+      server: 'http://<REDACTED_HOST>:8100',
+      fingerprint: 'abc123',
+      token: 'token-value',
+    );
+
+    final loaded = await ServerSettings.load();
+    expect(loaded.server, 'http://<REDACTED_HOST>:8100');
+    expect(loaded.fingerprint, 'abc123');
+    expect(loaded.token, 'token-value');
+  });
+}

@@ -54,6 +54,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
     setState(() {
       _server.text = settings.server;
       _fingerprint.text = settings.fingerprint;
+      _token.text = settings.token;
     });
   }
 
@@ -109,6 +110,7 @@ class _ConnectScreenState extends State<ConnectScreen> {
       await ServerSettings.save(
         server: _server.text,
         fingerprint: _fingerprint.text,
+        token: _token.text,
       );
       if (!mounted) return;
       final room = _linkRoom;

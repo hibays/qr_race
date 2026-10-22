@@ -55,6 +55,33 @@ class MainActivity : FlutterActivity() {
                 }
             }
         }
+        MethodChannel(
+            flutterEngine.dartExecutor.binaryMessenger,
+            "app.qrrace.qr_race_gui/storage",
+        ).setMethodCallHandler { call, result ->
+            val prefs = getSharedPreferences("qr_race_settings", MODE_PRIVATE)
+            when (call.method) {
+                "load" -> result.success(
+                    mapOf(
+                        "server" to (prefs.getString("server_url", null) ?: ""),
+                        "fingerprint" to (prefs.getString("server_fingerprint", null) ?: ""),
+                        "token" to (prefs.getString("server_token", null) ?: ""),
+                    ),
+                )
+                "save" -> {
+                    prefs.edit()
+                        .putString("server_url", call.argument<String>("server") ?: "")
+                        .putString(
+                            "server_fingerprint",
+                            call.argument<String>("fingerprint") ?: "",
+                        )
+                        .putString("server_token", call.argument<String>("token") ?: "")
+                        .apply()
+                    result.success(null)
+                }
+                else -> result.notImplemented()
+            }
+        }
         MethodChannel(flutterEngine.dartExecutor.binaryMessenger, channelName)
             .setMethodCallHandler { call, result ->
                 when (call.method) {

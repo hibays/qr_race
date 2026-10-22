@@ -123,7 +123,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
           IconButton(
             tooltip: '设置',
             onPressed: () => Navigator.of(context).push(
-              MaterialPageRoute(builder: (_) => const SettingsScreen()),
+              MaterialPageRoute(
+                builder: (_) => SettingsScreen(state: widget.state),
+              ),
             ),
             icon: const Icon(Icons.settings_outlined),
           ),
