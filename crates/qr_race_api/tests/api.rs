@@ -294,7 +294,9 @@ async fn the_mvp_flow_runs_over_http() {
         "{body}"
     );
 
-    state.room_socket_opened(&ADDRESS.parse().unwrap());
+    let address = ADDRESS.parse().unwrap();
+    let generation = state.room_epoch(&address).expect("room epoch");
+    state.room_socket_opened(&address, generation);
     let (status, lobby) = send(&app, request(Method::GET, "/v1/lobby", Some(&member), None)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(lobby["rooms"].as_array().unwrap().len(), 1);

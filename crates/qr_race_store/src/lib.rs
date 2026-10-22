@@ -168,6 +168,10 @@ impl Store {
             "DELETE FROM rooms WHERE address = ?1",
             params![address.to_string()],
         )?;
+        connection.execute(
+            "DELETE FROM room_pins WHERE address = ?1",
+            params![address.to_string()],
+        )?;
         Ok(())
     }
 

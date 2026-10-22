@@ -6,7 +6,8 @@ mod error;
 mod routes;
 mod ws;
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, RwLock};
 
 use axum::Router;
@@ -26,6 +27,11 @@ struct WsTicket {
     expires_at_ms: u64,
 }
 
+struct RoomPresence {
+    generation: u64,
+    sockets: HashSet<u64>,
+}
+
 /// Everything one server process shares between connections.
 pub struct AppState {
     auth: Mutex<AuthService>,
@@ -33,7 +39,8 @@ pub struct AppState {
     sessions: RwLock<HashMap<String, Session>>,
     tickets: Mutex<HashMap<String, WsTicket>>,
     events: Mutex<HashMap<RoomAddress, broadcast::Sender<RoomEvent>>>,
-    room_sockets: Mutex<HashMap<RoomAddress, usize>>,
+    room_sockets: Mutex<HashMap<RoomAddress, RoomPresence>>,
+    next_socket: AtomicU64,
     clock: Arc<dyn Clock>,
 }
 
@@ -51,36 +58,60 @@ impl AppState {
             tickets: Mutex::new(HashMap::new()),
             events: Mutex::new(HashMap::new()),
             room_sockets: Mutex::new(HashMap::new()),
+            next_socket: AtomicU64::new(1),
             clock,
         })
     }
 
-    pub fn room_socket_opened(&self, address: &RoomAddress) {
+    pub fn room_socket_opened(&self, address: &RoomAddress, generation: u64) -> u64 {
+        let socket_id = self.next_socket.fetch_add(1, Ordering::Relaxed);
         let mut sockets = self.room_sockets.lock().expect("room sockets lock");
-        *sockets.entry(address.clone()).or_insert(0) += 1;
+        let presence = sockets
+            .entry(address.clone())
+            .or_insert_with(|| RoomPresence {
+                generation,
+                sockets: HashSet::new(),
+            });
+        if presence.generation != generation {
+            presence.generation = generation;
+            presence.sockets.clear();
+        }
+        presence.sockets.insert(socket_id);
+        socket_id
     }
 
-    /// Drops one socket; when the last one leaves, the room is closed so a
-    /// disconnected host cannot keep a geographic or PIN address reserved.
-    pub fn room_socket_closed(&self, address: &RoomAddress) {
+    /// Drops one socket. A socket from an older incarnation of the same address
+    /// must not close a room that has since been recreated.
+    pub fn room_socket_closed(&self, address: &RoomAddress, generation: u64, socket_id: u64) {
         let last = {
             let mut sockets = self.room_sockets.lock().expect("room sockets lock");
-            let Some(count) = sockets.get_mut(address) else {
+            let Some(presence) = sockets.get_mut(address) else {
                 return;
             };
-            *count -= 1;
-            if *count == 0 {
+            if presence.generation != generation {
+                return;
+            }
+            presence.sockets.remove(&socket_id);
+            if presence.sockets.is_empty() {
                 sockets.remove(address);
                 true
             } else {
                 false
             }
         };
-        if last {
-            let mut hub = self.hub.lock().expect("hub lock");
-            let _ = hub.close_room(address);
-            self.events.lock().expect("events lock").remove(address);
+        if !last {
+            return;
         }
+        let mut hub = self.hub.lock().expect("hub lock");
+        if hub.room_epoch(address) != Some(generation) {
+            return;
+        }
+        let _ = hub.close_room(address);
+        self.events.lock().expect("events lock").remove(address);
+    }
+
+    pub fn room_epoch(&self, address: &RoomAddress) -> Option<u64> {
+        self.hub.lock().expect("hub lock").room_epoch(address)
     }
 
     pub fn room_is_live(&self, address: &RoomAddress) -> bool {
@@ -88,9 +119,8 @@ impl AppState {
             .lock()
             .expect("room sockets lock")
             .get(address)
-            .is_some_and(|count| *count > 0)
+            .is_some_and(|presence| !presence.sockets.is_empty())
     }
-
     /// Registers a user out of band (admin provisioning).
     pub fn provision(
         &self,
@@ -252,6 +282,39 @@ mod tests {
                 address: address.clone(),
             }],
         );
+    }
+
+    #[test]
+    fn an_old_socket_cannot_close_a_recreated_room() {
+        let state = AppState::new(Arc::new(ManualClock::new(0)));
+        let address = address();
+        let host = UserId("u-1".into());
+        {
+            let mut hub = state.hub.lock().expect("hub");
+            hub.create_room(address.clone(), host.clone()).unwrap();
+            hub.light_room(&host, &address).unwrap();
+        }
+        let old_epoch = state.room_epoch(&address).unwrap();
+        let old_socket = state.room_socket_opened(&address, old_epoch);
+
+        {
+            let mut hub = state.hub.lock().expect("hub");
+            hub.close_room(&address).unwrap();
+            hub.create_room(address.clone(), host.clone()).unwrap();
+            hub.light_room(&host, &address).unwrap();
+        }
+        let new_epoch = state.room_epoch(&address).unwrap();
+        assert_ne!(new_epoch, old_epoch);
+        let new_socket = state.room_socket_opened(&address, new_epoch);
+
+        state.room_socket_closed(&address, old_epoch, old_socket);
+        assert!(
+            state.hub.lock().expect("hub").room_exists(&address),
+            "old socket must not close the new room"
+        );
+
+        state.room_socket_closed(&address, new_epoch, new_socket);
+        assert!(!state.hub.lock().expect("hub").room_exists(&address));
     }
 
     #[test]

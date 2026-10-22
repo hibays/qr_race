@@ -30,17 +30,28 @@ pub async fn room_events(
     let address = query.address()?;
     let user = authenticate(&state, &headers, query.ticket.as_deref())?;
 
-    {
+    let generation = {
         let mut hub = state.hub.lock().expect("hub lock");
         // Participants only, and this also proves the room exists.
         hub.view(&user, &address)?;
-    }
+        hub.room_epoch(&address)
+            .ok_or_else(|| ApiError::NotFound("room disappeared".into()))?
+    };
 
     let receiver = state.subscribe(&address);
-    state.room_socket_opened(&address);
+    let socket_id = state.room_socket_opened(&address, generation);
     let live_state = state.clone();
     let live_address = address.clone();
-    Ok(ws.on_upgrade(move |socket| stream(socket, receiver, live_state, live_address)))
+    Ok(ws.on_upgrade(move |socket| {
+        stream(
+            socket,
+            receiver,
+            live_state,
+            live_address,
+            generation,
+            socket_id,
+        )
+    }))
 }
 
 fn authenticate(
@@ -66,6 +77,8 @@ async fn stream(
     mut receiver: broadcast::Receiver<RoomEvent>,
     state: Arc<AppState>,
     address: qr_race_core::RoomAddress,
+    generation: u64,
+    socket_id: u64,
 ) {
     loop {
         tokio::select! {
@@ -89,5 +102,5 @@ async fn stream(
             },
         }
     }
-    state.room_socket_closed(&address);
+    state.room_socket_closed(&address, generation, socket_id);
 }

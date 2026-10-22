@@ -113,6 +113,8 @@ pub struct Hub {
     rooms: BTreeMap<RoomAddress, Room>,
     relays: BTreeMap<RoomAddress, Vec<RelayEntry>>,
     relay_hashes: BTreeMap<RoomAddress, BTreeMap<String, RelayId>>,
+    epochs: BTreeMap<RoomAddress, u64>,
+    next_epoch: u64,
     clock: Arc<dyn Clock>,
     next_relay: u64,
     store: Option<Arc<Store>>,
@@ -135,6 +137,8 @@ impl Hub {
             rooms: BTreeMap::new(),
             relays: BTreeMap::new(),
             relay_hashes: BTreeMap::new(),
+            epochs: BTreeMap::new(),
+            next_epoch: 0,
             clock,
             next_relay: 0,
             store: None,
@@ -158,11 +162,19 @@ impl Hub {
             .map_err(storage_error)?
             .into_iter()
             .collect();
+        let mut epochs = BTreeMap::new();
+        for address in rooms.keys() {
+            let epoch = epochs.len() as u64 + 1;
+            epochs.insert(address.clone(), epoch);
+        }
+        let next_epoch = epochs.len() as u64;
 
         Ok(Self {
             rooms,
             relays: BTreeMap::new(),
             relay_hashes: BTreeMap::new(),
+            epochs,
+            next_epoch,
             clock,
             next_relay: 0,
             store: Some(store),
@@ -196,6 +208,8 @@ impl Hub {
         }
         self.rooms
             .insert(address.clone(), Room::new(address.clone(), host.clone()));
+        self.next_epoch = self.next_epoch.saturating_add(1);
+        self.epochs.insert(address.clone(), self.next_epoch);
         self.persist_room(&address)?;
         Ok(vec![RoomEvent::RoomCreated { address, host }])
     }
@@ -235,11 +249,20 @@ impl Hub {
     }
 
     pub fn resolve_pin(&self, pin: &str) -> Option<RoomAddress> {
-        self.pins.get(pin).cloned()
+        self.pins
+            .get(pin)
+            .filter(|address| self.rooms.contains_key(*address))
+            .cloned()
     }
 
     pub fn room_exists(&self, address: &RoomAddress) -> bool {
         self.rooms.contains_key(address)
+    }
+
+    /// Identifies one incarnation of a room address. Old event sockets carry
+    /// the old epoch and must not close a newly recreated room.
+    pub fn room_epoch(&self, address: &RoomAddress) -> Option<u64> {
+        self.epochs.get(address).copied()
     }
 
     /// Removes a room and everything tied to its address. Called when the last
@@ -250,6 +273,7 @@ impl Hub {
         }
         self.relays.remove(address);
         self.relay_hashes.remove(address);
+        self.epochs.remove(address);
         self.pins.retain(|_, existing| existing != address);
         if let Some(store) = &self.store {
             store.delete_room(address).map_err(storage_error)?;
@@ -797,6 +821,20 @@ mod tests {
 
         let reloaded = Hub::with_store(Arc::new(clock), store).unwrap();
         assert_eq!(reloaded.resolve_pin("1234"), Some(address()));
+    }
+
+    #[test]
+    fn closing_a_room_releases_its_pin_for_reuse() {
+        let clock = ManualClock::new(1_700_000_000_000);
+        let store = Arc::new(Store::in_memory().unwrap());
+        let mut hub = Hub::with_store(Arc::new(clock.clone()), store.clone()).unwrap();
+        hub.create_room(address(), host()).unwrap();
+        hub.set_pin(&host(), &address(), "1234").unwrap();
+        hub.close_room(&address()).unwrap();
+        assert_eq!(hub.resolve_pin("1234"), None);
+
+        let reloaded = Hub::with_store(Arc::new(clock), store).unwrap();
+        assert_eq!(reloaded.resolve_pin("1234"), None);
     }
     #[test]
     fn a_restart_resumes_rooms_and_roles_but_not_codes() {
