@@ -67,6 +67,31 @@ struct Session {
 
 static SESSION: Mutex<Option<Session>> = Mutex::new(None);
 static DROPPED: AtomicU64 = AtomicU64::new(0);
+static RGB_POOL: Mutex<Vec<Vec<u8>>> = Mutex::new(Vec::new());
+const RGB_POOL_MAX: usize = 3;
+
+fn take_rgb_buffer(len: usize) -> Vec<u8> {
+    let mut buffer = RGB_POOL
+        .lock()
+        .ok()
+        .and_then(|mut pool| pool.pop())
+        .unwrap_or_default();
+    buffer.resize(len, 0);
+    buffer.fill(0);
+    buffer
+}
+
+fn recycle_rgb(buffer: Option<Vec<u8>>) {
+    let Some(mut buffer) = buffer else {
+        return;
+    };
+    if let Ok(mut pool) = RGB_POOL.lock()
+        && pool.len() < RGB_POOL_MAX
+    {
+        buffer.clear();
+        pool.push(buffer);
+    }
+}
 
 pub fn start(width: u32, height: u32, backend: u32) -> i32 {
     stop();
@@ -116,13 +141,15 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                 _ => ScanMode::Hybrid,
             };
             let mut frame_seq: u64 = 0;
-            while let Ok(frame) = rx.recv() {
+            while let Ok(mut frame) = rx.recv() {
                 let Ok(gray) = GrayFrame::new(frame.width, frame.height, frame.data) else {
+                    recycle_rgb(frame.color.take());
                     continue;
                 };
+                let color = frame.color.take();
                 let started = Instant::now();
                 frame_seq += 1;
-                let outcome = pipeline.scan(&gray, frame.color.as_deref(), scan_mode, frame_seq);
+                let outcome = pipeline.scan(&gray, color.as_deref(), scan_mode, frame_seq);
                 let ran_cnn = outcome.tier.starts_with("cnn");
                 let detections = outcome.detections.clone();
                 let hits: Vec<(String, Vec<u8>, Vec<[f32; 2]>)> = outcome
@@ -195,6 +222,7 @@ pub fn start(width: u32, height: u32, backend: u32) -> i32 {
                         state.hit_count += 1;
                     }
                 }
+                recycle_rgb(color);
             }
             if let Ok(mut state) = worker_shared.lock() {
                 state.running = false;
@@ -312,8 +340,7 @@ fn now_ms() -> u64 {
 /// for the CNN tier and the preview.
 /// Converts tightly packed YUV_420_888 planes to RGB with imazen `zenyuv`'s
 /// SIMD kernels (AVX2 / NEON / WASM dispatch).
-fn yuv_to_rgb(y: &[u8], u: &[u8], v: &[u8], width: usize, height: usize) -> Vec<u8> {
-    let mut rgb = vec![0u8; width * height * 3];
+fn yuv_to_rgb_into(y: &[u8], u: &[u8], v: &[u8], width: usize, height: usize, rgb: &mut [u8]) {
     let image = yuv::YuvPlanarImage {
         y_plane: y,
         y_stride: width as u32,
@@ -326,15 +353,30 @@ fn yuv_to_rgb(y: &[u8], u: &[u8], v: &[u8], width: usize, height: usize) -> Vec<
     };
     let _ = yuv::yuv420_to_rgb(
         &image,
-        &mut rgb,
+        rgb,
         (width * 3) as u32,
         yuv::YuvRange::Limited,
         yuv::YuvStandardMatrix::Bt601,
     );
+}
+
+#[allow(dead_code)]
+fn yuv_to_rgb(y: &[u8], u: &[u8], v: &[u8], width: usize, height: usize) -> Vec<u8> {
+    let mut rgb = vec![0u8; width * height * 3];
+    yuv_to_rgb_into(y, u, v, width, height, &mut rgb);
     rgb
 }
 
-pub fn push_yuv(width: u32, height: u32, rotation: i32, y: &[u8], u: &[u8], v: &[u8]) -> i32 {
+/// Same frame path as [`push_yuv`], but takes ownership of the luma plane so
+/// the JNI conversion buffer is moved into the worker instead of copied again.
+pub fn push_yuv_owned(
+    width: u32,
+    height: u32,
+    rotation: i32,
+    mut y: Vec<u8>,
+    u: &[u8],
+    v: &[u8],
+) -> i32 {
     if width == 0 || height == 0 || width % 2 != 0 || height % 2 != 0 {
         return -1;
     }
@@ -345,7 +387,16 @@ pub fn push_yuv(width: u32, height: u32, rotation: i32, y: &[u8], u: &[u8], v: &
     if y.len() < luma_len || u.len() < chroma_len || v.len() < chroma_len {
         return -1;
     }
-    let rgb = yuv_to_rgb(y, u, v, width as usize, height as usize);
+    y.truncate(luma_len);
+    let mut rgb = take_rgb_buffer(luma_len * 3);
+    yuv_to_rgb_into(
+        &y[..luma_len],
+        u,
+        v,
+        width as usize,
+        height as usize,
+        &mut rgb,
+    );
     let session = match SESSION.lock() {
         Ok(slot) => slot.as_ref().map(|session| session.tx.clone()),
         Err(_) => return -2,
@@ -356,17 +407,33 @@ pub fn push_yuv(width: u32, height: u32, rotation: i32, y: &[u8], u: &[u8], v: &
     match tx.try_send(Frame {
         width,
         height,
-        data: y[..luma_len].to_vec(),
+        data: y,
         color: Some(rgb),
         rotation,
     }) {
         Ok(()) => 0,
-        Err(std::sync::mpsc::TrySendError::Full(_)) => {
+        Err(std::sync::mpsc::TrySendError::Full(frame)) => {
+            recycle_rgb(frame.color);
             DROPPED.fetch_add(1, Ordering::Relaxed);
             0
         }
-        Err(std::sync::mpsc::TrySendError::Disconnected(_)) => -1,
+        Err(std::sync::mpsc::TrySendError::Disconnected(frame)) => {
+            recycle_rgb(frame.color);
+            -1
+        }
     }
+}
+
+#[allow(dead_code)]
+pub fn push_yuv(width: u32, height: u32, rotation: i32, y: &[u8], u: &[u8], v: &[u8]) -> i32 {
+    if width == 0 || height == 0 || width % 2 != 0 || height % 2 != 0 {
+        return -1;
+    }
+    let luma_len = (width * height) as usize;
+    if y.len() < luma_len {
+        return -1;
+    }
+    push_yuv_owned(width, height, rotation, y[..luma_len].to_vec(), u, v)
 }
 
 #[cfg(target_os = "android")]
@@ -385,11 +452,11 @@ pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativePushFra
         let y = env.convert_byte_array(y)?;
         let u = env.convert_byte_array(u)?;
         let v = env.convert_byte_array(v)?;
-        let _ = push_yuv(
+        let _ = push_yuv_owned(
             width.max(0) as u32,
             height.max(0) as u32,
             rotation,
-            &y,
+            y,
             &u,
             &v,
         );

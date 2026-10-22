@@ -44,6 +44,12 @@ pub struct PipelineOutcome {
 pub trait QrDecoder: Send + Sync {
     fn decode_full(&self, frame: &GrayFrame, color: Option<&[u8]>) -> Vec<ScanHit>;
     fn decode_crop(&self, data: &[u8], width: usize, height: usize) -> Vec<ScanHit>;
+
+    /// Same decode, but takes ownership of a freshly scaled crop and can move
+    /// it into the frame instead of copying it. Decoding behavior is identical.
+    fn decode_crop_owned(&self, data: Vec<u8>, width: usize, height: usize) -> Vec<ScanHit> {
+        self.decode_crop(&data, width, height)
+    }
 }
 
 /// The candidate half. It intentionally has no decode method.
@@ -92,6 +98,16 @@ impl ZxingBackend {
             ],
         }
     }
+
+    fn decode_frame(&self, frame: &GrayFrame) -> Vec<ScanHit> {
+        for decoder in &self.hard_binarizers {
+            let hits = decoder.decode(frame).unwrap_or_default();
+            if !hits.is_empty() {
+                return hits;
+            }
+        }
+        self.hard.decode(frame).unwrap_or_default()
+    }
 }
 
 impl Default for ZxingBackend {
@@ -126,13 +142,14 @@ impl QrDecoder for ZxingBackend {
         let Ok(frame) = GrayFrame::new(width as u32, height as u32, data.to_vec()) else {
             return Vec::new();
         };
-        for decoder in &self.hard_binarizers {
-            let hits = decoder.decode(&frame).unwrap_or_default();
-            if !hits.is_empty() {
-                return hits;
-            }
-        }
-        self.hard.decode(&frame).unwrap_or_default()
+        self.decode_frame(&frame)
+    }
+
+    fn decode_crop_owned(&self, data: Vec<u8>, width: usize, height: usize) -> Vec<ScanHit> {
+        let Ok(frame) = GrayFrame::new(width as u32, height as u32, data) else {
+            return Vec::new();
+        };
+        self.decode_frame(&frame)
     }
 }
 
@@ -267,7 +284,7 @@ impl ScanPipeline {
                         if scale == 2.0 && ow > cw {
                             sr_used = true;
                         }
-                        decoded = self.decoder.decode_crop(&scaled, ow, oh);
+                        decoded = self.decoder.decode_crop_owned(scaled, ow, oh);
                         sw = ow;
                         sh = oh;
                     }
@@ -370,6 +387,24 @@ mod tests {
     }
 
     #[test]
+    fn owned_crop_decode_matches_borrowed() {
+        let frame = qr_frame("https://example.test/owned");
+        let backend = ZxingBackend::new();
+        let borrowed =
+            backend.decode_crop(frame.data(), frame.width() as usize, frame.height() as usize);
+        let owned = backend.decode_crop_owned(
+            frame.data().to_vec(),
+            frame.width() as usize,
+            frame.height() as usize,
+        );
+        assert_eq!(borrowed.len(), owned.len());
+        assert_eq!(
+            borrowed.iter().map(|hit| &hit.text).collect::<Vec<_>>(),
+            owned.iter().map(|hit| &hit.text).collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
     fn cnn_mode_never_falls_back_to_full_frame_decode() {
         let pipeline = ScanPipeline::with_backends(Box::new(ZxingBackend::new()), None);
         let frame = qr_frame("https://example.test/relay");
@@ -378,8 +413,4 @@ mod tests {
         assert!(outcome.detections.is_empty());
     }
 }
-
-
-
-
 
