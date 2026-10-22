@@ -37,7 +37,10 @@ pub async fn room_events(
     }
 
     let receiver = state.subscribe(&address);
-    Ok(ws.on_upgrade(move |socket| stream(socket, receiver)))
+    state.room_socket_opened(&address);
+    let live_state = state.clone();
+    let live_address = address.clone();
+    Ok(ws.on_upgrade(move |socket| stream(socket, receiver, live_state, live_address)))
 }
 
 fn authenticate(
@@ -58,7 +61,12 @@ fn authenticate(
     state.session_user(session_id)
 }
 
-async fn stream(mut socket: WebSocket, mut receiver: broadcast::Receiver<RoomEvent>) {
+async fn stream(
+    mut socket: WebSocket,
+    mut receiver: broadcast::Receiver<RoomEvent>,
+    state: Arc<AppState>,
+    address: qr_race_core::RoomAddress,
+) {
     loop {
         tokio::select! {
             event = receiver.recv() => match event {
@@ -81,4 +89,6 @@ async fn stream(mut socket: WebSocket, mut receiver: broadcast::Receiver<RoomEve
             },
         }
     }
+    state.room_socket_closed(&address);
 }
+

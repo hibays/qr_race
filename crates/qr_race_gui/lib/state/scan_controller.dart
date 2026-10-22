@@ -32,6 +32,7 @@ class ScanController extends ChangeNotifier {
   final Set<String> _published = {};
   final Set<String> _publishedTexts = {};
   final Map<String, String> _lastBySlot = {};
+  final Map<String, DateTime> _lastRefresh = {};
   final Map<String, DateTime> _retryAt = {};
   final Set<String> _queuedSlots = {};
   final List<_PendingRelay> _queue = [];
@@ -108,13 +109,23 @@ class ScanController extends ChangeNotifier {
     final api = _api;
     final address = _address;
     if (api == null || address == null) return;
+    final now = DateTime.now();
     for (final hit in snapshot.hits) {
-      if (_publishedTexts.contains(hit.text)) continue;
       final slot = relaySlot(hit.text);
+      if (_publishedTexts.contains(hit.text)) {
+        if (_queuedSlots.contains(slot)) continue;
+        final last = _lastRefresh[slot];
+        if (last != null &&
+            now.difference(last) > const Duration(seconds: 4)) {
+          _queuedSlots.add(slot);
+          _queue.add(_PendingRelay(api, address, slot, hit));
+        }
+        continue;
+      }
       if (_lastBySlot[slot] == hit.text) continue;
       if (_queuedSlots.contains(slot)) continue;
       final retry = _retryAt[slot];
-      if (retry != null && DateTime.now().isBefore(retry)) continue;
+      if (retry != null && now.isBefore(retry)) continue;
       _queuedSlots.add(slot);
       _queue.add(_PendingRelay(api, address, slot, hit));
     }
@@ -133,6 +144,7 @@ class ScanController extends ChangeNotifier {
             payload: pending.hit.raw,
           );
           _lastBySlot[pending.slot] = pending.hit.text;
+          _lastRefresh[pending.slot] = DateTime.now();
           _retryAt.remove(pending.slot);
           _published.add(pending.hit.key);
           _publishedTexts.add(pending.hit.text);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
@@ -22,14 +24,25 @@ class RoomScreen extends StatefulWidget {
 }
 
 class _RoomScreenState extends State<RoomScreen> {
+  Timer? _ticker;
+  Timer? _refresh;
+
   @override
   void initState() {
     super.initState();
     widget.state.enterRoom(widget.address);
+    _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (mounted) setState(() {});
+    });
+    _refresh = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (mounted) widget.state.refreshRoom();
+    });
   }
 
   @override
   void dispose() {
+    _ticker?.cancel();
+    _refresh?.cancel();
     widget.state.exitRoom();
     super.dispose();
   }
@@ -254,11 +267,28 @@ class _RoomBody extends StatelessWidget {
         // filling the wall with history.
         final bySlot = <String, Relay>{};
         for (final relay in room.relays) {
-          bySlot.putIfAbsent(relaySlot(relay.text), () => relay);
+          bySlot[relaySlot(relay.text)] = relay;
         }
-        final relays = bySlot.values.toList();
-        final relayArea = relays.isEmpty
-            ? const _EmptyRelays()
+        final now = DateTime.now().millisecondsSinceEpoch;
+        final active = <Relay>[];
+        final inactive = <Relay>[];
+        for (final relay in bySlot.values) {
+          final age = now - relay.createdAtMs;
+          if (age <= 10000) {
+            active.add(relay);
+          } else if (age <= 30000) {
+            inactive.add(relay);
+          }
+        }
+        final activeGrid = active.isEmpty
+            ? (inactive.isEmpty
+                ? const _EmptyRelays()
+                : const Center(
+                    child: Text(
+                      '暂无活跃码',
+                      style: TextStyle(color: muted, fontSize: 14),
+                    ),
+                  ))
             : GridView.builder(
                 padding: const EdgeInsets.all(16),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -267,10 +297,61 @@ class _RoomBody extends StatelessWidget {
                   crossAxisSpacing: 14,
                   mainAxisSpacing: 14,
                 ),
-                itemCount: relays.length,
+                itemCount: active.length,
                 itemBuilder: (context, index) =>
-                    _RelayCard(relay: relays[index], state: state),
+                    _RelayCard(relay: active[index], state: state),
               );
+        final relayArea = Column(
+          children: [
+            Expanded(child: activeGrid),
+            if (inactive.isNotEmpty)
+              Container(
+                height: 150,
+                width: double.infinity,
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: line)),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    const Padding(
+                      padding: EdgeInsets.fromLTRB(16, 8, 16, 2),
+                      child: Text(
+                        '不活跃码 · 10 秒未刷新',
+                        style: TextStyle(color: muted, fontSize: 12),
+                      ),
+                    ),
+                    Expanded(
+                      child: ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
+                        itemCount: inactive.length,
+                        separatorBuilder: (_, _) => const SizedBox(width: 8),
+                        itemBuilder: (context, index) => Container(
+                          width: 180,
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: surface,
+                            border: Border.all(color: line),
+                            borderRadius: BorderRadius.circular(10),
+                          ),
+                          child: Text(
+                            inactive[index].text,
+                            maxLines: 3,
+                            overflow: TextOverflow.ellipsis,
+                            style: const TextStyle(
+                              color: muted,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+          ],
+        );
 
         if (wide) {
           return Row(

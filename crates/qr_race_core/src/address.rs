@@ -18,6 +18,9 @@ use crate::error::CoreError;
 pub enum Capital {
     Tokyo,
     Kyoto,
+    /// Synthetic namespace for 4-digit pairing rooms. `南极1234` is not a
+    /// physical venue and never consumes an inventory room.
+    Antarctica,
 }
 
 impl Capital {
@@ -27,10 +30,14 @@ impl Capital {
         match self {
             Capital::Tokyo => "东京",
             Capital::Kyoto => "西京",
+            Capital::Antarctica => "南极",
         }
     }
 
     pub fn from_name(name: &str) -> Option<Self> {
+        if name == "南极" {
+            return Some(Capital::Antarctica);
+        }
         Self::ALL
             .into_iter()
             .find(|capital| capital.as_str() == name)
@@ -104,6 +111,9 @@ impl RoomAddress {
 
 impl fmt::Display for RoomAddress {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        if self.capital == Capital::Antarctica {
+            return write!(f, "南极{}", self.district);
+        }
         write!(
             f,
             "{}{}区{}级{}房",
@@ -117,6 +127,14 @@ impl FromStr for RoomAddress {
 
     fn from_str(input: &str) -> Result<Self, Self::Err> {
         let text = input.trim();
+        if let Some(pin) = text.strip_prefix("南极") {
+            if pin.len() != 4 || !pin.chars().all(|c| c.is_ascii_digit()) {
+                return Err(CoreError::Address(
+                    "南极 rooms need a four-digit PIN".into(),
+                ));
+            }
+            return Self::new(Capital::Antarctica, pin, "1", "1");
+        }
         let rest = text
             .strip_suffix('房')
             .ok_or_else(|| CoreError::Address("address must end with 房".into()))?;
@@ -156,6 +174,15 @@ mod tests {
         let address: RoomAddress = "西京Z区B级103房".parse().unwrap();
         assert_eq!(address.capital, Capital::Kyoto);
         assert_eq!(address.segments(), ["西京", "Z", "B", "103"]);
+    }
+
+    #[test]
+    fn parses_a_pin_only_southern_room() {
+        let address: RoomAddress = "南极1234".parse().unwrap();
+        assert_eq!(address.capital, Capital::Antarctica);
+        assert_eq!(address.district, "1234");
+        assert_eq!(address.to_string(), "南极1234");
+        assert!("南极123".parse::<RoomAddress>().is_err());
     }
 
     #[test]

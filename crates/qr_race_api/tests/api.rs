@@ -25,7 +25,7 @@ const ADMIN_TOKEN: &str = "admin-token-01234567890";
 const ADMIN_SECRET: &str = "JBSWY3DPEHPK3PXPJBSWY3DPEHPK3PXP";
 const ADDRESS: &str = "东京A区1B级103房";
 
-fn fixture() -> (Router, ManualClock) {
+fn fixture() -> (Router, ManualClock, Arc<AppState>) {
     let clock = ManualClock::new(1_700_000_000_000);
     let state = AppState::new(Arc::new(clock.clone()));
     state
@@ -37,7 +37,7 @@ fn fixture() -> (Router, ManualClock) {
     state
         .provision_as(UserId("admin".into()), ADMIN_TOKEN, ADMIN_SECRET, true)
         .unwrap();
-    (router(state), clock)
+    (router(state.clone()), clock, state)
 }
 
 fn request(method: Method, uri: &str, session: Option<&str>, body: Option<Value>) -> Request<Body> {
@@ -88,7 +88,7 @@ async fn authenticate(app: &Router, clock: &ManualClock, token: &str, secret: &s
 
 #[tokio::test]
 async fn cors_preflight_is_allowed_for_the_web_client() {
-    let (app, _clock) = fixture();
+    let (app, _clock, _state) = fixture();
     let request = Request::builder()
         .method(Method::OPTIONS)
         .uri("/v1/lobby")
@@ -114,7 +114,7 @@ async fn cors_preflight_is_allowed_for_the_web_client() {
 
 #[tokio::test]
 async fn repeated_bad_codes_lock_the_account_temporarily() {
-    let (app, clock) = fixture();
+    let (app, clock, _state) = fixture();
 
     for _ in 0..qr_race_hub::auth::MAX_FAILED_ATTEMPTS {
         let (status, _) = send(
@@ -160,7 +160,7 @@ async fn repeated_bad_codes_lock_the_account_temporarily() {
 
 #[tokio::test]
 async fn auth_reports_whether_the_account_is_an_admin() {
-    let (app, clock) = fixture();
+    let (app, clock, _state) = fixture();
 
     let admin_code = totp::current_code(ADMIN_SECRET, clock.now_ms(), 6).unwrap();
     let (status, body) = send(
@@ -193,7 +193,7 @@ async fn auth_reports_whether_the_account_is_an_admin() {
 
 #[tokio::test]
 async fn the_mvp_flow_runs_over_http() {
-    let (app, clock) = fixture();
+    let (app, clock, state) = fixture();
 
     let (status, _) = send(&app, request(Method::GET, "/v1/health", None, None)).await;
     assert_eq!(status, StatusCode::OK);
@@ -237,6 +237,7 @@ async fn the_mvp_flow_runs_over_http() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
+    state.room_socket_opened(&ADDRESS.parse().unwrap());
     let (status, lobby) = send(&app, request(Method::GET, "/v1/lobby", Some(&member), None)).await;
     assert_eq!(status, StatusCode::OK);
     assert_eq!(lobby["rooms"].as_array().unwrap().len(), 1);
@@ -289,7 +290,7 @@ async fn the_mvp_flow_runs_over_http() {
 
 #[tokio::test]
 async fn auth_failures_are_401() {
-    let (app, clock) = fixture();
+    let (app, clock, _state) = fixture();
     let code = totp::current_code(HOST_SECRET, clock.now_ms(), 6).unwrap();
 
     let (status, _) = send(
@@ -333,7 +334,7 @@ async fn auth_failures_are_401() {
 
 #[tokio::test]
 async fn room_errors_map_to_status_codes() {
-    let (app, clock) = fixture();
+    let (app, clock, _state) = fixture();
     let host = authenticate(&app, &clock, HOST_TOKEN, HOST_SECRET).await;
     let member = authenticate(&app, &clock, MEMBER_TOKEN, MEMBER_SECRET).await;
 
@@ -426,4 +427,39 @@ async fn room_errors_map_to_status_codes() {
     )
     .await;
     assert_eq!(status, StatusCode::FORBIDDEN);
+}
+
+
+
+
+#[tokio::test]
+async fn pin_start_uses_the_southern_namespace() {
+    let (app, clock, _state) = fixture();
+    let host = authenticate(&app, &clock, HOST_TOKEN, HOST_SECRET).await;
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            "/v1/rooms/start-by-pin",
+            Some(&host),
+            Some(json!({ "pin": "9999" })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(body["address"], "南极9999");
+    assert_eq!(body["created"], true);
+
+    let (status, room) = send(
+        &app,
+        request(
+            Method::GET,
+            &room_uri("南极9999", ""),
+            Some(&host),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(room["label"], "南极9999");
 }

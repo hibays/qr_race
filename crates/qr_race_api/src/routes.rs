@@ -73,6 +73,7 @@ pub async fn lobby(State(state): State<Arc<AppState>>, Authed(_user): Authed) ->
         rooms: hub
             .lit_rooms()
             .into_iter()
+            .filter(|room| state.room_is_live(&room.address))
             .map(LobbyRoomDto::from)
             .collect(),
     })
@@ -119,9 +120,16 @@ pub async fn start_by_pin(
             created: false,
         }));
     }
-    let address = inventory_addresses()
-        .find(|address| !hub.room_exists(address))
-        .ok_or_else(|| ApiError::Conflict("no free room left in the inventory".into()))?;
+    let address = RoomAddress::new(
+        Capital::Antarctica,
+        body.pin.clone(),
+        "1",
+        "1",
+    )
+    .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    if hub.room_exists(&address) {
+        return Err(ApiError::Conflict("PIN room already exists".into()));
+    }
     hub.create_room(address.clone(), user.clone())?;
     hub.light_room(&user, &address)?;
     hub.set_pin(&user, &address, &body.pin)?;
@@ -312,40 +320,6 @@ pub async fn relay(
         .map(|relay: RelayEntry| RelayDto::from(&relay))
         .ok_or_else(|| ApiError::BadRequest("relay was not published".into()))?;
     Ok(Json(relay))
-}
-
-fn inventory_addresses() -> impl Iterator<Item = RoomAddress> {
-    let mut addresses = Vec::new();
-    for (capital, districts, levels, floors) in [
-        (Capital::Tokyo, &["A", "B"][..], 12usize, 6usize),
-        (Capital::Kyoto, &["Z"][..], 8usize, 5usize),
-    ] {
-        for district in districts {
-            for level in 0..levels {
-                let level = match capital {
-                    Capital::Tokyo => format!(
-                        "{}{}",
-                        level / 2 + 1,
-                        if level % 2 == 0 { "A" } else { "B" }
-                    ),
-                    Capital::Kyoto => ((b'A' + level as u8) as char).to_string(),
-                };
-                for floor in 1..=floors {
-                    for unit in 1..=9 {
-                        if let Ok(address) = RoomAddress::new(
-                            capital,
-                            *district,
-                            &level,
-                            format!("{floor}{unit:02}"),
-                        ) {
-                            addresses.push(address);
-                        }
-                    }
-                }
-            }
-        }
-    }
-    addresses.into_iter()
 }
 
 fn validate_pin(pin: &str) -> Result<(), ApiError> {

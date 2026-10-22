@@ -44,14 +44,14 @@ class AppState extends ChangeNotifier {
           payloadB64: base64Encode(
             utf8.encode('https://example.test/relay?n=42&room=103'),
           ),
-          createdAtMs: 1700000000000,
+          createdAtMs: DateTime.now().millisecondsSinceEpoch - 2000,
         ),
         Relay(
           id: 'r-2',
           publisher: 'mika',
           kind: 'text',
           payloadB64: base64Encode(utf8.encode('第二枚码的接力内容')),
-          createdAtMs: 1700000060000,
+          createdAtMs: DateTime.now().millisecondsSinceEpoch - 1000,
         ),
       ],
     );
@@ -341,6 +341,7 @@ class AppState extends ChangeNotifier {
     super.dispose();
   }
 }
+
 
 
 

@@ -33,6 +33,7 @@ pub struct AppState {
     sessions: RwLock<HashMap<String, Session>>,
     tickets: Mutex<HashMap<String, WsTicket>>,
     events: Mutex<HashMap<RoomAddress, broadcast::Sender<RoomEvent>>>,
+    room_sockets: Mutex<HashMap<RoomAddress, usize>>,
     clock: Arc<dyn Clock>,
 }
 
@@ -49,8 +50,48 @@ impl AppState {
             sessions: RwLock::new(HashMap::new()),
             tickets: Mutex::new(HashMap::new()),
             events: Mutex::new(HashMap::new()),
+            room_sockets: Mutex::new(HashMap::new()),
             clock,
         })
+    }
+
+    pub fn room_socket_opened(&self, address: &RoomAddress) {
+        let mut sockets = self.room_sockets.lock().expect("room sockets lock");
+        *sockets.entry(address.clone()).or_insert(0) += 1;
+    }
+
+    /// Drops one socket; when the last one leaves, the room is closed so a
+    /// disconnected host cannot keep a geographic or PIN address reserved.
+    pub fn room_socket_closed(&self, address: &RoomAddress) {
+        let last = {
+            let mut sockets = self.room_sockets.lock().expect("room sockets lock");
+            let Some(count) = sockets.get_mut(address) else {
+                return;
+            };
+            *count -= 1;
+            if *count == 0 {
+                sockets.remove(address);
+                true
+            } else {
+                false
+            }
+        };
+        if last {
+            let mut hub = self.hub.lock().expect("hub lock");
+            let _ = hub.close_room(address);
+            self.events
+                .lock()
+                .expect("events lock")
+                .remove(address);
+        }
+    }
+
+    pub fn room_is_live(&self, address: &RoomAddress) -> bool {
+        self.room_sockets
+            .lock()
+            .expect("room sockets lock")
+            .get(address)
+            .is_some_and(|count| *count > 0)
     }
 
     /// Registers a user out of band (admin provisioning).
