@@ -332,16 +332,32 @@ class _Body extends StatelessWidget {
           child: Container(
             color: Colors.black,
             child: controller.previewTextureId != null
-                ? Stack(
-                    fit: StackFit.expand,
-                    children: [
-                      Texture(
-                        textureId: controller.previewTextureId!,
+                ? ClipRect(
+                    child: FittedBox(
+                      fit: BoxFit.contain,
+                      child: RotatedBox(
+                        quarterTurns: landscape ? 3 : 0,
+                        child: SizedBox(
+                        width: landscape
+                            ? (snapshot?.width ?? 1920).toDouble()
+                            : (snapshot?.height ?? 1440).toDouble(),
+                        height: landscape
+                            ? (snapshot?.height ?? 1440).toDouble()
+                            : (snapshot?.width ?? 1920).toDouble(),
+                        child: Stack(
+                          fit: StackFit.expand,
+                          children: [
+                            Texture(
+                              textureId: controller.previewTextureId!,
+                            ),
+                            CustomPaint(
+                              painter: _MatrixBoxPainter(snapshot: snapshot),
+                            ),
+                          ],
+                        ),
+                        ),
                       ),
-                      CustomPaint(
-                        painter: _MatrixBoxPainter(snapshot: snapshot),
-                      ),
-                    ],
+                    ),
                   )
                 : snapshot?.preview != null
                     ? Image.memory(
@@ -748,6 +764,7 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
 
 
 
