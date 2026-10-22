@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import '../state/app_state.dart';
 import '../state/server_settings.dart';
+import 'echo_signal.dart';
 import 'theme.dart';
 
 class SettingsScreen extends StatefulWidget {
@@ -84,7 +85,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
     return Scaffold(
       appBar: AppBar(title: const Text('设置')),
       body: !_loaded
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: EchoSignal(size: 48, mode: EchoSignalMode.loading))
           : ListView(
               padding: const EdgeInsets.all(20),
               children: [
@@ -133,7 +134,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ? const SizedBox(
                           width: 20,
                           height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
+                          child: EchoSignal(size: 18, mode: EchoSignalMode.loading),
                         )
                       : const Text('保存并重新连接'),
                 ),

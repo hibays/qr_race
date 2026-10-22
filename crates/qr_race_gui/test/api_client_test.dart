@@ -145,7 +145,16 @@ void main() {
       MaterialApp(theme: buildTheme(), home: ConnectScreen(state: state)),
     );
 
-    expect(find.text('qr_race'), findsOneWidget);
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Image &&
+            widget.image is AssetImage &&
+            (widget.image as AssetImage).assetName ==
+                'assets/brand/qr_race-lockup.png',
+      ),
+      findsOneWidget,
+    );
     expect(find.text('连接'), findsOneWidget);
     expect(find.byType(TextFormField), findsNWidgets(3));
     expect(find.text('证书指纹（可选）'), findsOneWidget);

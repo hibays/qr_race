@@ -43,6 +43,9 @@ class ScanController extends ChangeNotifier {
 
   bool isPublished(ScanHit hit) => _published.contains(hit.key);
 
+  /// True while a hot relay is waiting for, or inside, the publish HTTP call.
+  bool get isBroadcasting => _draining || _queue.isNotEmpty;
+
   bool get autoPublishEnabled => _api != null;
 
   int? get previewTextureId => backend.previewTextureId;

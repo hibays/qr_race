@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img">
+  <title>qr_race — ECHO SIGNAL mark</title>
+
+  <rect x="128" y="272" width="136" height="136" rx="12" fill="none" stroke="#0B0F0C" stroke-width="24"/>
+  <rect x="168" y="312" width="56" height="56" fill="#0B0F0C"/>
+  <path d="M264 208 A64 64 0 0 1 328 272" fill="none" stroke="#0B0F0C" stroke-width="20" stroke-linecap="round"/>
+  <path d="M264 160 A112 112 0 0 1 376 272" fill="none" stroke="#0B0F0C" stroke-width="20" stroke-linecap="round"/>
+  <path d="M264 112 A160 160 0 0 1 424 272" fill="none" stroke="#0B0F0C" stroke-width="20" stroke-linecap="round"/>
+  <circle cx="424" cy="272" r="17" fill="#63F2C5"/>
+
+</svg>

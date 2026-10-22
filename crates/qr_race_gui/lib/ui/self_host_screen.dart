@@ -7,6 +7,7 @@ import '../native/storage_access.dart';
 import '../selfhost/self_host_launcher.dart';
 import '../state/app_state.dart';
 import 'lobby_screen.dart';
+import 'echo_signal.dart';
 import 'theme.dart';
 
 /// One-click server: provision accounts, choose HTTP/self-signed/custom TLS,
@@ -228,7 +229,7 @@ class _SelfHostScreenState extends State<SelfHostScreen>
                   ? const SizedBox(
                       width: 18,
                       height: 18,
-                      child: CircularProgressIndicator(strokeWidth: 2, color: accentInk),
+                      child: EchoSignal(size: 18, mode: EchoSignalMode.loading, color: accentInk, accent: accentInk),
                     )
                   : const Text('启动本机服务器'),
             ),

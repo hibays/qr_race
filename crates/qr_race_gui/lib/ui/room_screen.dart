@@ -11,6 +11,7 @@ import '../state/relay_slot.dart';
 import 'open_link_sheet.dart';
 import 'qr_image.dart';
 import 'scan_screen.dart';
+import 'echo_signal.dart';
 import 'theme.dart';
 
 class RoomScreen extends StatefulWidget {
@@ -66,9 +67,24 @@ class _RoomScreenState extends State<RoomScreen> {
             title: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  room?.label ?? widget.address,
-                  style: const TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                Row(
+                  children: [
+                    Image.asset(
+                      'assets/brand/qr_race-mark.png',
+                      width: 22,
+                      height: 22,
+                    ),
+                    const SizedBox(width: 7),
+                    Flexible(
+                      child: Text(
+                        room?.label ?? widget.address,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
                 Text(
                   room == null
@@ -251,7 +267,7 @@ class _RoomScreenState extends State<RoomScreen> {
         ),
       );
     }
-    return const Center(child: CircularProgressIndicator());
+    return const Center(child: EchoSignal(size: 40, mode: EchoSignalMode.loading));
   }
 }
 
@@ -847,7 +863,3 @@ class _UnlitBanner extends StatelessWidget {
     );
   }
 }
-
-
-
-

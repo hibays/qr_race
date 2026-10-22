@@ -3,6 +3,7 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 
 import '../native/qr_renderer.dart';
+import 'echo_signal.dart';
 
 /// Renders a QR code through the native encoder and shows the WebP
 /// bytes with nearest-neighbour scaling. The module edges stay crisp because
@@ -71,7 +72,7 @@ class _QrImageState extends State<QrImage> {
             child: SizedBox(
               width: 18,
               height: 18,
-              child: CircularProgressIndicator(strokeWidth: 2),
+              child: EchoSignal(size: 28, mode: EchoSignalMode.loading),
             ),
           ),
         );
@@ -79,4 +80,3 @@ class _QrImageState extends State<QrImage> {
     );
   }
 }
-

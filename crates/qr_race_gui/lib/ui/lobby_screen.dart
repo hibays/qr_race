@@ -9,6 +9,7 @@ import '../state/app_state.dart';
 import 'connect_screen.dart';
 import 'room_screen.dart';
 import 'settings_screen.dart';
+import 'echo_signal.dart';
 import 'theme.dart';
 
 class LobbyScreen extends StatefulWidget {
@@ -101,7 +102,20 @@ class _LobbyScreenState extends State<LobbyScreen> {
           builder: (context, _) => Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const Text('大厅', style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700)),
+              Row(
+                children: [
+                  Image.asset(
+                    'assets/brand/qr_race-mark.png',
+                    width: 24,
+                    height: 24,
+                  ),
+                  const SizedBox(width: 8),
+                  const Text(
+                    '大厅',
+                    style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),
+                  ),
+                ],
+              ),
               Text(
                 '${widget.state.session?.userId ?? ''} · ${widget.state.api?.baseUrl ?? ''}',
                 style: const TextStyle(fontSize: 12, color: muted),
@@ -165,7 +179,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
           }
           if (state.lobby.isEmpty) {
             if (state.busy) {
-              return const Center(child: CircularProgressIndicator());
+              return const Center(child: EchoSignal(size: 40, mode: EchoSignalMode.loading));
             }
             return const _CenteredNote(
               icon: Icons.meeting_room_outlined,
@@ -291,9 +305,3 @@ class _CenteredNote extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-

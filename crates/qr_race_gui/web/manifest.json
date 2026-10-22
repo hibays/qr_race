@@ -1,11 +1,11 @@
 {
-    "name": "qr_race_gui",
-    "short_name": "qr_race_gui",
+    "name": "qr_race",
+    "short_name": "qr_race",
     "start_url": ".",
     "display": "standalone",
-    "background_color": "#0175C2",
-    "theme_color": "#0175C2",
-    "description": "A new Flutter project.",
+    "background_color": "#0A0E0B",
+    "theme_color": "#0A0E0B",
+    "description": "现场扫码接力：房主扫一次，全房间亮屏。",
     "orientation": "portrait-primary",
     "prefer_related_applications": false,
     "icons": [

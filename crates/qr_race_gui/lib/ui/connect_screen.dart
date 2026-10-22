@@ -8,6 +8,7 @@ import '../state/server_settings.dart';
 import 'lobby_screen.dart';
 import 'room_screen.dart';
 import 'self_host_screen.dart';
+import 'echo_signal.dart';
 import 'theme.dart';
 
 class ConnectScreen extends StatefulWidget {
@@ -160,14 +161,12 @@ class _ConnectScreenState extends State<ConnectScreen> {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.stretch,
                     children: [
-                      const Text(
-                        'qr_race',
-                        style: TextStyle(
-                          fontSize: 34,
-                          fontWeight: FontWeight.w800,
-                          letterSpacing: -0.5,
-                          color: ink,
-                        ),
+                      Image.asset(
+                        'assets/brand/qr_race-lockup.png',
+                        height: 78,
+                        fit: BoxFit.contain,
+                        alignment: Alignment.centerLeft,
+                        semanticLabel: 'qr_race',
                       ),
                       const SizedBox(height: 6),
                       const Text(
@@ -217,13 +216,11 @@ class _ConnectScreenState extends State<ConnectScreen> {
                       FilledButton(
                         onPressed: state.busy ? null : _connect,
                         child: state.busy
-                            ? const SizedBox(
-                                width: 20,
-                                height: 20,
-                                child: CircularProgressIndicator(
-                                  strokeWidth: 2,
-                                  color: accentInk,
-                                ),
+                            ? const EchoSignal(
+                                size: 18,
+                                mode: EchoSignalMode.loading,
+                                color: accentInk,
+                                accent: accentInk,
                               )
                             : const Text('连接'),
                       ),
@@ -325,10 +322,3 @@ class _LinkDialogState extends State<_LinkDialog> {
     );
   }
 }
-
-
-
-
-
-
-

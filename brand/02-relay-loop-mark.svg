@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img">
+  <title>qr_race — RELAY LOOP mark</title>
+
+  <path d="M136 288 V136 H288" fill="none" stroke="#0B0F0C" stroke-width="40" stroke-linecap="square"/>
+  <path d="M376 224 V376 H224" fill="none" stroke="#0B0F0C" stroke-width="40" stroke-linecap="square"/>
+  <path d="M216 296 L292 220" fill="none" stroke="#C8FF4D" stroke-width="30" stroke-linecap="round"/>
+  <path d="M292 184 L332 216 L292 248 Z" fill="#C8FF4D"/>
+  <rect x="244" y="244" width="24" height="24" fill="#C8FF4D"/>
+
+</svg>

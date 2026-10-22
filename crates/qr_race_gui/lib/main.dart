@@ -5,6 +5,7 @@ import 'state/app_state.dart';
 import 'state/server_settings.dart';
 import 'ui/connect_screen.dart';
 import 'ui/lobby_screen.dart';
+import 'ui/echo_signal.dart';
 import 'ui/room_screen.dart';
 import 'ui/theme.dart';
 
@@ -102,7 +103,7 @@ class _StartupGateState extends State<_StartupGate> {
   Widget build(BuildContext context) {
     if (_checking) {
       return const Scaffold(
-        body: Center(child: CircularProgressIndicator()),
+        body: Center(child: EchoSignal(size: 56, mode: EchoSignalMode.loading)),
       );
     }
     if (_connected) return LobbyScreen(state: widget.state);

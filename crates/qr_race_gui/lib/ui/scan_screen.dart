@@ -7,6 +7,7 @@ import '../state/app_state.dart';
 import '../state/relay_slot.dart';
 import '../state/scan_controller.dart';
 import 'open_link_sheet.dart';
+import 'echo_signal.dart';
 import 'theme.dart';
 
 class ScanScreen extends StatefulWidget {
@@ -183,7 +184,7 @@ class _ScanScreenState extends State<ScanScreen> with WidgetsBindingObserver {
               child: Column(
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  CircularProgressIndicator(),
+                  EchoSignal(size: 44, mode: EchoSignalMode.loading),
                   SizedBox(height: 14),
                   Text('正在申请相机权限…', style: TextStyle(color: muted, fontSize: 12.5)),
                 ],
@@ -646,6 +647,10 @@ class _Results extends StatelessWidget {
                 '识别结果 · 自动发布',
                 style: TextStyle(fontSize: 12, letterSpacing: 1.2, color: muted),
               ),
+              if (controller.isBroadcasting) ...[
+                const SizedBox(width: 8),
+                const EchoSignal(size: 18, mode: EchoSignalMode.broadcasting),
+              ],
               const SizedBox(width: 8),
               const Expanded(child: Divider(color: line)),
               IconButton(
@@ -909,40 +914,3 @@ class _InitError extends StatelessWidget {
     );
   }
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
