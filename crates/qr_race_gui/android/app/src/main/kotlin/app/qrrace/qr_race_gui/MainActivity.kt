@@ -82,9 +82,24 @@ class MainActivity : FlutterActivity() {
                         texture.surfaceTexture().setDefaultBufferSize(width, height)
                         capture = CameraCapture(
                             this,
-                            Surface(texture.surfaceTexture()),
+                            texture.surfaceTexture(),
                         ).also { it.start(width, height) }
                         result.success(texture.id())
+                    }
+                    "previewTransform" -> {
+                        val capture = capture
+                        val matrix = capture?.previewTransform()
+                        if (matrix == null) {
+                            result.success(null)
+                        } else {
+                            result.success(
+                                mapOf(
+                                    "matrix" to matrix.toList(),
+                                    "width" to capture.previewWidth(),
+                                    "height" to capture.previewHeight(),
+                                ),
+                            )
+                        }
                     }
                     "trackDetections" -> {
                         capture?.trackDetections(
@@ -289,6 +304,7 @@ class MainActivity : FlutterActivity() {
         startActivity(intent)
     }
 }
+
 
 
 

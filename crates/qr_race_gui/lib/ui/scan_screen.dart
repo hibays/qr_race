@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../native/camera_permission.dart';
-import '../native/preview_geometry.dart';
+import '../native/preview_projection.dart';
 import '../native/scanner_backend.dart';
 import '../state/app_state.dart';
 import '../state/relay_slot.dart';
@@ -324,8 +324,7 @@ class _Body extends StatelessWidget {
     }
     final media = MediaQuery.sizeOf(context);
     final landscape = media.width > media.height;
-    final previewRotation = landscape ? 0 : (snapshot?.rotation ?? 90);
-    final source = _SourceSize.of(snapshot, previewRotation);
+
     final previewFit = landscape && !fullFrame ? BoxFit.cover : BoxFit.contain;
     return Stack(
       children: [
@@ -333,20 +332,16 @@ class _Body extends StatelessWidget {
           child: Container(
             color: Colors.black,
             child: controller.previewTextureId != null
-                ? ClipRect(
-                    child: FittedBox(
-                      fit: previewFit,
-                      child: RotatedBox(
-                        quarterTurns: quarterTurnsForRotation(snapshot?.rotation ?? 90),
-                        child: SizedBox(
-                          width: landscape ? (snapshot?.width ?? 1920).toDouble() : source.width,
-                          height: landscape ? (snapshot?.height ?? 1440).toDouble() : source.height,
-                          child: Texture(
-                            textureId: controller.previewTextureId!,
-                          ),
-                        ),
+                ? Stack(
+                    fit: StackFit.expand,
+                    children: [
+                      Texture(
+                        textureId: controller.previewTextureId!,
                       ),
-                    ),
+                      CustomPaint(
+                        painter: _MatrixBoxPainter(snapshot: snapshot),
+                      ),
+                    ],
                   )
                 : snapshot?.preview != null
                     ? Image.memory(
@@ -375,16 +370,6 @@ class _Body extends StatelessWidget {
             ),
           ),
         ),
-        Positioned.fill(
-          child: _HitOverlay(
-            controller: controller,
-            snapshot: snapshot,
-            rotation: controller.previewTextureId != null
-                ? previewRotation
-                : (snapshot?.rotation ?? 0),
-            contain: controller.previewTextureId != null && previewFit == BoxFit.contain,
-          ),
-        ),
         Positioned(
           left: 12,
           bottom: 12,
@@ -405,6 +390,49 @@ class _Body extends StatelessWidget {
       ],
     );
   }
+}
+
+class _MatrixBoxPainter extends CustomPainter {
+  const _MatrixBoxPainter({required this.snapshot});
+  final ScannerSnapshot? snapshot;
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final matrix = snapshot?.previewMatrix;
+    final frameW = snapshot?.width ?? 0;
+    final frameH = snapshot?.height ?? 0;
+    if (matrix == null || matrix.length != 16 || frameW <= 0 || frameH <= 0) {
+      return;
+    }
+    final hits = snapshot?.latestHits ?? const <ScanHit>[];
+    for (final hit in hits) {
+      if (hit.points.isEmpty) continue;
+      final path = Path();
+      for (var i = 0; i < hit.points.length; i++) {
+        final u = hit.points[i].$1 / frameW;
+        final v = hit.points[i].$2 / frameH;
+        final point = projectPreviewPoint(matrix, u, v, size);
+        if (i == 0) {
+          path.moveTo(point.dx, point.dy);
+        } else {
+          path.lineTo(point.dx, point.dy);
+        }
+      }
+      path.close();
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 4
+          ..color = accent,
+      );
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant _MatrixBoxPainter old) =>
+      old.snapshot?.previewMatrix != snapshot?.previewMatrix ||
+      old.snapshot?.latestHits != snapshot?.latestHits;
 }
 
 class _CameraPlaceholder extends StatelessWidget {
@@ -502,310 +530,6 @@ class _Results extends StatelessWidget {
 /// Draws the latest hit next to its QR corners. The Android SurfaceTexture is
 /// already upright but its buffer is portrait (height×width of the sensor), so
 /// the texture uses swapped dimensions and the points map with a 90° rotation.
-class _HitOverlay extends StatelessWidget {
-  const _HitOverlay({
-    required this.controller,
-    required this.snapshot,
-    required this.rotation,
-    required this.contain,
-  });
-
-  final ScanController controller;
-  final ScannerSnapshot? snapshot;
-  final int rotation;
-  final bool contain;
-
-  @override
-  Widget build(BuildContext context) {
-    final all = snapshot?.hits ?? const <ScanHit>[];
-    final seq = snapshot?.latestSeq ?? 0;
-    final hits = seq == 0
-        ? all
-        : all.where((hit) => seq - hit.lastSeq <= 3).toList(growable: false);
-    if (hits.isEmpty) return const SizedBox.shrink();
-    final latest = hits.first;
-    return LayoutBuilder(
-      builder: (context, constraints) {
-        final size = Size(constraints.maxWidth, constraints.maxHeight);
-        final source = _SourceSize.of(snapshot, rotation);
-        final point = _mapToView(latest.points, snapshot, source, size, rotation, contain);
-        final left = point == null
-            ? 16.0
-            : (point.dx - 130).clamp(8.0, size.width - 268.0);
-        final top = point == null
-            ? 96.0
-            : (point.dy - 92).clamp(78.0, size.height - 190.0);
-        return Stack(
-          children: [
-            Positioned.fill(
-              child: IgnorePointer(
-                child: CustomPaint(
-                  painter: _DetectionBoxPainter(
-                    hits: hits,
-                    detections: snapshot?.detections ?? const [],
-                    snapshot: snapshot,
-                    source: source,
-                    view: size,
-                    rotation: rotation,
-                    contain: contain,
-                  ),
-                ),
-              ),
-            ),
-            Positioned(
-              left: left,
-              top: top,
-              child: _HitBubble(
-                hit: latest,
-                published: controller.isPublished(latest),
-                autoPublish: controller.autoPublishEnabled,
-              ),
-            ),
-            for (final hit in hits.skip(1).take(2))
-              if (_mapToView(hit.points, snapshot, source, size, rotation, contain)
-                  case final point?)
-                Positioned(
-                  left: (point.dx - 85).clamp(8.0, size.width - 178.0),
-                  top: (point.dy + 50).clamp(78.0, size.height - 120.0),
-                  child: _MiniHitBubble(
-                    hit: hit,
-                    published: controller.isPublished(hit),
-                  ),
-                ),
-          ],
-        );
-      },
-    );
-  }
-}
-
-class _SourceSize {
-  const _SourceSize(this.width, this.height);
-  final double width;
-  final double height;
-
-  static _SourceSize of(ScannerSnapshot? snapshot, int rotation) {
-    if (snapshot == null || snapshot.width == 0 || snapshot.height == 0) {
-      return const _SourceSize(1, 1);
-    }
-    final degrees = ((rotation % 360) + 360) % 360;
-    return degrees == 90 || degrees == 270
-        ? _SourceSize(snapshot.height.toDouble(), snapshot.width.toDouble())
-        : _SourceSize(snapshot.width.toDouble(), snapshot.height.toDouble());
-  }
-}
-
-Offset? _mapToView(
-  List<(double, double)> points,
-  ScannerSnapshot? snapshot,
-  _SourceSize source,
-  Size view,
-  int rotation,
-  bool contain,
-) {
-  final mapped = _mapPoints(points, snapshot, source, view, rotation, contain);
-  if (mapped.isEmpty) return null;
-  final sum = mapped.fold(Offset.zero, (a, b) => a + b);
-  return sum / mapped.length.toDouble();
-}
-
-List<Offset> _mapPoints(
-  List<(double, double)> points,
-  ScannerSnapshot? snapshot,
-  _SourceSize source,
-  Size view,
-  int rotation,
-  bool contain,
-) {
-  if (points.isEmpty || snapshot == null) return const [];
-  return PreviewGeometry(
-    frameWidth: snapshot.width,
-    frameHeight: snapshot.height,
-    rotation: rotation,
-    view: view,
-    contain: contain,
-  ).mapPoints(points);
-}
-
-class _DetectionBoxPainter extends CustomPainter {
-  _DetectionBoxPainter({
-    required this.hits,
-    required this.detections,
-    required this.snapshot,
-    required this.source,
-    required this.view,
-    required this.rotation,
-    required this.contain,
-  });
-
-  final List<ScanHit> hits;
-  final List<List<(double, double)>> detections;
-  final ScannerSnapshot? snapshot;
-  final _SourceSize source;
-  final Size view;
-  final int rotation;
-  final bool contain;
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    for (final box in detections) {
-      final quad = _mapPoints(box, snapshot, source, size, rotation, contain);
-      if (quad.length < 4) continue;
-      final path = Path()..moveTo(quad[0].dx, quad[0].dy);
-      for (final point in quad.skip(1)) {
-        path.lineTo(point.dx, point.dy);
-      }
-      path.close();
-      final cyanBounds = path.getBounds().inflate(5);
-      canvas.drawRect(
-        cyanBounds,
-        Paint()
-          ..style = PaintingStyle.stroke
-          ..strokeWidth = 2
-          ..color = const Color(0xFF6FE7FF),
-      );
-    }
-    for (var i = 0; i < hits.length; i++) {
-      final quad = _mapPoints(hits[i].points, snapshot, source, size, rotation, contain);
-      if (quad.isEmpty) continue;
-      final path = Path();
-      if (quad.length >= 4) {
-        path.moveTo(quad[0].dx, quad[0].dy);
-        for (final point in quad.skip(1)) {
-          path.lineTo(point.dx, point.dy);
-        }
-      } else {
-        final xs = quad.map((p) => p.dx);
-        final ys = quad.map((p) => p.dy);
-        final left = xs.reduce((a, b) => a < b ? a : b);
-        final top = ys.reduce((a, b) => a < b ? a : b);
-        final right = xs.reduce((a, b) => a > b ? a : b);
-        final bottom = ys.reduce((a, b) => a > b ? a : b);
-        path.addRect(Rect.fromLTRB(left - 8, top - 8, right + 8, bottom + 8));
-      }
-      path.close();
-      final paint = Paint()
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = i == 0 ? 3 : 2
-        ..color = i == 0 ? accent : Colors.white70;
-      canvas.drawPath(path, paint);
-    }
-  }
-
-  @override
-  bool shouldRepaint(covariant _DetectionBoxPainter old) =>
-      old.hits != hits ||
-      old.detections != detections ||
-      old.snapshot != snapshot;
-}
-
-class _MiniHitBubble extends StatelessWidget {
-  const _MiniHitBubble({required this.hit, required this.published});
-
-  final ScanHit hit;
-  final bool published;
-
-  @override
-  Widget build(BuildContext context) {
-    return Container(
-      width: 170,
-      padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 7),
-      decoration: BoxDecoration(
-        color: Colors.black.withValues(alpha: 0.72),
-        borderRadius: BorderRadius.circular(10),
-        border: Border.all(
-          color: published ? accent : Colors.white.withValues(alpha: 0.28),
-        ),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Text(
-            hit.text,
-            maxLines: 2,
-            overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 11, color: Colors.white),
-          ),
-          const SizedBox(height: 3),
-          Text(
-            published ? '已广播' : '离线 · 未广播',
-            style: TextStyle(
-              fontSize: 9,
-              color: published ? accent : muted,
-            ),
-          ),
-        ],
-      ),
-    );
-  }
-}
-class _HitBubble extends StatelessWidget {
-  const _HitBubble({
-    required this.hit,
-    required this.published,
-    required this.autoPublish,
-  });
-
-  final ScanHit hit;
-  final bool published;
-  final bool autoPublish;
-
-  @override
-  Widget build(BuildContext context) {
-    final text = hit.text.isEmpty ? '（二进制内容）' : hit.text;
-    final status = !autoPublish
-        ? '离线 · 未广播'
-        : published
-            ? '已广播到房间'
-            : '广播中…';
-    return ConstrainedBox(
-      constraints: const BoxConstraints(maxWidth: 260),
-      child: Container(
-        padding: const EdgeInsets.fromLTRB(12, 9, 12, 9),
-        decoration: BoxDecoration(
-          color: Colors.black.withValues(alpha: 0.78),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: published ? accent : Colors.white.withValues(alpha: 0.35),
-          ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(
-              text,
-              maxLines: 3,
-              overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 13, height: 1.3, color: Colors.white),
-            ),
-            const SizedBox(height: 4),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Icon(
-                  published ? Icons.cloud_done_outlined : Icons.cloud_off_outlined,
-                  size: 13,
-                  color: published ? accent : muted,
-                ),
-                const SizedBox(width: 4),
-                Text(
-                  status,
-                  style: TextStyle(
-                    fontSize: 11,
-                    color: published ? accent : muted,
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-}
-
 class _StatusChip extends StatelessWidget {
   const _StatusChip({required this.snapshot, required this.backend});
 
@@ -1024,6 +748,8 @@ class _InitError extends StatelessWidget {
     );
   }
 }
+
+
 
 
 

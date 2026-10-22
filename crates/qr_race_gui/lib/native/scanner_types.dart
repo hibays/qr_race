@@ -16,6 +16,9 @@ class ScannerSnapshot {
     this.latestSeq = 0,
     required this.previewSeq,
     required this.preview,
+    this.previewMatrix,
+    this.previewWidth = 0,
+    this.previewHeight = 0,
     required this.source,
     this.detections = const [],
     this.wechatRuns = 0,
@@ -29,6 +32,9 @@ class ScannerSnapshot {
   factory ScannerSnapshot.fromJson(
     Map<String, dynamic> json, {
     Uint8List? preview,
+    List<double>? previewMatrix,
+    int previewWidth = 0,
+    int previewHeight = 0,
   }) {
     final stats = json['stats'] as Map<String, dynamic>? ?? const {};
     final hits = (json['hits'] as List<dynamic>? ?? const [])
@@ -50,6 +56,9 @@ class ScannerSnapshot {
       latestSeq: json['latest_seq'] as int? ?? 0,
       previewSeq: json['preview_seq'] as int? ?? 0,
       preview: preview,
+      previewMatrix: previewMatrix,
+      previewWidth: previewWidth,
+      previewHeight: previewHeight,
       source: json['source'] as String?,
       detections: (json['detections'] as List<dynamic>? ?? const [])
           .map((box) => _decodePoints(box))
@@ -81,6 +90,9 @@ class ScannerSnapshot {
   final int latestSeq;
   final int previewSeq;
   final Uint8List? preview;
+  final List<double>? previewMatrix;
+  final int previewWidth;
+  final int previewHeight;
   final String? source;
   /// Latest WeChat detector candidate boxes (four corners).
   final List<List<(double, double)>> detections;

@@ -2,6 +2,7 @@ package app.qrrace.qr_race_gui
 
 import android.annotation.SuppressLint
 import android.content.Context
+import android.graphics.SurfaceTexture
 import android.graphics.ImageFormat
 import android.graphics.Rect
 import android.hardware.camera2.CameraCaptureSession
@@ -25,8 +26,11 @@ import kotlin.math.sqrt
  */
 class CameraCapture(
     private val context: Context,
-    private val previewSurface: android.view.Surface? = null,
+    private val previewTexture: SurfaceTexture? = null,
 ) {
+    private val previewSurface: android.view.Surface? = previewTexture?.let { android.view.Surface(it) }
+    @Volatile private var frameWidth = 1920
+    @Volatile private var frameHeight = 1440
     private var thread: HandlerThread? = null
     private var handler: Handler? = null
     private var camera: CameraDevice? = null
@@ -61,6 +65,8 @@ class CameraCapture(
         activeArray = characteristics.get(CameraCharacteristics.SENSOR_INFO_ACTIVE_ARRAY_SIZE)
         val map = characteristics.get(CameraCharacteristics.SCALER_STREAM_CONFIGURATION_MAP)
         val size = chooseSize(map, requestedWidth, requestedHeight)
+        frameWidth = size.width
+        frameHeight = size.height
 
         reader = ImageReader.newInstance(size.width, size.height, ImageFormat.YUV_420_888, 2).also {
             it.setOnImageAvailableListener({ source -> onImage(source) }, callbackHandler)
@@ -195,6 +201,18 @@ class CameraCapture(
         } catch (error: Exception) {
             Log.e(TAG, "zoom request failed", error)
         }
+    }
+
+    fun previewWidth(): Int = frameWidth
+
+    fun previewHeight(): Int = frameHeight
+
+    fun previewTransform(): FloatArray? {
+        val texture = previewTexture ?: return null
+        if (stopped) return null
+        val matrix = FloatArray(16)
+        texture.getTransformMatrix(matrix)
+        return matrix
     }
 
     fun stop() {
@@ -336,6 +354,8 @@ class CameraCapture(
         }
     }
 }
+
+
 
 
 

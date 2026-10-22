@@ -54,6 +54,10 @@ class FfiScannerBackend implements ScannerBackend {
   Uint8List? _lastPreview;
   bool _started = false;
   int? _previewTextureId;
+  List<double>? _previewMatrix;
+  int _previewWidth = 0;
+  int _previewHeight = 0;
+  int _transformTick = 0;
 
   @override
   int? get previewTextureId => _previewTextureId;
@@ -88,6 +92,19 @@ class FfiScannerBackend implements ScannerBackend {
       final id = await _channel.invokeMethod<int>('previewTextureId');
       if (id != null && id >= 0) {
         _previewTextureId = id == 0 ? null : id;
+      }
+      if (++_transformTick % 15 == 0) {
+        final data = await _channel.invokeMapMethod<String, dynamic>(
+          'previewTransform',
+        );
+        final matrix = (data?['matrix'] as List<dynamic>?)
+            ?.map((v) => (v as num).toDouble())
+            .toList(growable: false);
+        if (matrix != null && matrix.length == 16) {
+          _previewMatrix = matrix;
+          _previewWidth = data?['width'] as int? ?? 0;
+          _previewHeight = data?['height'] as int? ?? 0;
+        }
       }
     } catch (_) {}
   }
@@ -146,7 +163,13 @@ class FfiScannerBackend implements ScannerBackend {
         _lastPreviewSeq = seq;
       }
     }
-    return ScannerSnapshot.fromJson(json, preview: preview);
+    return ScannerSnapshot.fromJson(
+      json,
+      preview: preview,
+      previewMatrix: _previewMatrix,
+      previewWidth: _previewWidth,
+      previewHeight: _previewHeight,
+    );
   }
 
   @override

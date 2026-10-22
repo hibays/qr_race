@@ -37,10 +37,11 @@ preview sequence). Android preview is a zero-copy Flutter Texture; desktop keeps
 4. The Rust worker converts YUV to RGB with the SIMD `yuv` crate and first decodes RGB with zxing-cpp. On a miss it runs
    `ScanEngine` (pyramid detector + zxing-cpp on luma), then the CNN tiers.
    Frames are **not rotated** here; QR detection is rotation-independent.
-   Sensor rotation is metadata only; the Android SurfaceTexture is a 1440×1920 portrait buffer and is already upright, so the texture child uses the swapped dimensions and `BoxFit.contain`, so the full sensor field of view is visible with letterboxing instead of a center crop.
-5. Android preview is rendered straight from the Camera2 SurfaceTexture registered
-   with Flutter, so no JPEG, no rotation copy, and no full-frame preview upload.
-   Desktop still uses the 1280 px JPEG preview.
+   Sensor rotation is metadata only; Flutter displays the Camera2 SurfaceTexture directly.
+5. Android preview is a zero-copy Flutter Texture. The same SurfaceTexture
+   transform matrix is exposed through the camera channel, and the hit/detection
+   overlay projects YUV points through it (with the GL bottom-left Y flip), so
+   preview and boxes share one display transform. No JPEG/BMP/RGBA copy.
 6. `addImageAvailableListener` uses `acquireLatestImage()` and a busy flag, so
    the camera stays live and the UI never builds an unbounded backlog.
 
@@ -52,8 +53,7 @@ symbol in view produces one hit.
 - The scan path is raw `GrayFrame` data; no compression, PNG or JPEG is involved
   in decoding.
 - Android has **no preview encoding**: Camera2 also renders into a
-  `SurfaceTexture` registered with Flutter, so the preview is a GPU texture.
-- Desktop still has the **preview JPEG** (`image` with the `jpeg` feature) for
+- Android preview is a **GPU SurfaceTexture**: no image encoder and no per-frame copy.
   `Image.memory`.
 - `qr_race_ffi` now builds `qr_race_scan` with `default-features = false`, so
   the scan crate's own PNG/BMP file decoders are gone.

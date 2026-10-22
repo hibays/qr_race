@@ -12,7 +12,7 @@ finished product.
 | Rust lints | `cargo clippy --workspace --all-targets -- -D warnings` | clean |
 | Rust tests | `$env:ORT_DYLIB_PATH=".refs/ort129-root/lib/onnxruntime.dll"; cargo test --workspace` | **134 passed** |
 | Flutter analyze | `flutter analyze` | no issues |
-| Flutter tests | `flutter test` | **33 passed** (includes preview geometry regression) |
+| Flutter tests | `flutter test` | **34 passed** (includes SurfaceTexture matrix projection regression) |
 | Windows build | `flutter build windows --release` | built |
 | Web build | `flutter build web --release` | built; scan/QR use vendored zxing-wasm |
 | Android packages | `pwsh scripts/build_android.ps1` | 3 split release APKs: arm64-v8a 59.6 MB, armeabi-v7a 45.3 MB, x86_64 67.6 MB; each contains FFI/ZXing/ORT/libc++ for its ABI |
@@ -253,6 +253,7 @@ dart run tool/selfhost_probe.dart
 # Android device (builds, adb reverse, installs, launches)
 pwsh -File scripts/android-deploy.ps1 -Port 8443
 ```
+
 
 
 
