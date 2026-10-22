@@ -6,6 +6,7 @@
 
 use std::path::Path;
 use std::str::FromStr;
+use std::sync::Arc;
 use std::sync::Mutex;
 
 use qr_race_core::{
@@ -212,7 +213,7 @@ impl Store {
                 relay.publisher.0,
                 kind_to_str(relay.kind),
                 compression_to_str(relay.compression),
-                relay.payload,
+                relay.payload.as_ref(),
                 relay.created_at_ms as i64,
             ],
         )?;
@@ -252,7 +253,7 @@ impl Store {
                 publisher: UserId(publisher),
                 kind: kind_from_str(&kind)?,
                 compression: compression_from_str(&compression)?,
-                payload,
+                payload: Arc::from(payload),
                 created_at_ms: created_at_ms as u64,
             });
         }
@@ -265,6 +266,31 @@ impl Store {
             "DELETE FROM relays WHERE room = ?1 AND seq NOT IN
              (SELECT seq FROM relays WHERE room = ?1 ORDER BY seq DESC LIMIT ?2)",
             params![room.to_string(), keep as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn clear_relays(&self) -> Result<(), StoreError> {
+        self.lock()?.execute("DELETE FROM relays", [])?;
+        Ok(())
+    }
+
+    pub fn delete_relays_before(
+        &self,
+        room: &RoomAddress,
+        cutoff_ms: u64,
+    ) -> Result<(), StoreError> {
+        self.lock()?.execute(
+            "DELETE FROM relays WHERE room = ?1 AND created_at_ms < ?2",
+            params![room.to_string(), cutoff_ms as i64],
+        )?;
+        Ok(())
+    }
+
+    pub fn touch_relay(&self, relay_id: &str, created_at_ms: u64) -> Result<(), StoreError> {
+        self.lock()?.execute(
+            "UPDATE relays SET created_at_ms = ?2 WHERE id = ?1",
+            params![relay_id, created_at_ms as i64],
         )?;
         Ok(())
     }
@@ -453,4 +479,3 @@ mod tests {
         let _ = std::fs::remove_file(path.with_extension("db-shm"));
     }
 }
-

@@ -15,6 +15,7 @@ pub enum ApiError {
     BadRequest(String),
     Conflict(String),
     TooManyRequests(String),
+    ServiceUnavailable(String),
     Internal(String),
 }
 
@@ -27,6 +28,7 @@ impl ApiError {
             ApiError::BadRequest(message) => (StatusCode::BAD_REQUEST, message),
             ApiError::Conflict(message) => (StatusCode::CONFLICT, message),
             ApiError::TooManyRequests(message) => (StatusCode::TOO_MANY_REQUESTS, message),
+            ApiError::ServiceUnavailable(message) => (StatusCode::SERVICE_UNAVAILABLE, message),
             ApiError::Internal(message) => (StatusCode::INTERNAL_SERVER_ERROR, message),
         }
     }
@@ -62,6 +64,8 @@ impl From<HubError> for ApiError {
             HubError::RoomNotLit(_) => ApiError::Conflict(message),
             HubError::NotAScanner | HubError::NotAParticipant => ApiError::Forbidden(message),
             HubError::InvalidPin(_) => ApiError::BadRequest(message),
+            HubError::RelayNotFound(_) => ApiError::NotFound(message),
+            HubError::TooManyRooms => ApiError::ServiceUnavailable(message),
             HubError::Storage(_) => ApiError::Internal(message),
             HubError::Core(core) => ApiError::from(core),
         }

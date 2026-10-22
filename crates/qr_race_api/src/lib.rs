@@ -79,10 +79,7 @@ impl AppState {
         if last {
             let mut hub = self.hub.lock().expect("hub lock");
             let _ = hub.close_room(address);
-            self.events
-                .lock()
-                .expect("events lock")
-                .remove(address);
+            self.events.lock().expect("events lock").remove(address);
         }
     }
 
@@ -203,11 +200,13 @@ pub fn router(state: Arc<AppState>) -> Router {
         .route("/v1/room", get(routes::room_view))
         .route("/v1/room/light", post(routes::light))
         .route("/v1/room/join", post(routes::join))
+        .route("/v1/room/enter", post(routes::enter))
         .route("/v1/room/guest", post(routes::guest))
         .route("/v1/room/leave", post(routes::leave))
         .route("/v1/room/promote", post(routes::promote))
         .route("/v1/room/demote", post(routes::demote))
         .route("/v1/room/relay", post(routes::relay))
+        .route("/v1/room/relay/heartbeat", post(routes::relay_heartbeat))
         .route("/v1/room/events", get(ws::room_events))
         // The Flutter web build is served from a different origin than the API.
         .layer(CorsLayer::permissive())

@@ -237,6 +237,25 @@ async fn the_mvp_flow_runs_over_http() {
     .await;
     assert_eq!(status, StatusCode::NO_CONTENT);
 
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            &room_uri(ADDRESS, "/enter"),
+            Some(&member),
+            None,
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["room"]["label"], ADDRESS);
+    assert!(
+        body["ticket"]
+            .as_str()
+            .is_some_and(|ticket| !ticket.is_empty()),
+        "{body}"
+    );
+
     state.room_socket_opened(&ADDRESS.parse().unwrap());
     let (status, lobby) = send(&app, request(Method::GET, "/v1/lobby", Some(&member), None)).await;
     assert_eq!(status, StatusCode::OK);
@@ -429,9 +448,6 @@ async fn room_errors_map_to_status_codes() {
     assert_eq!(status, StatusCode::FORBIDDEN);
 }
 
-
-
-
 #[tokio::test]
 async fn pin_start_uses_the_southern_namespace() {
     let (app, clock, _state) = fixture();
@@ -452,12 +468,7 @@ async fn pin_start_uses_the_southern_namespace() {
 
     let (status, room) = send(
         &app,
-        request(
-            Method::GET,
-            &room_uri("南极9999", ""),
-            Some(&host),
-            None,
-        ),
+        request(Method::GET, &room_uri("南极9999", ""), Some(&host), None),
     )
     .await;
     assert_eq!(status, StatusCode::OK);

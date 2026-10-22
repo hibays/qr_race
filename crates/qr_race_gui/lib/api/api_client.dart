@@ -12,10 +12,11 @@ class ApiClient {
     required String baseUrl,
     http.Client? httpClient,
     String? fingerprint,
-  })  : baseUrl = normalizeBaseUrl(baseUrl),
-        _fingerprint = normalizeFingerprint(fingerprint),
-        _http = httpClient ??
-            transport.createHttpClient(normalizeFingerprint(fingerprint));
+  }) : baseUrl = normalizeBaseUrl(baseUrl),
+       _fingerprint = normalizeFingerprint(fingerprint),
+       _http =
+           httpClient ??
+           transport.createHttpClient(normalizeFingerprint(fingerprint));
 
   final String baseUrl;
   String? get fingerprint => _fingerprint;
@@ -35,9 +36,9 @@ class ApiClient {
   }
 
   Map<String, String> get _headers => {
-        'content-type': 'application/json',
-        if (sessionId != null) 'authorization': 'Bearer $sessionId',
-      };
+    'content-type': 'application/json',
+    if (sessionId != null) 'authorization': 'Bearer $sessionId',
+  };
 
   Future<AuthSession> authenticate({required String token}) async {
     final response = await _http.post(
@@ -73,13 +74,19 @@ class ApiClient {
     await _post('/v1/room/join', query: {'address': address});
   }
 
+  /// One round trip for join + room snapshot + WebSocket ticket.
+  Future<RoomEntry> enter(String address) async {
+    final body = await _post('/v1/room/enter', query: {'address': address});
+    return RoomEntry(
+      room: RoomView.fromJson(body['room'] as Map<String, dynamic>),
+      ticket: body['ticket'] as String,
+    );
+  }
+
   /// Host-only: mints a fresh member identity for this room. The guest is a
   /// real server account, but its token is only shared in the invite.
   Future<GuestAccount> createGuest(String address) async {
-    final body = await _post(
-      '/v1/room/guest',
-      query: {'address': address},
-    );
+    final body = await _post('/v1/room/guest', query: {'address': address});
     return GuestAccount(
       userId: body['user_id'] as String,
       token: body['token'] as String,
@@ -91,10 +98,7 @@ class ApiClient {
   }
 
   Future<void> createRoom(String address, {String? pin}) async {
-    await _post('/v1/rooms', body: {
-      'address': address,
-      'pin': ?pin,
-    });
+    await _post('/v1/rooms', body: {'address': address, 'pin': ?pin});
   }
 
   Future<void> setPin(String address, String pin) async {
@@ -113,7 +117,6 @@ class ApiClient {
       created: body['created'] as bool? ?? false,
     );
   }
-
 
   Future<void> lightRoom(String address) async {
     await _post('/v1/room/light', query: {'address': address});
@@ -140,21 +143,35 @@ class ApiClient {
     required List<int> payload,
     String kind = 'text',
   }) async {
-    final body = await _post('/v1/room/relay', query: {'address': address}, body: {
-      'kind': kind,
-      'payload_b64': base64Encode(payload),
-    });
+    final body = await _post(
+      '/v1/room/relay',
+      query: {'address': address},
+      body: {'kind': kind, 'payload_b64': base64Encode(payload)},
+    );
     return Relay.fromJson(body);
+  }
+
+  Future<void> publishHeartbeat(String address, String hash) async {
+    await _post(
+      '/v1/room/relay/heartbeat',
+      query: {'address': address},
+      body: {'hash': hash},
+    );
   }
 
   /// Gets a single-use ticket, then opens the room event socket.
   Future<WebSocketChannel> openEvents(String address) async {
     final body = await _post('/v1/ws-ticket');
-    final ticket = body['ticket'] as String;
+    return openEventsWithTicket(address, body['ticket'] as String);
+  }
+
+  Future<WebSocketChannel> openEventsWithTicket(
+    String address,
+    String ticket,
+  ) async {
     final wsBase = baseUrl.replaceFirst(RegExp('^http'), 'ws');
-    final uri = Uri.parse('$wsBase/v1/room/events').replace(
-      queryParameters: {'address': address, 'ticket': ticket},
-    );
+    final uri = Uri.parse('$wsBase/v1/room/events')
+        .replace(queryParameters: {'address': address, 'ticket': ticket});
     return transport.openWebSocket(uri, _fingerprint);
   }
 
@@ -216,11 +233,15 @@ class ApiException implements Exception {
   String toString() => message.isEmpty ? 'HTTP $status' : message;
 }
 
+class RoomEntry {
+  const RoomEntry({required this.room, required this.ticket});
+
+  final RoomView room;
+  final String ticket;
+}
+
 class GuestAccount {
-  const GuestAccount({
-    required this.userId,
-    required this.token,
-  });
+  const GuestAccount({required this.userId, required this.token});
 
   final String userId;
   final String token;
@@ -248,10 +269,10 @@ class LobbyRoom {
   });
 
   factory LobbyRoom.fromJson(Map<String, dynamic> json) => LobbyRoom(
-        label: json['label'] as String,
-        host: json['host'] as String,
-        memberCount: json['member_count'] as int,
-      );
+    label: json['label'] as String,
+    host: json['host'] as String,
+    memberCount: json['member_count'] as int,
+  );
 
   final String label;
   final String host;
@@ -268,16 +289,16 @@ class RoomView {
   });
 
   factory RoomView.fromJson(Map<String, dynamic> json) => RoomView(
-        label: json['label'] as String,
-        lit: json['lit'] as bool,
-        host: json['host'] as String,
-        members: (json['members'] as List<dynamic>? ?? const [])
-            .map((member) => RoomMember.fromJson(member as Map<String, dynamic>))
-            .toList(),
-        relays: (json['relays'] as List<dynamic>? ?? const [])
-            .map((relay) => Relay.fromJson(relay as Map<String, dynamic>))
-            .toList(),
-      );
+    label: json['label'] as String,
+    lit: json['lit'] as bool,
+    host: json['host'] as String,
+    members: (json['members'] as List<dynamic>? ?? const [])
+        .map((member) => RoomMember.fromJson(member as Map<String, dynamic>))
+        .toList(),
+    relays: (json['relays'] as List<dynamic>? ?? const [])
+        .map((relay) => Relay.fromJson(relay as Map<String, dynamic>))
+        .toList(),
+  );
 
   final String label;
   final bool lit;
@@ -286,12 +307,12 @@ class RoomView {
   final List<Relay> relays;
 
   RoomView copyWith({List<Relay>? relays}) => RoomView(
-        label: label,
-        lit: lit,
-        host: host,
-        members: members,
-        relays: relays ?? this.relays,
-      );
+    label: label,
+    lit: lit,
+    host: host,
+    members: members,
+    relays: relays ?? this.relays,
+  );
 }
 
 class RoomMember {
@@ -302,10 +323,10 @@ class RoomMember {
   });
 
   factory RoomMember.fromJson(Map<String, dynamic> json) => RoomMember(
-        user: json['user'] as String,
-        role: json['role'] as String,
-        lastRelay: json['last_relay'] as String?,
-      );
+    user: json['user'] as String,
+    role: json['role'] as String,
+    lastRelay: json['last_relay'] as String?,
+  );
 
   final String user;
   final String role;
@@ -315,10 +336,10 @@ class RoomMember {
   bool get hasRelayed => lastRelay != null;
 
   String get roleLabel => switch (role) {
-        'host' => '房主',
-        'co_host' => '副房主',
-        _ => '成员',
-      };
+    'host' => '房主',
+    'co_host' => '副房主',
+    _ => '成员',
+  };
 }
 
 class Relay {
@@ -331,12 +352,12 @@ class Relay {
   });
 
   factory Relay.fromJson(Map<String, dynamic> json) => Relay(
-        id: json['id'] as String,
-        publisher: json['publisher'] as String,
-        kind: json['kind'] as String? ?? 'text',
-        payloadB64: json['payload_b64'] as String,
-        createdAtMs: json['created_at_ms'] as int,
-      );
+    id: json['id'] as String,
+    publisher: json['publisher'] as String,
+    kind: json['kind'] as String? ?? 'text',
+    payloadB64: json['payload_b64'] as String,
+    createdAtMs: json['created_at_ms'] as int,
+  );
 
   final String id;
   final String publisher;
@@ -345,6 +366,14 @@ class Relay {
   final int createdAtMs;
 
   List<int> get payloadBytes => base64Decode(payloadB64);
+
+  Relay copyWith({int? createdAtMs}) => Relay(
+    id: id,
+    publisher: publisher,
+    kind: kind,
+    payloadB64: payloadB64,
+    createdAtMs: createdAtMs ?? this.createdAtMs,
+  );
 
   /// Best-effort display text; the bytes are the authoritative payload.
   String get text => utf8.decode(payloadBytes, allowMalformed: true);
@@ -356,8 +385,3 @@ class Relay {
     return '$hour:$minute';
   }
 }
-
-
-
-
-

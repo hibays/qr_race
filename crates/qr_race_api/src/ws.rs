@@ -31,7 +31,7 @@ pub async fn room_events(
     let user = authenticate(&state, &headers, query.ticket.as_deref())?;
 
     {
-        let hub = state.hub.lock().expect("hub lock");
+        let mut hub = state.hub.lock().expect("hub lock");
         // Participants only, and this also proves the room exists.
         hub.view(&user, &address)?;
     }
@@ -91,4 +91,3 @@ async fn stream(
     }
     state.room_socket_closed(&address);
 }
-

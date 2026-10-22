@@ -16,8 +16,8 @@ use serde::{Deserialize, Serialize};
 use crate::AppState;
 use crate::dto::{
     AuthRequest, AuthResponse, CreateRoomRequest, LobbyDto, LobbyRoomDto, PinRoomResponse,
-    PinStartRequest, PinStartResponse, RelayBody, RelayDto, RoomViewDto, SetPinRequest,
-    TargetRequest, WsTicketResponse,
+    PinStartRequest, PinStartResponse, RelayBody, RelayDto, RelayHeartbeatBody, RelaySeenResponse,
+    RoomViewDto, SetPinRequest, TargetRequest, WsTicketResponse,
 };
 use crate::error::ApiError;
 
@@ -120,13 +120,8 @@ pub async fn start_by_pin(
             created: false,
         }));
     }
-    let address = RoomAddress::new(
-        Capital::Antarctica,
-        body.pin.clone(),
-        "1",
-        "1",
-    )
-    .map_err(|error| ApiError::BadRequest(error.to_string()))?;
+    let address = RoomAddress::new(Capital::Antarctica, body.pin.clone(), "1", "1")
+        .map_err(|error| ApiError::BadRequest(error.to_string()))?;
     if hub.room_exists(&address) {
         return Err(ApiError::Conflict("PIN room already exists".into()));
     }
@@ -178,7 +173,7 @@ pub async fn room_view(
 ) -> Result<Json<RoomViewDto>, ApiError> {
     let address = query.address()?;
     let view = {
-        let hub = state.hub.lock().expect("hub lock");
+        let mut hub = state.hub.lock().expect("hub lock");
         hub.view(&user, &address)?
     };
     Ok(Json(RoomViewDto::from(&view)))
@@ -213,6 +208,37 @@ pub async fn join(
 }
 
 #[derive(Serialize)]
+pub struct EnterResponse {
+    pub room: RoomViewDto,
+    pub ticket: String,
+    pub expires_at_ms: u64,
+}
+
+/// Joins the room, returns its current view and a single-use WebSocket ticket
+/// in one round trip. The client used to need join + room + ws-ticket, which
+/// made room entry latency three times the network RTT.
+pub async fn enter(
+    State(state): State<Arc<AppState>>,
+    Authed(user): Authed,
+    Query(query): Query<RoomQuery>,
+) -> Result<Json<EnterResponse>, ApiError> {
+    let address = query.address()?;
+    let (view, events) = {
+        let mut hub = state.hub.lock().expect("hub lock");
+        let events = hub.join(user.clone(), &address)?;
+        let view = hub.view(&user, &address)?;
+        (view, events)
+    };
+    state.publish(&address, &events);
+    let (ticket, expires_at_ms) = state.issue_ticket(user);
+    Ok(Json(EnterResponse {
+        room: RoomViewDto::from(&view),
+        ticket,
+        expires_at_ms,
+    }))
+}
+
+#[derive(Serialize)]
 pub struct GuestResponse {
     user_id: String,
     token: String,
@@ -227,7 +253,7 @@ pub async fn guest(
 ) -> Result<Json<GuestResponse>, ApiError> {
     let address = query.address()?;
     {
-        let hub = state.hub.lock().expect("hub lock");
+        let mut hub = state.hub.lock().expect("hub lock");
         let view = hub.view(&user, &address)?;
         if view.host != user {
             return Err(ApiError::Forbidden(
@@ -320,6 +346,31 @@ pub async fn relay(
         .map(|relay: RelayEntry| RelayDto::from(&relay))
         .ok_or_else(|| ApiError::BadRequest("relay was not published".into()))?;
     Ok(Json(relay))
+}
+
+pub async fn relay_heartbeat(
+    State(state): State<Arc<AppState>>,
+    Authed(user): Authed,
+    Query(query): Query<RoomQuery>,
+    Json(body): Json<RelayHeartbeatBody>,
+) -> Result<Json<RelaySeenResponse>, ApiError> {
+    let address = query.address()?;
+    let event = {
+        let mut hub = state.hub.lock().expect("hub lock");
+        hub.heartbeat_relay(&user, &address, &body.hash)?
+    };
+    state.publish(&address, std::slice::from_ref(&event));
+    match event {
+        RoomEvent::RelaySeen {
+            relay,
+            created_at_ms,
+            ..
+        } => Ok(Json(RelaySeenResponse {
+            relay,
+            created_at_ms,
+        })),
+        _ => Err(ApiError::Internal("unexpected heartbeat event".into())),
+    }
 }
 
 fn validate_pin(pin: &str) -> Result<(), ApiError> {

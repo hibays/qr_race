@@ -39,7 +39,10 @@ class _RoomScreenState extends State<RoomScreen> {
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });
-    _refresh = Timer.periodic(const Duration(seconds: 4), (_) {
+    // WS relay events already update the room incrementally. This timer is a
+    // recovery snapshot only; polling every 4s re-sent every payload to every
+    // viewer and dominated room bandwidth.
+    _refresh = Timer.periodic(const Duration(seconds: 15), (_) {
       if (mounted) widget.state.refreshRoom();
     });
   }
@@ -135,7 +138,10 @@ class _RoomScreenState extends State<RoomScreen> {
                       Container(
                         width: double.infinity,
                         color: accent.withValues(alpha: 0.12),
-                        padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 8,
+                        ),
                         child: Text(
                           '配对码 ${state.pairingPin} · 成员可在大厅用此码进入',
                           style: const TextStyle(fontSize: 12),
@@ -143,7 +149,9 @@ class _RoomScreenState extends State<RoomScreen> {
                       ),
                     if (!room.lit && me?.role == 'host')
                       _UnlitBanner(onLight: state.lightRoom),
-                    Expanded(child: _RoomBody(state: state, room: room)),
+                    Expanded(
+                      child: _RoomBody(state: state, room: room),
+                    ),
                   ],
                 ),
         );
@@ -168,9 +176,8 @@ class _RoomScreenState extends State<RoomScreen> {
     if (pin == null || !mounted) return;
     await widget.state.setPin(pin);
     if (mounted && widget.state.error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(widget.state.error!)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(widget.state.error!)));
     }
   }
 
@@ -185,9 +192,8 @@ class _RoomScreenState extends State<RoomScreen> {
   Future<void> _invite(RoomView room) async {
     final api = widget.state.api;
     if (api == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('演示模式没有服务器，不能邀请')),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('演示模式没有服务器，不能邀请')));
       return;
     }
     try {
@@ -226,9 +232,8 @@ class _RoomScreenState extends State<RoomScreen> {
                 Clipboard.setData(ClipboardData(text: link));
                 Navigator.pop(dialogContext);
                 if (!mounted) return;
-                ScaffoldMessenger.of(context).showSnackBar(
-                  const SnackBar(content: Text('邀请链接已复制')),
-                );
+                ScaffoldMessenger.of(context)
+                    .showSnackBar(const SnackBar(content: Text('邀请链接已复制')));
               },
               child: const Text('复制链接'),
             ),
@@ -241,9 +246,8 @@ class _RoomScreenState extends State<RoomScreen> {
       );
     } on ApiException catch (error) {
       if (!mounted) return;
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(error.message)),
-      );
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(error.message)));
     }
   }
 
@@ -267,7 +271,9 @@ class _RoomScreenState extends State<RoomScreen> {
         ),
       );
     }
-    return const Center(child: EchoSignal(size: 40, mode: EchoSignalMode.loading));
+    return const Center(
+      child: EchoSignal(size: 40, mode: EchoSignalMode.loading),
+    );
   }
 }
 
@@ -302,13 +308,13 @@ class _RoomBody extends StatelessWidget {
         }
         final activeGrid = active.isEmpty
             ? (inactive.isEmpty
-                ? const _EmptyRelays()
-                : const Center(
-                    child: Text(
-                      '暂无活跃码',
-                      style: TextStyle(color: muted, fontSize: 14),
-                    ),
-                  ))
+                  ? const _EmptyRelays()
+                  : const Center(
+                      child: Text(
+                        '暂无活跃码',
+                        style: TextStyle(color: muted, fontSize: 14),
+                      ),
+                    ))
             : GridView.builder(
                 padding: const EdgeInsets.all(16),
                 gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
@@ -737,7 +743,10 @@ class _MemberTile extends StatelessWidget {
                       member.user,
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 13.5),
+                      style: const TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13.5,
+                      ),
                     ),
                   ),
                   if (canManage)
@@ -754,12 +763,19 @@ class _MemberTile extends StatelessWidget {
                       ],
                       builder: (context, controller, child) => IconButton(
                         tooltip: '管理成员',
-                        onPressed: () =>
-                            controller.isOpen ? controller.close() : controller.open(),
-                        icon: const Icon(Icons.more_horiz, size: 18, color: muted),
+                        onPressed: () => controller.isOpen
+                            ? controller.close()
+                            : controller.open(),
+                        icon: const Icon(
+                          Icons.more_horiz,
+                          size: 18,
+                          color: muted,
+                        ),
                         padding: EdgeInsets.zero,
-                        constraints:
-                            const BoxConstraints.tightFor(width: 28, height: 28),
+                        constraints: const BoxConstraints.tightFor(
+                          width: 28,
+                          height: 28,
+                        ),
                         visualDensity: VisualDensity.compact,
                       ),
                     ),
@@ -854,10 +870,7 @@ class _UnlitBanner extends StatelessWidget {
               style: TextStyle(color: warn, fontSize: 12.5, height: 1.4),
             ),
           ),
-          TextButton(
-            onPressed: onLight,
-            child: const Text('点亮'),
-          ),
+          TextButton(onPressed: onLight, child: const Text('点亮')),
         ],
       ),
     );

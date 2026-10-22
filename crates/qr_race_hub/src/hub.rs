@@ -7,10 +7,12 @@
 use std::collections::BTreeMap;
 use std::sync::Arc;
 
+use data_encoding::HEXLOWER;
 use qr_race_core::{
     Compression, CoreError, PayloadKind, RelayEntry, RelayId, Room, RoomAddress, RoomRole, UserId,
 };
 use qr_race_store::{Store, StoreError};
+use sha2::{Digest, Sha256};
 use thiserror::Error;
 
 use crate::clock::Clock;
@@ -41,6 +43,11 @@ pub enum RoomEvent {
     RelayPublished {
         address: RoomAddress,
         relay: RelayEntry,
+    },
+    RelaySeen {
+        address: RoomAddress,
+        relay: RelayId,
+        created_at_ms: u64,
     },
 }
 
@@ -90,6 +97,12 @@ pub enum HubError {
     #[error("invalid pairing PIN: {0}")]
     InvalidPin(String),
 
+    #[error("unknown relay hash: {0}")]
+    RelayNotFound(String),
+
+    #[error("too many active rooms")]
+    TooManyRooms,
+
     #[error("storage: {0}")]
     Storage(String),
 
@@ -100,6 +113,7 @@ pub enum HubError {
 pub struct Hub {
     rooms: BTreeMap<RoomAddress, Room>,
     relays: BTreeMap<RoomAddress, Vec<RelayEntry>>,
+    relay_hashes: BTreeMap<RoomAddress, BTreeMap<String, RelayId>>,
     clock: Arc<dyn Clock>,
     next_relay: u64,
     store: Option<Arc<Store>>,
@@ -109,12 +123,19 @@ pub struct Hub {
 /// Relays are kept in memory, so a room keeps its newest entries and drops the
 /// oldest beyond this bound. Members re-fetch after a gap (see the WS contract).
 pub const MAX_RELAYS_PER_ROOM: usize = 64;
+/// Hard cap on the uploaded payload bytes kept for one room.
+pub const MAX_RELAY_BYTES_PER_ROOM: usize = 256 * 1024;
+/// Hard cap on rooms held in memory. Empty rooms close with their last socket.
+pub const MAX_ACTIVE_ROOMS: usize = 512;
+/// Relays disappear from the room view and storage after this age.
+pub const RELAY_TTL_MS: u64 = 40_000;
 
 impl Hub {
     pub fn new(clock: Arc<dyn Clock>) -> Self {
         Self {
             rooms: BTreeMap::new(),
             relays: BTreeMap::new(),
+            relay_hashes: BTreeMap::new(),
             clock,
             next_relay: 0,
             store: None,
@@ -122,26 +143,17 @@ impl Hub {
         }
     }
 
-    /// Rebuilds a hub from the store, so a restart resumes the rooms and relays
-    /// users already see. Accounts come from the operator's config, not here.
+    /// Rebuilds persisted rooms, roles and PINs. Active codes are memory-only:
+    /// after a restart they arrive again through client heartbeats.
     pub fn with_store(clock: Arc<dyn Clock>, store: Arc<Store>) -> Result<Self, HubError> {
+        // Codes are active memory state; purge any rows left by older builds.
+        store.clear_relays().map_err(storage_error)?;
         let rooms: BTreeMap<RoomAddress, Room> = store
             .load_rooms()
             .map_err(storage_error)?
             .into_iter()
             .map(|room| (room.address.clone(), room))
             .collect();
-
-        let mut relays = BTreeMap::new();
-        for address in rooms.keys() {
-            relays.insert(
-                address.clone(),
-                store
-                    .load_relays(address, MAX_RELAYS_PER_ROOM)
-                    .map_err(storage_error)?,
-            );
-        }
-        let next_relay = store.max_relay_seq().map_err(storage_error)?;
         let pins = store
             .room_pins()
             .map_err(storage_error)?
@@ -150,9 +162,10 @@ impl Hub {
 
         Ok(Self {
             rooms,
-            relays,
+            relays: BTreeMap::new(),
+            relay_hashes: BTreeMap::new(),
             clock,
-            next_relay,
+            next_relay: 0,
             store: Some(store),
             pins,
         })
@@ -178,6 +191,9 @@ impl Hub {
     ) -> Result<Vec<RoomEvent>, HubError> {
         if self.rooms.contains_key(&address) {
             return Err(HubError::RoomExists(address));
+        }
+        if self.rooms.len() >= MAX_ACTIVE_ROOMS {
+            return Err(HubError::TooManyRooms);
         }
         self.rooms
             .insert(address.clone(), Room::new(address.clone(), host.clone()));
@@ -234,6 +250,7 @@ impl Hub {
             return Err(HubError::RoomNotFound(address.clone()));
         }
         self.relays.remove(address);
+        self.relay_hashes.remove(address);
         self.pins.retain(|_, existing| existing != address);
         if let Some(store) = &self.store {
             store.delete_room(address).map_err(storage_error)?;
@@ -357,13 +374,16 @@ impl Hub {
         }
 
         let now = self.clock.now_ms();
-        // Re-publishing the same bytes is a heartbeat: move the existing entry
-        // forward instead of filling the room with duplicates.
-        if let Some(relays) = self.relays.get_mut(address)
-            && let Some(existing) = relays
-                .iter_mut()
-                .rev()
-                .find(|relay| relay.publisher == *actor && relay.payload == request.payload)
+        self.prune_relays(address, now)?;
+        let hash = content_hash(&request.payload);
+
+        if let Some(relay_id) = self
+            .relay_hashes
+            .get(address)
+            .and_then(|hashes| hashes.get(&hash))
+            .cloned()
+            && let Some(relays) = self.relays.get_mut(address)
+            && let Some(existing) = relays.iter_mut().find(|relay| relay.id == relay_id)
         {
             existing.created_at_ms = now;
             let relay = existing.clone();
@@ -383,21 +403,16 @@ impl Hub {
             request.payload,
             now,
         )?;
-        let relays = self.relays.entry(address.clone()).or_default();
-        relays.push(relay.clone());
-        if relays.len() > MAX_RELAYS_PER_ROOM {
-            let overflow = relays.len() - MAX_RELAYS_PER_ROOM;
-            relays.drain(0..overflow);
-        }
-
-        if let Some(store) = &self.store {
-            store
-                .insert_relay(self.next_relay, &relay)
-                .map_err(storage_error)?;
-            store
-                .trim_relays(address, MAX_RELAYS_PER_ROOM)
-                .map_err(storage_error)?;
-        }
+        let relay_id = relay.id.clone();
+        self.relay_hashes
+            .entry(address.clone())
+            .or_default()
+            .insert(hash, relay_id);
+        self.relays
+            .entry(address.clone())
+            .or_default()
+            .push(relay.clone());
+        self.trim_room(address);
 
         Ok(vec![RoomEvent::RelayPublished {
             address: address.clone(),
@@ -405,9 +420,47 @@ impl Hub {
         }])
     }
 
+    /// Refresh an existing content hash without uploading its payload again.
+    pub fn heartbeat_relay(
+        &mut self,
+        actor: &UserId,
+        address: &RoomAddress,
+        hash: &str,
+    ) -> Result<RoomEvent, HubError> {
+        let room = self
+            .rooms
+            .get(address)
+            .ok_or_else(|| HubError::RoomNotFound(address.clone()))?;
+        if !room.is_scanner(actor) {
+            return Err(HubError::NotAScanner);
+        }
+        let now = self.clock.now_ms();
+        self.prune_relays(address, now)?;
+        let relay_id = self
+            .relay_hashes
+            .get(address)
+            .and_then(|hashes| hashes.get(hash))
+            .cloned()
+            .ok_or_else(|| HubError::RelayNotFound(hash.to_string()))?;
+        let Some(relays) = self.relays.get_mut(address) else {
+            return Err(HubError::RelayNotFound(hash.to_string()));
+        };
+        let Some(relay) = relays.iter_mut().find(|relay| relay.id == relay_id) else {
+            return Err(HubError::RelayNotFound(hash.to_string()));
+        };
+        relay.created_at_ms = now;
+        Ok(RoomEvent::RelaySeen {
+            address: address.clone(),
+            relay: relay_id,
+            created_at_ms: now,
+        })
+    }
+
     /// The snapshot a participant's device renders: who is here, what they are,
     /// which of them last relayed, and the relays themselves.
-    pub fn view(&self, actor: &UserId, address: &RoomAddress) -> Result<RoomView, HubError> {
+    pub fn view(&mut self, actor: &UserId, address: &RoomAddress) -> Result<RoomView, HubError> {
+        let now = self.clock.now_ms();
+        self.prune_relays(address, now)?;
         let room = self
             .rooms
             .get(address)
@@ -416,14 +469,13 @@ impl Hub {
             return Err(HubError::NotAParticipant);
         }
 
-        let now = self.clock.now_ms();
         let relays: Vec<_> = self
             .relays
             .get(address)
             .cloned()
             .unwrap_or_default()
             .into_iter()
-            .filter(|relay| now.saturating_sub(relay.created_at_ms) <= 40_000)
+            .filter(|relay| now.saturating_sub(relay.created_at_ms) <= RELAY_TTL_MS)
             .collect();
         let users = std::iter::once(&room.host)
             .chain(room.co_hosts.iter())
@@ -458,6 +510,56 @@ impl Hub {
         self.rooms.get(address)
     }
 
+    /// Drop relays past their TTL. Active codes live only in memory.
+    fn prune_relays(&mut self, address: &RoomAddress, now: u64) -> Result<(), HubError> {
+        let Some(relays) = self.relays.get_mut(address) else {
+            return Ok(());
+        };
+        let cutoff = now.saturating_sub(RELAY_TTL_MS);
+        relays.retain(|relay| relay.created_at_ms >= cutoff);
+        self.sync_hashes(address);
+        Ok(())
+    }
+
+    fn trim_room(&mut self, address: &RoomAddress) {
+        while let Some(relays) = self.relays.get(address) {
+            let bytes: usize = relays.iter().map(|relay| relay.payload.len()).sum();
+            if relays.len() <= MAX_RELAYS_PER_ROOM && bytes <= MAX_RELAY_BYTES_PER_ROOM {
+                break;
+            }
+            let Some(oldest) = relays
+                .iter()
+                .enumerate()
+                .min_by_key(|(_, relay)| relay.created_at_ms)
+                .map(|(index, _)| index)
+            else {
+                break;
+            };
+            let removed = self
+                .relays
+                .get_mut(address)
+                .expect("relays checked above")
+                .remove(oldest);
+            if let Some(hashes) = self.relay_hashes.get_mut(address) {
+                hashes.retain(|_, relay_id| *relay_id != removed.id);
+            }
+        }
+        if self.relays.get(address).is_some_and(Vec::is_empty) {
+            self.relays.remove(address);
+            self.relay_hashes.remove(address);
+        }
+    }
+
+    fn sync_hashes(&mut self, address: &RoomAddress) {
+        let Some(relays) = self.relays.get(address) else {
+            self.relay_hashes.remove(address);
+            return;
+        };
+        if let Some(hashes) = self.relay_hashes.get_mut(address) {
+            hashes.retain(|_, relay_id| relays.iter().any(|relay| relay.id == *relay_id));
+        }
+    }
+
     pub fn relays(&self, address: &RoomAddress) -> &[RelayEntry] {
         self.relays
             .get(address)
@@ -470,6 +572,10 @@ impl Hub {
             .get_mut(address)
             .ok_or_else(|| HubError::RoomNotFound(address.clone()))
     }
+}
+
+fn content_hash(payload: &[u8]) -> String {
+    HEXLOWER.encode(&Sha256::digest(payload))
 }
 
 fn storage_error(error: StoreError) -> HubError {
@@ -638,7 +744,7 @@ mod tests {
 
     #[test]
     fn non_participants_cannot_view_a_room() {
-        let (hub, _clock) = lit_room_with_members();
+        let (mut hub, _clock) = lit_room_with_members();
         assert_eq!(
             hub.view(&member("stranger"), &address()),
             Err(HubError::NotAParticipant)
@@ -698,7 +804,7 @@ mod tests {
         assert_eq!(reloaded.resolve_pin("1234"), Some(address()));
     }
     #[test]
-    fn a_restart_resumes_rooms_roles_and_relays() {
+    fn a_restart_resumes_rooms_and_roles_but_not_codes() {
         let clock = ManualClock::new(1_700_000_000_000);
         let store = Arc::new(Store::in_memory().unwrap());
         let mut hub = Hub::with_store(Arc::new(clock.clone()), store.clone()).unwrap();
@@ -713,8 +819,7 @@ mod tests {
         let mut reloaded = Hub::with_store(Arc::new(clock), store).unwrap();
         let view = reloaded.view(&member("m-1"), &address()).unwrap();
         assert!(view.lit);
-        assert_eq!(view.relays.len(), 1);
-        assert_eq!(view.relays[0].payload, b"persisted");
+        assert!(view.relays.is_empty(), "codes are memory-only");
         let target = member("m-1");
         let promoted = view
             .members
@@ -728,7 +833,11 @@ mod tests {
             .unwrap();
         match &events[0] {
             RoomEvent::RelayPublished { relay, .. } => {
-                assert_eq!(relay.id, RelayId("r-2".into()), "the id counter continues");
+                assert_eq!(
+                    relay.id,
+                    RelayId("r-1".into()),
+                    "the id counter resets with codes"
+                );
             }
             other => panic!("expected a relay event, got {other:?}"),
         }
@@ -756,6 +865,73 @@ mod tests {
     }
 
     #[test]
+    fn another_publisher_refreshes_the_same_content() {
+        let (mut hub, clock) = lit_room_with_members();
+        hub.promote(&host(), &member("m-1"), &address()).unwrap();
+        let first = hub
+            .publish_relay(&host(), &address(), request(b"same"))
+            .unwrap();
+        let first_id = match &first[0] {
+            RoomEvent::RelayPublished { relay, .. } => relay.id.clone(),
+            other => panic!("expected relay, got {other:?}"),
+        };
+        clock.advance(5_000);
+        let second = hub
+            .publish_relay(&member("m-1"), &address(), request(b"same"))
+            .unwrap();
+        let second_relay = match &second[0] {
+            RoomEvent::RelayPublished { relay, .. } => relay,
+            other => panic!("expected relay, got {other:?}"),
+        };
+        assert_eq!(second_relay.id, first_id);
+        assert_eq!(second_relay.publisher, host());
+        assert_eq!(hub.view(&host(), &address()).unwrap().relays.len(), 1);
+    }
+
+    #[test]
+    fn a_hash_heartbeat_refreshes_without_the_payload() {
+        let (mut hub, clock) = lit_room_with_members();
+        let events = hub
+            .publish_relay(&host(), &address(), request(b"same"))
+            .unwrap();
+        let relay_id = match &events[0] {
+            RoomEvent::RelayPublished { relay, .. } => relay.id.clone(),
+            other => panic!("expected relay, got {other:?}"),
+        };
+        let hash = content_hash(b"same");
+        clock.advance(5_000);
+        let event = hub.heartbeat_relay(&host(), &address(), &hash).unwrap();
+        match event {
+            RoomEvent::RelaySeen {
+                relay,
+                created_at_ms,
+                ..
+            } => {
+                assert_eq!(relay, relay_id);
+                assert_eq!(created_at_ms, 1_700_000_005_000);
+            }
+            other => panic!("expected seen, got {other:?}"),
+        }
+        assert_eq!(
+            hub.heartbeat_relay(&host(), &address(), "unknown"),
+            Err(HubError::RelayNotFound("unknown".into()))
+        );
+    }
+
+    #[test]
+    fn room_byte_cap_evicts_oldest_codes() {
+        let (mut hub, _clock) = lit_room_with_members();
+        for index in 0..20u8 {
+            hub.publish_relay(&host(), &address(), request(&vec![index; 16 * 1024]))
+                .unwrap();
+        }
+        let view = hub.view(&host(), &address()).unwrap();
+        let bytes: usize = view.relays.iter().map(|relay| relay.payload.len()).sum();
+        assert!(bytes <= MAX_RELAY_BYTES_PER_ROOM);
+        assert!(view.relays.len() < 20);
+    }
+
+    #[test]
     fn relays_disappear_from_the_view_after_forty_seconds() {
         let (mut hub, clock) = lit_room_with_members();
         hub.publish_relay(&host(), &address(), request(b"old"))
@@ -763,7 +939,14 @@ mod tests {
         clock.advance(40_001);
         assert!(hub.view(&host(), &address()).unwrap().relays.is_empty());
     }
+
+    #[test]
+    fn expired_relays_are_dropped_from_memory() {
+        let (mut hub, clock) = lit_room_with_members();
+        hub.publish_relay(&host(), &address(), request(b"old"))
+            .unwrap();
+        clock.advance(40_001);
+        assert!(hub.view(&host(), &address()).unwrap().relays.is_empty());
+        assert!(hub.relays(&address()).is_empty());
+    }
 }
-
-
-

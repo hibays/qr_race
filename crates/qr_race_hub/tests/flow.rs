@@ -65,7 +65,7 @@ fn auth_then_room_then_relay() {
 
     let view = hub.view(&member_session.user_id, &address).unwrap();
     assert_eq!(view.relays.len(), 1);
-    assert_eq!(view.relays[0].payload, b"first relay");
+    assert_eq!(&*view.relays[0].payload, b"first relay");
     assert_eq!(view.relays[0].publisher, host_id);
 
     let member_view = view

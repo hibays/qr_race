@@ -75,6 +75,17 @@ pub struct RelayBody {
     pub payload_b64: String,
 }
 
+#[derive(Debug, Deserialize)]
+pub struct RelayHeartbeatBody {
+    pub hash: String,
+}
+
+#[derive(Debug, Serialize)]
+pub struct RelaySeenResponse {
+    pub relay: RelayId,
+    pub created_at_ms: u64,
+}
+
 #[derive(Debug, Serialize)]
 pub struct RelayDto {
     pub id: RelayId,
@@ -192,6 +203,11 @@ pub enum EventDto {
         address: RoomAddress,
         relay: RelayDto,
     },
+    RelaySeen {
+        address: RoomAddress,
+        relay: RelayId,
+        created_at_ms: u64,
+    },
 }
 
 impl From<RoomEvent> for EventDto {
@@ -221,6 +237,15 @@ impl From<RoomEvent> for EventDto {
             RoomEvent::RelayPublished { address, relay } => EventDto::RelayPublished {
                 address,
                 relay: RelayDto::from(&relay),
+            },
+            RoomEvent::RelaySeen {
+                address,
+                relay,
+                created_at_ms,
+            } => EventDto::RelaySeen {
+                address,
+                relay,
+                created_at_ms,
             },
         }
     }

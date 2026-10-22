@@ -14,21 +14,23 @@ import 'package:qr_race_gui/ui/scan_screen.dart';
 import 'package:qr_race_gui/ui/theme.dart';
 
 ScanHit _hit(String text) => ScanHit(
-      text: text,
-      raw: Uint8List.fromList(utf8.encode(text)),
-      atMs: 1700000000000,
-    );
+  text: text,
+  raw: Uint8List.fromList(utf8.encode(text)),
+  atMs: 1700000000000,
+);
 
 http.Response _json(Object body, {int status = 200}) => http.Response.bytes(
-      utf8.encode(jsonEncode(body)),
-      status,
-      headers: {'content-type': 'application/json; charset=utf-8'},
-    );
+  utf8.encode(jsonEncode(body)),
+  status,
+  headers: {'content-type': 'application/json; charset=utf-8'},
+);
 
 void main() {
   test('the controller polls the backend and stops on dispose', () async {
     final backend = FakeScannerBackend(
-      snapshots: [fakeSnapshot(hits: [_hit('hello relay')])],
+      snapshots: [
+        fakeSnapshot(hits: [_hit('hello relay')]),
+      ],
     );
     final controller = ScanController(
       backend: backend,
@@ -42,6 +44,33 @@ void main() {
 
     controller.dispose();
     expect(backend.disposed, isTrue);
+  });
+
+  test('stale hit history is not republished as a heartbeat', () async {
+    final calls = <http.Request>[];
+    final controller = ScanController(
+      backend: FakeScannerBackend(
+        snapshots: [
+          fakeSnapshot(hits: [_hit('cam1:old')], latestHits: const []),
+        ],
+      ),
+      interval: const Duration(milliseconds: 5),
+    );
+    controller.enableAutoPublish(
+      ApiClient(
+        baseUrl: 'http://example.test',
+        httpClient: MockClient((request) async {
+          calls.add(request);
+          return _json({});
+        }),
+      ),
+      '东京A区1B级103房',
+    );
+    controller.start();
+    await Future<void>.delayed(const Duration(milliseconds: 60));
+
+    expect(calls, isEmpty);
+    controller.dispose();
   });
 
   testWidgets('the scan screen auto-publishes prefixed hits', (tester) async {
@@ -104,7 +133,9 @@ void main() {
     await tester.pumpWidget(const SizedBox());
   });
 
-  testWidgets('the scan screen requests 4:3 2K and can switch backends', (tester) async {
+  testWidgets('the scan screen requests 4:3 2K and can switch backends', (
+    tester,
+  ) async {
     final backend = RecordingBackend();
     await tester.pumpWidget(
       MaterialApp(
@@ -132,7 +163,9 @@ void main() {
     expect(backend.backend, 'zxing');
     await tester.pumpWidget(const SizedBox());
   });
-  testWidgets('a missing native scanner is explained, not crashed', (tester) async {
+  testWidgets('a missing native scanner is explained, not crashed', (
+    tester,
+  ) async {
     final state = AppState.demo();
     await tester.pumpWidget(
       MaterialApp(
@@ -151,7 +184,9 @@ void main() {
     expect(find.textContaining('boom'), findsOneWidget);
   });
 
-  testWidgets('a denied camera permission offers Settings and retry', (tester) async {
+  testWidgets('a denied camera permission offers Settings and retry', (
+    tester,
+  ) async {
     final permission = _DeniedPermission();
     await tester.pumpWidget(
       MaterialApp(
@@ -221,7 +256,6 @@ class _DeniedPermission implements CameraPermission {
   }
 }
 
-
 class RecordingBackend implements ScannerBackend {
   int width = 0;
   int height = 0;
@@ -252,4 +286,3 @@ class RecordingBackend implements ScannerBackend {
   @override
   void dispose() {}
 }
-

@@ -4,6 +4,8 @@
 //! the server stores and rebroadcasts the bytes). This module does not compress
 //! or decompress; it records the codec so a client can.
 
+use std::sync::Arc;
+
 use serde::{Deserialize, Serialize};
 
 use crate::address::RoomAddress;
@@ -42,7 +44,7 @@ pub struct RelayEntry {
     pub publisher: UserId,
     pub kind: PayloadKind,
     pub compression: Compression,
-    pub payload: Vec<u8>,
+    pub payload: Arc<[u8]>,
     pub created_at_ms: u64,
 }
 
@@ -77,7 +79,7 @@ impl RelayEntry {
             publisher,
             kind,
             compression,
-            payload,
+            payload: Arc::from(payload),
             created_at_ms,
         })
     }

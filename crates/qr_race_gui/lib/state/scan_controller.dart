@@ -1,5 +1,6 @@
 import 'dart:async';
 
+import 'package:crypto/crypto.dart';
 import 'package:flutter/foundation.dart';
 
 import '../api/api_client.dart';
@@ -32,6 +33,8 @@ class ScanController extends ChangeNotifier {
   final Set<String> _published = {};
   final Set<String> _publishedTexts = {};
   final Map<String, String> _lastBySlot = {};
+  final Map<String, String> _hashBySlot = {};
+  final Map<String, String> _keyBySlot = {};
   final Map<String, DateTime> _lastRefresh = {};
   final Map<String, DateTime> _retryAt = {};
   final Set<String> _queuedSlots = {};
@@ -113,15 +116,18 @@ class ScanController extends ChangeNotifier {
     final address = _address;
     if (api == null || address == null) return;
     final now = DateTime.now();
-    for (final hit in snapshot.hits) {
+    _pruneLocal(now);
+    for (final hit in snapshot.latestHits) {
       final slot = relaySlot(hit.text);
       if (_publishedTexts.contains(hit.text)) {
         if (_queuedSlots.contains(slot)) continue;
         final last = _lastRefresh[slot];
+        final hash = _hashBySlot[slot];
         if (last != null &&
+            hash != null &&
             now.difference(last) > const Duration(seconds: 4)) {
           _queuedSlots.add(slot);
-          _queue.add(_PendingRelay(api, address, slot, hit));
+          _queue.add(_PendingRelay(api, address, slot, hit, hash: hash));
         }
         continue;
       }
@@ -136,6 +142,36 @@ class ScanController extends ChangeNotifier {
     unawaited(_drain());
   }
 
+  void _pruneLocal(DateTime now) {
+    final stale = _lastRefresh.entries
+        .where(
+          (entry) => now.difference(entry.value) > const Duration(seconds: 40),
+        )
+        .map((entry) => entry.key)
+        .toList();
+    for (final slot in stale) {
+      _forgetSlot(slot);
+    }
+    if (_lastRefresh.length <= 64) return;
+    final oldest = _lastRefresh.entries.toList()
+      ..sort((a, b) => a.value.compareTo(b.value));
+    for (final entry in oldest.take(_lastRefresh.length - 64)) {
+      _forgetSlot(entry.key);
+    }
+  }
+
+  void _forgetSlot(String slot) {
+    final text = _lastBySlot.remove(slot);
+    final key = _keyBySlot.remove(slot);
+    _hashBySlot.remove(slot);
+    _lastRefresh.remove(slot);
+    _retryAt.remove(slot);
+    _queue.removeWhere((pending) => pending.slot == slot);
+    _queuedSlots.remove(slot);
+    if (text != null) _publishedTexts.remove(text);
+    if (key != null) _published.remove(key);
+  }
+
   Future<void> _drain() async {
     if (_draining) return;
     _draining = true;
@@ -143,21 +179,50 @@ class ScanController extends ChangeNotifier {
       while (_queue.isNotEmpty) {
         final pending = _queue.removeAt(0);
         try {
-          await pending.api.publishRelay(
-            pending.address,
-            payload: pending.hit.raw,
-          );
+          if (pending.hash == null) {
+            await pending.api.publishRelay(
+              pending.address,
+              payload: pending.hit.raw,
+            );
+            final hash = sha256.convert(pending.hit.raw).toString();
+            _hashBySlot[pending.slot] = hash;
+            _keyBySlot[pending.slot] = pending.hit.key;
+            _published.add(pending.hit.key);
+            _publishedTexts.add(pending.hit.text);
+          } else {
+            await pending.api.publishHeartbeat(pending.address, pending.hash!);
+          }
           _lastBySlot[pending.slot] = pending.hit.text;
           _lastRefresh[pending.slot] = DateTime.now();
           _retryAt.remove(pending.slot);
-          _published.add(pending.hit.key);
-          _publishedTexts.add(pending.hit.text);
           publishError = null;
         } catch (error) {
-          publishError =
-              error is ApiException ? error.message : error.toString();
-          // Back off this slot; another code may still publish fine.
-          _retryAt[pending.slot] = DateTime.now().add(const Duration(seconds: 2));
+          publishError = error is ApiException
+              ? error.message
+              : error.toString();
+          // A server restart drops memory-only relays. Fall back to a full
+          // upsert once instead of leaving the code dead until it is rescanned.
+          if (pending.hash != null &&
+              error is ApiException &&
+              error.status == 404) {
+            _hashBySlot.remove(pending.slot);
+            _publishedTexts.remove(pending.hit.text);
+            _keyBySlot.remove(pending.slot);
+            _published.remove(pending.hit.key);
+            _queue.insert(
+              0,
+              _PendingRelay(
+                pending.api,
+                pending.address,
+                pending.slot,
+                pending.hit,
+              ),
+            );
+          } else {
+            _retryAt[pending.slot] = DateTime.now().add(
+              const Duration(seconds: 2),
+            );
+          }
         } finally {
           _queuedSlots.remove(pending.slot);
         }
@@ -179,18 +244,21 @@ class ScanController extends ChangeNotifier {
 }
 
 class _PendingRelay {
-  _PendingRelay(this.api, this.address, this.slot, this.hit);
+  _PendingRelay(this.api, this.address, this.slot, this.hit, {this.hash});
 
   final ApiClient api;
   final String address;
   final String slot;
   final ScanHit hit;
+
+  /// Non-null means a hash-only heartbeat; null means a full upsert.
+  final String? hash;
 }
 
 /// Test/demo backend: hand it snapshots, no native library involved.
 class FakeScannerBackend implements ScannerBackend {
   FakeScannerBackend({List<ScannerSnapshot>? snapshots})
-      : _snapshots = snapshots ?? const [];
+    : _snapshots = snapshots ?? const [];
 
   final List<ScannerSnapshot> _snapshots;
   int _index = 0;
@@ -246,6 +314,7 @@ class FakeScannerBackend implements ScannerBackend {
 /// A ready-made snapshot for tests and the demo build.
 ScannerSnapshot fakeSnapshot({
   List<ScanHit> hits = const [],
+  List<ScanHit>? latestHits,
   Uint8List? preview,
   int previewSeq = 1,
   int rotation = 0,
@@ -259,11 +328,9 @@ ScannerSnapshot fakeSnapshot({
     frames: 42,
     scanMs: 1.8,
     hits: hits,
+    latestHits: latestHits ?? hits,
     previewSeq: previewSeq,
     preview: preview,
     source: 'fake camera',
   );
 }
-
-
-

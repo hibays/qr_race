@@ -20,11 +20,7 @@ class AppState extends ChangeNotifier {
       expiresAtMs: 0,
     );
     state.lobby = const [
-      LobbyRoom(
-        label: '东京A区1B级103房',
-        host: 'host-a',
-        memberCount: 4,
-      ),
+      LobbyRoom(label: '东京A区1B级103房', host: 'host-a', memberCount: 4),
     ];
     state.room = RoomView(
       label: '东京A区1B级103房',
@@ -69,6 +65,9 @@ class AppState extends ChangeNotifier {
   WebSocketChannel? _events;
   StreamSubscription<dynamic>? _eventsSub;
   String? _roomAddress;
+  String? _server;
+  String? _token;
+  String? _fingerprint;
 
   bool get isConnected => session != null;
 
@@ -85,6 +84,9 @@ class AppState extends ChangeNotifier {
       final auth = await client.authenticate(token: token);
       api = client;
       session = auth;
+      _server = server;
+      _token = token;
+      _fingerprint = fingerprint;
       return true;
     } catch (e) {
       error = _describe(e);
@@ -102,9 +104,37 @@ class AppState extends ChangeNotifier {
       lobby = await client.lobby();
       error = null;
     } catch (e) {
-      error = _describe(e);
+      // The server keeps sessions in memory. After a server restart an already
+      // open app holds a stale session id; recover with the saved token instead
+      // of leaving the lobby stuck on a 401 until a full app restart.
+      if (e is ApiException && e.status == 401 && await _reauthenticate()) {
+        try {
+          lobby = await api!.lobby();
+          error = null;
+        } catch (retryError) {
+          error = _describe(retryError);
+        }
+      } else {
+        error = _describe(e);
+      }
     }
     notifyListeners();
+  }
+
+  Future<bool> _reauthenticate() async {
+    final server = _server;
+    final token = _token;
+    if (server == null || token == null) return false;
+    try {
+      final client = ApiClient(baseUrl: server, fingerprint: _fingerprint);
+      final auth = await client.authenticate(token: token);
+      api?.close();
+      api = client;
+      session = auth;
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Joins the room (idempotent server-side) and subscribes to its events.
@@ -123,10 +153,10 @@ class AppState extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      await client.join(address);
-      room = await client.room(address);
+      final entry = await client.enter(address);
+      room = entry.room;
       _roomAddress = address;
-      await _subscribe(client, address);
+      await _subscribe(client, address, entry.ticket);
       return true;
     } catch (e) {
       error = _describe(e);
@@ -145,7 +175,17 @@ class AppState extends ChangeNotifier {
       room = await client.room(address);
       error = null;
     } catch (e) {
-      error = _describe(e);
+      if (e is ApiException && e.status == 401 && await _reauthenticate()) {
+        try {
+          await _resubscribe(api!, address);
+          room = await api!.room(address);
+          error = null;
+        } catch (retryError) {
+          error = _describe(retryError);
+        }
+      } else {
+        error = _describe(e);
+      }
     }
     notifyListeners();
   }
@@ -169,7 +209,6 @@ class AppState extends ChangeNotifier {
       } on ApiException catch (e) {
         if (e.status != 409) rethrow;
       }
-      await refreshLobby();
       pairingPin = pin;
       notifyListeners();
       return null;
@@ -282,9 +321,22 @@ class AppState extends ChangeNotifier {
     notifyListeners();
   }
 
-  Future<void> _subscribe(ApiClient client, String address) async {
-    await _unsubscribe();
+  Future<void> _subscribe(
+    ApiClient client,
+    String address,
+    String ticket,
+  ) async {
+    final channel = await client.openEventsWithTicket(address, ticket);
+    await _listen(channel);
+  }
+
+  Future<void> _resubscribe(ApiClient client, String address) async {
     final channel = await client.openEvents(address);
+    await _listen(channel);
+  }
+
+  Future<void> _listen(WebSocketChannel channel) async {
+    await _unsubscribe();
     _events = channel;
     _eventsSub = channel.stream.listen(
       _onRoomEvent,
@@ -295,9 +347,32 @@ class AppState extends ChangeNotifier {
 
   /// Relay events already carry the relay, so the hot path does not need a
   /// follow-up GET /v1/room round trip. Other events still resync fully.
+  @visibleForTesting
+  void handleRoomEventForTest(String raw) => _onRoomEvent(raw);
+
   void _onRoomEvent(dynamic raw) {
     try {
       final body = jsonDecode(raw as String) as Map<String, dynamic>;
+      if (body['type'] == 'relay_seen') {
+        final id = body['relay'] as String?;
+        final createdAtMs = body['created_at_ms'] as int?;
+        final current = room;
+        if (current != null && id != null && createdAtMs != null) {
+          var found = false;
+          final relays = current.relays
+              .map((entry) {
+                if (entry.id != id) return entry;
+                found = true;
+                return entry.copyWith(createdAtMs: createdAtMs);
+              })
+              .toList(growable: false);
+          if (found) {
+            room = current.copyWith(relays: relays);
+            notifyListeners();
+            return;
+          }
+        }
+      }
       if (body['type'] == 'relay_published') {
         final relay = Relay.fromJson(body['relay'] as Map<String, dynamic>);
         final current = room;
@@ -327,6 +402,9 @@ class AppState extends ChangeNotifier {
     lobby = const [];
     room = null;
     _roomAddress = null;
+    _server = null;
+    _token = null;
+    _fingerprint = null;
     error = null;
     notifyListeners();
   }
@@ -342,6 +420,7 @@ class AppState extends ChangeNotifier {
     if (error is ApiException) {
       if (error.status == 401) return '认证失败：token 不对或已失效';
       if (error.status == 429) return '尝试失败次数过多，账户已锁定 60 秒，请稍后再试';
+      if (error.status == 503) return '服务器房间已满，请稍后再试';
       return error.message;
     }
     final text = error.toString();
@@ -371,12 +450,3 @@ class AppState extends ChangeNotifier {
     super.dispose();
   }
 }
-
-
-
-
-
-
-
-
-
