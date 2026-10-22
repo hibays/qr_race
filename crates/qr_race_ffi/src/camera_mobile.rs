@@ -372,8 +372,8 @@ pub fn push_yuv(width: u32, height: u32, rotation: i32, y: &[u8], u: &[u8], v: &
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativePushFrame(
-    env: jni::JNIEnv,
-    _class: jni::objects::JClass,
+    mut env: jni::EnvUnowned<'_>,
+    _class: jni::objects::JClass<'_>,
     width: jni::sys::jint,
     height: jni::sys::jint,
     rotation: jni::sys::jint,
@@ -381,28 +381,28 @@ pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativePushFra
     u: jni::objects::JByteArray,
     v: jni::objects::JByteArray,
 ) {
-    let (Ok(y), Ok(u), Ok(v)) = (
-        env.convert_byte_array(y),
-        env.convert_byte_array(u),
-        env.convert_byte_array(v),
-    ) else {
-        return;
-    };
-    let _ = push_yuv(
-        width.max(0) as u32,
-        height.max(0) as u32,
-        rotation,
-        &y,
-        &u,
-        &v,
-    );
+    let outcome = env.with_env(|env| -> jni::errors::Result<()> {
+        let y = env.convert_byte_array(y)?;
+        let u = env.convert_byte_array(u)?;
+        let v = env.convert_byte_array(v)?;
+        let _ = push_yuv(
+            width.max(0) as u32,
+            height.max(0) as u32,
+            rotation,
+            &y,
+            &u,
+            &v,
+        );
+        Ok(())
+    });
+    outcome.resolve::<jni::errors::ThrowRuntimeExAndDefault>();
 }
 
 #[cfg(target_os = "android")]
 #[unsafe(no_mangle)]
 pub extern "system" fn Java_app_qrrace_qr_1race_1gui_CameraCapture_nativeFrameDropped(
-    _env: jni::JNIEnv,
-    _class: jni::objects::JClass,
+    _env: jni::EnvUnowned<'_>,
+    _class: jni::objects::JClass<'_>,
 ) {
     DROPPED.fetch_add(1, Ordering::Relaxed);
 }
@@ -466,3 +466,4 @@ mod tests {
         assert_eq!(&black[..3], &[16, 16, 16]);
     }
 }
+
