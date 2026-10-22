@@ -278,9 +278,9 @@ class _RoomBody extends StatelessWidget {
         final inactive = <Relay>[];
         for (final relay in bySlot.values) {
           final age = now - relay.createdAtMs;
-          if (age <= 10000) {
+          if (age <= 15000) {
             active.add(relay);
-          } else if (age <= 30000) {
+          } else if (age <= 40000) {
             inactive.add(relay);
           }
         }
@@ -331,21 +331,24 @@ class _RoomBody extends StatelessWidget {
                         padding: const EdgeInsets.fromLTRB(16, 4, 16, 10),
                         itemCount: inactive.length,
                         separatorBuilder: (_, _) => const SizedBox(width: 8),
-                        itemBuilder: (context, index) => Container(
-                          width: 180,
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: surface,
-                            border: Border.all(color: line),
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                          child: Text(
-                            inactive[index].text,
-                            maxLines: 3,
-                            overflow: TextOverflow.ellipsis,
-                            style: const TextStyle(
-                              color: muted,
-                              fontSize: 12,
+                        itemBuilder: (context, index) => GestureDetector(
+                          onTap: () => _showRelayQr(context, inactive[index]),
+                          child: Container(
+                            width: 180,
+                            padding: const EdgeInsets.all(10),
+                            decoration: BoxDecoration(
+                              color: surface,
+                              border: Border.all(color: line),
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              inactive[index].text,
+                              maxLines: 3,
+                              overflow: TextOverflow.ellipsis,
+                              style: const TextStyle(
+                                color: muted,
+                                fontSize: 12,
+                              ),
                             ),
                           ),
                         ),
@@ -412,6 +415,53 @@ class _EmptyRelays extends StatelessWidget {
       ),
     );
   }
+}
+
+void _showRelayQr(BuildContext context, Relay relay) {
+  showDialog<void>(
+    context: context,
+    builder: (context) => Dialog(
+      backgroundColor: surfaceRaised,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 420),
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
+            children: [
+              Container(
+                color: Colors.white,
+                padding: const EdgeInsets.all(16),
+                child: AspectRatio(
+                  aspectRatio: 1,
+                  child: LayoutBuilder(
+                    builder: (context, constraints) => QrImage(
+                      text: relay.text,
+                      size: constraints.biggest.shortestSide,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              SelectableText(
+                relay.text,
+                style: const TextStyle(fontSize: 13, height: 1.45),
+              ),
+              const SizedBox(height: 8),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () => Navigator.of(context).pop(),
+                  child: const Text('关闭'),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    ),
+  );
 }
 
 class _RelayCard extends StatelessWidget {
@@ -797,6 +847,7 @@ class _UnlitBanner extends StatelessWidget {
     );
   }
 }
+
 
 
 

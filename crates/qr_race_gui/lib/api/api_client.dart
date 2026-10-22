@@ -284,6 +284,14 @@ class RoomView {
   final String host;
   final List<RoomMember> members;
   final List<Relay> relays;
+
+  RoomView copyWith({List<Relay>? relays}) => RoomView(
+        label: label,
+        lit: lit,
+        host: host,
+        members: members,
+        relays: relays ?? this.relays,
+      );
 }
 
 class RoomMember {

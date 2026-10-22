@@ -15,7 +15,7 @@ class ScanController extends ChangeNotifier {
     this.height = 1440,
     this.fps = 30,
     this.backendName = 'hybrid',
-    this.interval = const Duration(milliseconds: 120),
+    this.interval = const Duration(milliseconds: 80),
   });
 
   final ScannerBackend backend;
@@ -127,7 +127,8 @@ class ScanController extends ChangeNotifier {
       final retry = _retryAt[slot];
       if (retry != null && now.isBefore(retry)) continue;
       _queuedSlots.add(slot);
-      _queue.add(_PendingRelay(api, address, slot, hit));
+      // A newly seen hot code jumps ahead of refresh heartbeats.
+      _queue.insert(0, _PendingRelay(api, address, slot, hit));
     }
     unawaited(_drain());
   }

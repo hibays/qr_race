@@ -423,7 +423,7 @@ impl Hub {
             .cloned()
             .unwrap_or_default()
             .into_iter()
-            .filter(|relay| now.saturating_sub(relay.created_at_ms) <= 30_000)
+            .filter(|relay| now.saturating_sub(relay.created_at_ms) <= 40_000)
             .collect();
         let users = std::iter::once(&room.host)
             .chain(room.co_hosts.iter())
@@ -756,12 +756,14 @@ mod tests {
     }
 
     #[test]
-    fn relays_disappear_from_the_view_after_thirty_seconds() {
+    fn relays_disappear_from_the_view_after_forty_seconds() {
         let (mut hub, clock) = lit_room_with_members();
         hub.publish_relay(&host(), &address(), request(b"old"))
             .unwrap();
-        clock.advance(30_001);
+        clock.advance(40_001);
         assert!(hub.view(&host(), &address()).unwrap().relays.is_empty());
     }
 }
+
+
 

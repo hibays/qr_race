@@ -175,7 +175,7 @@ void main() {
           publisher: 'host-a',
           kind: 'text',
           payloadB64: 'b2xk',
-          createdAtMs: now - 15000,
+          createdAtMs: now - 20000,
         ),
       ],
     );
@@ -187,8 +187,12 @@ void main() {
 
     expect(find.textContaining('不活跃码'), findsOneWidget);
     expect(find.byType(QrImage), findsNothing);
+    await tester.tap(find.text('old'));
+    await tester.pumpAndSettle();
+    expect(find.byType(QrImage), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 }
+
 
 

@@ -287,10 +287,35 @@ class AppState extends ChangeNotifier {
     final channel = await client.openEvents(address);
     _events = channel;
     _eventsSub = channel.stream.listen(
-      (_) => refreshRoom(),
+      _onRoomEvent,
       onError: (Object _) {},
       cancelOnError: false,
     );
+  }
+
+  /// Relay events already carry the relay, so the hot path does not need a
+  /// follow-up GET /v1/room round trip. Other events still resync fully.
+  void _onRoomEvent(dynamic raw) {
+    try {
+      final body = jsonDecode(raw as String) as Map<String, dynamic>;
+      if (body['type'] == 'relay_published') {
+        final relay = Relay.fromJson(body['relay'] as Map<String, dynamic>);
+        final current = room;
+        if (current != null) {
+          room = current.copyWith(
+            relays: [
+              ...current.relays.where((entry) => entry.id != relay.id),
+              relay,
+            ],
+          );
+          notifyListeners();
+          return;
+        }
+      }
+    } catch (_) {
+      // Fall through to a full resync.
+    }
+    refreshRoom();
   }
 
   /// Drops the session and returns the app to the connect screen.
