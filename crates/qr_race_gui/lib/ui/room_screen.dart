@@ -30,7 +30,11 @@ class _RoomScreenState extends State<RoomScreen> {
   @override
   void initState() {
     super.initState();
-    widget.state.enterRoom(widget.address);
+    // Lobby already joins before pushing this screen. Entering twice closes
+    // the first event socket, which now also closes the room; keep it idempotent.
+    if (widget.state.room?.label != widget.address) {
+      widget.state.enterRoom(widget.address);
+    }
     _ticker = Timer.periodic(const Duration(seconds: 1), (_) {
       if (mounted) setState(() {});
     });

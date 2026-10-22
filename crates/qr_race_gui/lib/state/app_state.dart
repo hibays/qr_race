@@ -114,6 +114,11 @@ class AppState extends ChangeNotifier {
       // Offline demo state already holds a room; nothing to join.
       return room != null;
     }
+    if (_roomAddress == address && room != null) {
+      // Already joined and subscribed; re-entering would close the socket and
+      // now also close the room.
+      return true;
+    }
     busy = true;
     error = null;
     notifyListeners();
@@ -196,8 +201,8 @@ class AppState extends ChangeNotifier {
     if (client == null) return null;
     try {
       final started = await client.startByPin(pin);
-      final entered = await enterRoom(started.address);
-      if (!entered) return null;
+      // Caller enters the returned address exactly once. Entering here too
+      // would close the first event socket and delete the room server-side.
       pairingPin = started.created ? pin : null;
       notifyListeners();
       return started.address;

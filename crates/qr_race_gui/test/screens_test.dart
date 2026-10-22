@@ -158,6 +158,37 @@ void main() {
 
     expect(find.text('离线演示模式不能建房'), findsOneWidget);
   });
+
+  testWidgets('stale relay moves to the inactive strip', (tester) async {
+    final state = AppState.demo();
+    final now = DateTime.now().millisecondsSinceEpoch;
+    state.room = RoomView(
+      label: '西京Z区B级103房',
+      lit: true,
+      host: 'host-a',
+      members: const [
+        RoomMember(user: 'host-a', role: 'host', lastRelay: 'r-old'),
+      ],
+      relays: [
+        Relay(
+          id: 'r-old',
+          publisher: 'host-a',
+          kind: 'text',
+          payloadB64: 'b2xk',
+          createdAtMs: now - 15000,
+        ),
+      ],
+    );
+    await pumpAt(
+      tester,
+      const Size(1280, 800),
+      RoomScreen(state: state, address: '西京Z区B级103房'),
+    );
+
+    expect(find.textContaining('不活跃码'), findsOneWidget);
+    expect(find.byType(QrImage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 }
 
 
