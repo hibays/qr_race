@@ -9,18 +9,19 @@ use std::sync::Arc;
 use data_encoding::HEXLOWER;
 use serde::{Deserialize, Serialize};
 
-/// Stable content id: BLAKE3 truncated to 96 bits, lowercase hex (24 chars).
-/// Short enough for a compact heartbeat, wide enough to avoid practical
-/// collisions inside one room.
+use crate::address::RoomAddress;
+use crate::error::CoreError;
+
+/// Number of BLAKE3 bytes retained for a content id.
 pub const CONTENT_HASH_BYTES: usize = 12;
 
+/// Stable content id: BLAKE3 truncated to 96 bits and encoded as lowercase
+/// hex (24 chars). Short enough for a compact heartbeat, wide enough to avoid
+/// practical collisions inside one room.
 pub fn content_hash(payload: &[u8]) -> String {
     let digest = blake3::hash(payload);
     HEXLOWER.encode(&digest.as_bytes()[..CONTENT_HASH_BYTES])
 }
-
-use crate::address::RoomAddress;
-use crate::error::CoreError;
 
 #[derive(Debug, Clone, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize)]
 pub struct RelayId(pub String);
@@ -56,6 +57,8 @@ pub struct RelayEntry {
     pub kind: PayloadKind,
     pub compression: Compression,
     pub payload: Arc<[u8]>,
+    /// Content id for this payload; computed once when the entry is built.
+    pub hash: String,
     pub created_at_ms: u64,
 }
 
@@ -90,6 +93,7 @@ impl RelayEntry {
             publisher,
             kind,
             compression,
+            hash: content_hash(&payload),
             payload: Arc::from(payload),
             created_at_ms,
         })
@@ -109,8 +113,17 @@ mod tests {
     fn content_hash_is_blake3_96_bits() {
         let hash = content_hash(b"same content");
         assert_eq!(hash.len(), CONTENT_HASH_BYTES * 2);
+        assert!(
+            hash.bytes()
+                .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+        );
         assert_eq!(hash, content_hash(b"same content"));
         assert_ne!(hash, content_hash(b"different"));
+        assert_eq!(
+            content_hash(b""),
+            "af1349b9f5f9a1a6a0404dea",
+            "wire hash changed"
+        );
     }
 
     #[test]

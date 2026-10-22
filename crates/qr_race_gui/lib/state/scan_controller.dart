@@ -167,8 +167,12 @@ class ScanController extends ChangeNotifier {
     _retryAt.remove(slot);
     _queue.removeWhere((pending) => pending.slot == slot);
     _queuedSlots.remove(slot);
-    if (text != null) _publishedTexts.remove(text);
-    if (key != null) _published.remove(key);
+    if (text != null && !_lastBySlot.values.contains(text)) {
+      _publishedTexts.remove(text);
+    }
+    if (key != null && !_keyBySlot.values.contains(key)) {
+      _published.remove(key);
+    }
   }
 
   Future<void> _drain() async {
@@ -184,13 +188,17 @@ class ScanController extends ChangeNotifier {
               payload: pending.hit.raw,
             );
             final hash = relay.hash;
-            if (hash != null) _hashBySlot[pending.slot] = hash;
+            if (hash == null) {
+              throw StateError('relay response has no content hash');
+            }
+            _hashBySlot[pending.slot] = hash;
             _keyBySlot[pending.slot] = pending.hit.key;
             _published.add(pending.hit.key);
             _publishedTexts.add(pending.hit.text);
           } else {
             await pending.api.publishHeartbeat(pending.address, pending.hash!);
           }
+          if (!_queuedSlots.contains(pending.slot)) continue;
           _lastBySlot[pending.slot] = pending.hit.text;
           _lastRefresh[pending.slot] = DateTime.now();
           _retryAt.remove(pending.slot);

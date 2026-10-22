@@ -227,6 +227,26 @@ async fn open_room_creates_lights_and_enters_in_one_request() {
     .await;
     assert_eq!(status, StatusCode::OK, "{body}");
     assert_eq!(body["room"]["label"], ADDRESS);
+
+    let (status, body) = send(
+        &app,
+        request(
+            Method::POST,
+            "/v1/rooms/open",
+            Some(&host),
+            Some(json!({ "address": ADDRESS, "pin": "1234" })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+
+    let (status, body) = send(
+        &app,
+        request(Method::GET, "/v1/room/by-pin?pin=1234", Some(&host), None),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{body}");
+    assert_eq!(body["address"], ADDRESS);
 }
 
 #[tokio::test]
@@ -322,6 +342,32 @@ async fn the_mvp_flow_runs_over_http() {
         relay["hash"].as_str().expect("hash").len(),
         qr_race_core::CONTENT_HASH_BYTES * 2
     );
+    let hash = relay["hash"].as_str().expect("hash").to_string();
+
+    let (status, seen) = send(
+        &app,
+        request(
+            Method::POST,
+            &room_uri(ADDRESS, "/relay/heartbeat"),
+            Some(&host),
+            Some(json!({ "hash": hash })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(seen["relay"], "r-1");
+
+    let (status, _) = send(
+        &app,
+        request(
+            Method::POST,
+            &room_uri(ADDRESS, "/relay/heartbeat"),
+            Some(&host),
+            Some(json!({ "hash": hash.to_uppercase() })),
+        ),
+    )
+    .await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 
     let (status, view) = send(
         &app,

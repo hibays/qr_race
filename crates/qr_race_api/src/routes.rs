@@ -251,12 +251,20 @@ pub async fn open_room(
     }
     let (view, events) = {
         let mut hub = state.hub.lock().expect("hub lock");
+        if let Some(pin) = body.pin.as_deref()
+            && let Some(existing) = hub.resolve_pin(pin)
+            && existing != address
+        {
+            return Err(ApiError::BadRequest("PIN is already in use".into()));
+        }
         let mut events = Vec::new();
         if !hub.room_exists(&address) {
             events.extend(hub.create_room(address.clone(), user.clone())?);
             if let Some(pin) = body.pin.as_deref() {
                 hub.set_pin(&user, &address, pin)?;
             }
+        } else if let Some(pin) = body.pin.as_deref() {
+            hub.set_pin(&user, &address, pin)?;
         }
         let lit = hub.room(&address).is_some_and(|room| room.is_lit());
         if !lit {
@@ -394,6 +402,7 @@ pub async fn relay_heartbeat(
     Json(body): Json<RelayHeartbeatBody>,
 ) -> Result<Json<RelaySeenResponse>, ApiError> {
     let address = query.address()?;
+    validate_content_hash(&body.hash)?;
     let event = {
         let mut hub = state.hub.lock().expect("hub lock");
         hub.heartbeat_relay(&user, &address, &body.hash)?
@@ -410,6 +419,19 @@ pub async fn relay_heartbeat(
         })),
         _ => Err(ApiError::Internal("unexpected heartbeat event".into())),
     }
+}
+
+fn validate_content_hash(hash: &str) -> Result<(), ApiError> {
+    if hash.len() != qr_race_core::CONTENT_HASH_BYTES * 2
+        || !hash
+            .bytes()
+            .all(|byte| byte.is_ascii_hexdigit() && !byte.is_ascii_uppercase())
+    {
+        return Err(ApiError::BadRequest(
+            "hash must be 24 lowercase hex characters".into(),
+        ));
+    }
+    Ok(())
 }
 
 fn validate_pin(pin: &str) -> Result<(), ApiError> {

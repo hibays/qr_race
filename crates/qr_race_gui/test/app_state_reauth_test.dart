@@ -52,11 +52,13 @@ void main() {
       final address = 'http://127.0.0.1:${server.port}';
       expect(await state.connect(server: address, token: 'host-token'), isTrue);
       expect(state.session?.sessionId, 's-1');
+      final clientBeforeRetry = state.api;
 
       await state.refreshLobby();
 
       expect(authCount, 2);
       expect(state.session?.sessionId, 's-2');
+      expect(identical(state.api, clientBeforeRetry), isTrue);
       expect(state.error, isNull);
       expect(state.lobby, isEmpty);
     },

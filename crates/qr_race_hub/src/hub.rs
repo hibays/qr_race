@@ -146,40 +146,21 @@ impl Hub {
         }
     }
 
-    /// Rebuilds persisted rooms, roles and PINs. Active codes are memory-only:
-    /// after a restart they arrive again through client heartbeats.
+    /// Starts with an empty room set. Rooms are live process state: a restart
+    /// has no event sockets, so restored rooms could never be closed. The
+    /// store is cleared so crashes do not accumulate stale addresses or PINs.
     pub fn with_store(clock: Arc<dyn Clock>, store: Arc<Store>) -> Result<Self, HubError> {
-        // Codes are active memory state; purge any rows left by older builds.
-        store.clear_relays().map_err(storage_error)?;
-        let rooms: BTreeMap<RoomAddress, Room> = store
-            .load_rooms()
-            .map_err(storage_error)?
-            .into_iter()
-            .map(|room| (room.address.clone(), room))
-            .collect();
-        let pins = store
-            .room_pins()
-            .map_err(storage_error)?
-            .into_iter()
-            .filter(|(_, address)| rooms.contains_key(address))
-            .collect();
-        let mut epochs = BTreeMap::new();
-        for address in rooms.keys() {
-            let epoch = epochs.len() as u64 + 1;
-            epochs.insert(address.clone(), epoch);
-        }
-        let next_epoch = epochs.len() as u64;
-
+        store.clear_rooms().map_err(storage_error)?;
         Ok(Self {
-            rooms,
+            rooms: BTreeMap::new(),
             relays: BTreeMap::new(),
             relay_hashes: BTreeMap::new(),
-            epochs,
-            next_epoch,
+            epochs: BTreeMap::new(),
+            next_epoch: 0,
             clock,
             next_relay: 0,
             store: Some(store),
-            pins,
+            pins: BTreeMap::new(),
         })
     }
 
@@ -495,7 +476,7 @@ impl Hub {
             return Err(HubError::NotAParticipant);
         }
 
-        let relays: Vec<_> = self
+        let mut relays: Vec<_> = self
             .relays
             .get(address)
             .cloned()
@@ -503,6 +484,7 @@ impl Hub {
             .into_iter()
             .filter(|relay| now.saturating_sub(relay.created_at_ms) <= RELAY_TTL_MS)
             .collect();
+        relays.sort_by_key(|relay| relay.created_at_ms);
         let users = std::iter::once(&room.host)
             .chain(room.co_hosts.iter())
             .chain(room.members.iter());
@@ -512,8 +494,8 @@ impl Hub {
                 role: room.role_of(user).expect("every participant has a role"),
                 last_relay: relays
                     .iter()
-                    .rev()
-                    .find(|relay| &relay.publisher == user)
+                    .filter(|relay| &relay.publisher == user)
+                    .max_by_key(|relay| relay.created_at_ms)
                     .map(|relay| relay.id.clone()),
             })
             .collect();
@@ -813,75 +795,24 @@ mod tests {
     }
 
     #[test]
-    fn pairing_pin_is_host_only_and_survives_restart() {
+    fn restart_clears_rooms_and_pins() {
         let clock = ManualClock::new(1_700_000_000_000);
         let store = Arc::new(Store::in_memory().unwrap());
         let mut hub = Hub::with_store(Arc::new(clock.clone()), store.clone()).unwrap();
-        hub.create_room(address(), host()).unwrap();
-        assert!(hub.set_pin(&host(), &address(), "1234").is_ok());
-        assert!(hub.set_pin(&member("m-1"), &address(), "5678").is_err());
-        assert_eq!(hub.resolve_pin("1234"), Some(address()));
-
-        let reloaded = Hub::with_store(Arc::new(clock), store).unwrap();
-        assert_eq!(reloaded.resolve_pin("1234"), Some(address()));
-    }
-
-    #[test]
-    fn closing_a_room_releases_its_pin_for_reuse() {
-        let clock = ManualClock::new(1_700_000_000_000);
-        let store = Arc::new(Store::in_memory().unwrap());
-        let mut hub = Hub::with_store(Arc::new(clock.clone()), store.clone()).unwrap();
-        hub.create_room(address(), host()).unwrap();
-        hub.set_pin(&host(), &address(), "1234").unwrap();
-        hub.close_room(&address()).unwrap();
-        assert_eq!(hub.resolve_pin("1234"), None);
-        assert_eq!(
-            store.room_pin("1234").unwrap(),
-            None,
-            "PIN row must be removed with the room"
-        );
-
-        let reloaded = Hub::with_store(Arc::new(clock), store).unwrap();
-        assert_eq!(reloaded.resolve_pin("1234"), None);
-    }
-    #[test]
-    fn a_restart_resumes_rooms_and_roles_but_not_codes() {
-        let clock = ManualClock::new(1_700_000_000_000);
-        let store = Arc::new(Store::in_memory().unwrap());
-        let mut hub = Hub::with_store(Arc::new(clock.clone()), store.clone()).unwrap();
-
         hub.create_room(address(), host()).unwrap();
         hub.light_room(&host(), &address()).unwrap();
+        hub.set_pin(&host(), &address(), "1234").unwrap();
         hub.join(member("m-1"), &address()).unwrap();
-        hub.promote(&host(), &member("m-1"), &address()).unwrap();
-        hub.publish_relay(&host(), &address(), request(b"persisted"))
-            .unwrap();
 
         let mut reloaded = Hub::with_store(Arc::new(clock), store).unwrap();
-        let view = reloaded.view(&member("m-1"), &address()).unwrap();
-        assert!(view.lit);
-        assert!(view.relays.is_empty(), "codes are memory-only");
-        let target = member("m-1");
-        let promoted = view
-            .members
-            .iter()
-            .find(|entry| entry.user == target)
-            .unwrap();
-        assert_eq!(promoted.role, RoomRole::CoHost);
-
-        let events = reloaded
-            .publish_relay(&host(), &address(), request(b"second"))
-            .unwrap();
-        match &events[0] {
-            RoomEvent::RelayPublished { relay, .. } => {
-                assert_eq!(
-                    relay.id,
-                    RelayId("r-1".into()),
-                    "the id counter resets with codes"
-                );
-            }
-            other => panic!("expected a relay event, got {other:?}"),
-        }
+        assert!(!reloaded.room_exists(&address()));
+        assert_eq!(reloaded.resolve_pin("1234"), None);
+        assert_eq!(
+            reloaded.view(&member("m-1"), &address()),
+            Err(HubError::RoomNotFound(address()))
+        );
+        reloaded.create_room(address(), host()).unwrap();
+        assert!(reloaded.room_exists(&address()));
     }
     #[test]
     fn republishing_same_payload_refreshes_one_relay() {

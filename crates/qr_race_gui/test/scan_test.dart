@@ -87,6 +87,7 @@ void main() {
           'kind': 'url',
           'payload_b64': base64Encode(hit.raw),
           'created_at_ms': 1700000000000,
+          'hash': '0123456789abcdef01234567',
         });
       }),
     );

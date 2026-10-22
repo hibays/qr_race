@@ -107,7 +107,7 @@ impl From<&RelayEntry> for RelayDto {
             kind: entry.kind,
             compression: entry.compression,
             created_at_ms: entry.created_at_ms,
-            hash: qr_race_core::content_hash(&entry.payload),
+            hash: entry.hash.clone(),
             payload_b64: BASE64.encode(&entry.payload),
         }
     }

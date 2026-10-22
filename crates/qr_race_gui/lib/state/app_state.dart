@@ -126,9 +126,12 @@ class AppState extends ChangeNotifier {
     final token = _token;
     if (server == null || token == null) return false;
     try {
-      final client = ApiClient(baseUrl: server, fingerprint: _fingerprint);
+      // Keep the same ApiClient: ScanController and pending relays hold a
+      // reference to it. Closing it here would leave the scanner publishing
+      // through a closed transport for the rest of the session.
+      final client =
+          api ?? ApiClient(baseUrl: server, fingerprint: _fingerprint);
       final auth = await client.authenticate(token: token);
-      api?.close();
       api = client;
       session = auth;
       return true;
@@ -153,7 +156,13 @@ class AppState extends ChangeNotifier {
     error = null;
     notifyListeners();
     try {
-      final entry = await client.enter(address);
+      RoomEntry entry;
+      try {
+        entry = await client.enter(address);
+      } on ApiException catch (e) {
+        if (e.status != 401 || !await _reauthenticate()) rethrow;
+        entry = await api!.enter(address);
+      }
       room = entry.room;
       _roomAddress = address;
       await _subscribe(client, address, entry.ticket);
