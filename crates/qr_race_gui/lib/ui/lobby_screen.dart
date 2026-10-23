@@ -88,25 +88,20 @@ class _LobbyScreenState extends State<LobbyScreen> {
   }
 
   Future<void> _createRoom() async {
-    final choice = await showRoomPicker(context, mode: RoomPickerMode.create);
+    final choice = await showRoomPicker(
+      context,
+      mode: RoomPickerMode.create,
+      onSubmit: (choice) => widget.state.createAndLight(choice.address),
+    );
     if (choice == null || !mounted) return;
-
-    final messenger = ScaffoldMessenger.of(context);
-    messenger.hideCurrentSnackBar();
-    messenger.showSnackBar(
-      const SnackBar(
-        content: Text('正在创建并点亮房间…'),
-        duration: Duration(minutes: 1),
+    // The dialog stays up until create + join + WS subscribe have succeeded,
+    // then opens the room directly; no extra success toast.
+    await Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) =>
+            RoomScreen(state: widget.state, address: choice.address),
       ),
     );
-    final error = await widget.state.createAndLight(choice.address);
-    if (!mounted) return;
-    messenger.hideCurrentSnackBar();
-    if (error != null) {
-      messenger.showSnackBar(SnackBar(content: Text(error)));
-      return;
-    }
-    await _enter(choice.address);
   }
 
   @override
@@ -278,6 +273,9 @@ class _LobbyScreenState extends State<LobbyScreen> {
               state.lobbyFilterCapital != null ||
               state.lobbyFilterDistrict != null ||
               state.lobbyFilterLevel != null;
+          final pinRooms = state.lobby
+              .where((room) => room.label.startsWith('南极'))
+              .toList(growable: false);
 
           return Column(
             children: [
@@ -291,50 +289,83 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   active: hasFilter,
                 ),
               Expanded(
-                child: geoRooms.isEmpty
-                    ? const _ScrollableFill(
-                        child: _CenteredNote(
-                          icon: Icons.pin_outlined,
-                          title: '大厅还没有地理房间',
-                          body: '配对码房不混入地理房大厅；可用右下角“配对码”进入，或创建一间地理房。',
+                child: RefreshIndicator(
+                  onRefresh: state.refreshLobby,
+                  child: ListView(
+                    physics: const AlwaysScrollableScrollPhysics(),
+                    padding: const EdgeInsets.fromLTRB(16, 12, 16, 124),
+                    children: [
+                      if (pinRooms.isNotEmpty) ...[
+                        _LobbySection(
+                          title: '配对码房',
+                          count: pinRooms.length,
+                          highlight: true,
                         ),
-                      )
-                    : RefreshIndicator(
-                        onRefresh: state.refreshLobby,
-                        child: visible.isEmpty
-                            ? _ScrollableFill(
-                                child: _CenteredNote(
-                                  icon: Icons.filter_alt_off_outlined,
-                                  title: '没有符合筛选的房间',
-                                  body: '换一组筛选条件，或清除筛选查看全部。',
-                                  action: hasFilter
-                                      ? TextButton(
-                                          onPressed: state.clearLobbyFilters,
-                                          child: const Text('清除筛选'),
-                                        )
-                                      : null,
+                        for (final room in pinRooms)
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 10),
+                            child: _RoomCard(
+                              room: room,
+                              badge: 'PIN',
+                              onTap: () => _enter(room.label),
+                            ),
+                          ),
+                        const SizedBox(height: 8),
+                      ],
+                      if (geoRooms.isNotEmpty) ...[
+                        _LobbySection(title: '地理房', count: visible.length),
+                        if (visible.isEmpty)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 28),
+                            child: Column(
+                              children: [
+                                const Icon(
+                                  Icons.filter_alt_off_outlined,
+                                  color: muted,
+                                  size: 32,
                                 ),
-                              )
-                            : ListView.separated(
-                                physics: const AlwaysScrollableScrollPhysics(),
-                                padding: const EdgeInsets.fromLTRB(
-                                  16,
-                                  12,
-                                  16,
-                                  124,
+                                const SizedBox(height: 10),
+                                const Text(
+                                  '没有符合筛选的地理房',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
                                 ),
-                                itemCount: visible.length,
-                                separatorBuilder: (_, _) =>
-                                    const SizedBox(height: 10),
-                                itemBuilder: (context, index) {
-                                  final room = visible[index];
-                                  return _RoomCard(
-                                    room: room,
-                                    onTap: () => _enter(room.label),
-                                  );
-                                },
+                                const SizedBox(height: 4),
+                                const Text(
+                                  '换一组筛选条件，或清除筛选。',
+                                  style: TextStyle(
+                                    color: muted,
+                                    fontSize: 12.5,
+                                  ),
+                                ),
+                                if (hasFilter)
+                                  TextButton(
+                                    onPressed: state.clearLobbyFilters,
+                                    child: const Text('清除筛选'),
+                                  ),
+                              ],
+                            ),
+                          )
+                        else
+                          for (final room in visible)
+                            Padding(
+                              padding: const EdgeInsets.only(bottom: 10),
+                              child: _RoomCard(
+                                room: room,
+                                onTap: () => _enter(room.label),
                               ),
-                      ),
+                            ),
+                      ] else if (pinRooms.isNotEmpty)
+                        const Padding(
+                          padding: EdgeInsets.symmetric(vertical: 18),
+                          child: Text(
+                            '当前没有地理房；可用右下角创建。',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(color: muted, fontSize: 12.5),
+                          ),
+                        ),
+                    ],
+                  ),
+                ),
               ),
             ],
           );
@@ -499,11 +530,46 @@ class _FilterMenu extends StatelessWidget {
   }
 }
 
+class _LobbySection extends StatelessWidget {
+  const _LobbySection({
+    required this.title,
+    required this.count,
+    this.highlight = false,
+  });
+
+  final String title;
+  final int count;
+  final bool highlight;
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 8),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              color: highlight ? accent : muted,
+              fontSize: 12,
+              fontWeight: FontWeight.w700,
+              letterSpacing: 0.3,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Text('$count', style: const TextStyle(color: muted, fontSize: 11)),
+        ],
+      ),
+    );
+  }
+}
+
 class _RoomCard extends StatelessWidget {
-  const _RoomCard({required this.room, required this.onTap});
+  const _RoomCard({required this.room, required this.onTap, this.badge});
 
   final LobbyRoom room;
   final VoidCallback onTap;
+  final String? badge;
 
   @override
   Widget build(BuildContext context) {
@@ -534,12 +600,40 @@ class _RoomCard extends StatelessWidget {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(
-                      room.label,
-                      style: const TextStyle(
-                        fontSize: 17,
-                        fontWeight: FontWeight.w600,
-                      ),
+                    Row(
+                      children: [
+                        Flexible(
+                          child: Text(
+                            room.label,
+                            style: const TextStyle(
+                              fontSize: 17,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ),
+                        if (badge != null) ...[
+                          const SizedBox(width: 8),
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 6,
+                              vertical: 2,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
+                            child: Text(
+                              badge!,
+                              style: const TextStyle(
+                                color: accent,
+                                fontSize: 10,
+                                fontWeight: FontWeight.w700,
+                                letterSpacing: 0.5,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                     const SizedBox(height: 4),
                     Text(
