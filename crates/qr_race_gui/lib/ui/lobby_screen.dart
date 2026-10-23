@@ -6,6 +6,7 @@ import '../api/api_client.dart';
 import '../rooms/room_picker.dart';
 import 'pin_dialog.dart';
 import '../state/app_state.dart';
+import 'brand_mark.dart';
 import 'connect_screen.dart';
 import 'room_screen.dart';
 import 'settings_screen.dart';
@@ -115,11 +116,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
             children: [
               Row(
                 children: [
-                  Image.asset(
-                    'assets/brand/qr_race-mark.png',
-                    width: 24,
-                    height: 24,
-                  ),
+                  const BrandMark(size: 30),
                   const SizedBox(width: 8),
                   const Text(
                     '大厅',

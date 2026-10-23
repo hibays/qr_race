@@ -1,10 +1,12 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512" role="img">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="36 36 440 440" width="512" height="512" role="img">
   <title>qr_race — RELAY LOOP mark</title>
 
-  <path d="M136 288 V136 H288" fill="none" stroke="#0B0F0C" stroke-width="40" stroke-linecap="square"/>
-  <path d="M376 224 V376 H224" fill="none" stroke="#0B0F0C" stroke-width="40" stroke-linecap="square"/>
-  <path d="M216 296 L292 220" fill="none" stroke="#C8FF4D" stroke-width="30" stroke-linecap="round"/>
-  <path d="M292 184 L332 216 L292 248 Z" fill="#C8FF4D"/>
-  <rect x="244" y="244" width="24" height="24" fill="#C8FF4D"/>
-
+  <g id="relay-frame" fill="none" stroke="#0B0F0C" stroke-width="40" stroke-linecap="square" stroke-linejoin="round">
+    <path d="M136 288V164A28 28 0 0 1 164 136H292M376 224V348A28 28 0 0 1 348 376H224"/>
+  </g>
+  <g id="relay-signal" fill="#C8FF4D">
+    <path d="M208 304L296 216" fill="none" stroke="#C8FF4D" stroke-width="34" stroke-linecap="round"/>
+    <path d="M332.77 179.23L270.544 190.544L321.456 241.456Z"/>
+    <rect x="244" y="244" width="24" height="24"/>
+  </g>
 </svg>

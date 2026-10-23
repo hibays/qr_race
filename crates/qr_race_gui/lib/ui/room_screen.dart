@@ -7,6 +7,7 @@ import '../api/api_client.dart';
 import '../api/connect_link.dart';
 import '../state/app_state.dart';
 import '../state/relay_slot.dart';
+import 'brand_mark.dart';
 import 'open_link_sheet.dart';
 import 'qr_image.dart';
 import 'scan_screen.dart';
@@ -71,11 +72,7 @@ class _RoomScreenState extends State<RoomScreen> {
               children: [
                 Row(
                   children: [
-                    Image.asset(
-                      'assets/brand/qr_race-mark.png',
-                      width: 22,
-                      height: 22,
-                    ),
+                    const BrandMark(size: 28, padding: 3.5, radius: 8.5),
                     const SizedBox(width: 7),
                     Flexible(
                       child: Text(

@@ -14,8 +14,10 @@ if (-not $GuiRoot) {
     $GuiRoot = Join-Path $root 'crates\qr_race_gui'
 }
 $icon = Join-Path $brand '02-relay-loop-icon.svg'
+$iconRounded = Join-Path $brand '02-relay-loop-icon-rounded.svg'
 $lockup = Join-Path $brand '02-relay-loop-lockup.svg'
 $foreground = Join-Path $brand '02-relay-loop-foreground.svg'
+$markLight = Join-Path $brand '02-relay-loop-mark-light.svg'
 
 function Render([string]$svg, [int]$w, [int]$h, [string]$out) {
     $dir = Split-Path -Parent $out
@@ -94,11 +96,12 @@ foreach ($size in @(16, 32, 64, 128, 256, 512, 1024)) {
     Render $icon $size $size (Join-Path $macos "app_icon_$size.png")
 }
 
-# Windows ICO.
+# Windows ICO. Explorer does not mask app icons, so this set bakes the rounded
+# tile into every frame.
 $icoDir = Join-Path $env:TEMP 'qr_race_ico'
 Remove-Item $icoDir -Recurse -Force -ErrorAction SilentlyContinue
 foreach ($size in @(16, 24, 32, 48, 64, 128, 256)) {
-    Render $icon $size $size (Join-Path $icoDir "icon-$size.png")
+    Render $iconRounded $size $size (Join-Path $icoDir "icon-$size.png")
 }
 python (Join-Path $brand 'assemble_ico.py') $icoDir
 Copy-Item (Join-Path $icoDir 'icon.ico') `
@@ -120,6 +123,7 @@ ffmpeg -hide_banner -loglevel error -i $icon `
 $assets = Join-Path $GuiRoot 'assets\brand'
 Render $lockup 1200 375 (Join-Path $assets 'qr_race-lockup.png')
 Render $foreground 512 512 (Join-Path $assets 'qr_race-mark.png')
+Render $markLight 256 256 (Join-Path $assets 'qr_race-mark-tile.png')
 
 Write-Host 'brand icons applied' -ForegroundColor Green
 

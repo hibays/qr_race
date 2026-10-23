@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1024 1024" width="1024" height="1024" role="img">
+  <title>qr_race — RELAY LOOP rounded app icon</title>
+  <rect width="1024" height="1024" rx="224" fill="#0B0F0C"/>
+  <g transform="translate(-68.462 -68.462) scale(2.26743)">
+    <g id="relay-frame" fill="none" stroke="#F3F7F2" stroke-width="40" stroke-linecap="square" stroke-linejoin="round">
+      <path d="M136 288V164A28 28 0 0 1 164 136H292M376 224V348A28 28 0 0 1 348 376H224"/>
+    </g>
+    <g id="relay-signal" fill="#C8FF4D">
+      <path d="M208 304L296 216" fill="none" stroke="#C8FF4D" stroke-width="34" stroke-linecap="round"/>
+      <path d="M332.77 179.23L270.544 190.544L321.456 241.456Z"/>
+      <rect x="244" y="244" width="24" height="24"/>
+    </g>
+  </g>
+</svg>
