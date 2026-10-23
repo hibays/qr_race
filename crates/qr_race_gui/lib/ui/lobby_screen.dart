@@ -52,8 +52,20 @@ class _LobbyScreenState extends State<LobbyScreen> {
 
   Future<void> _enter(String address) async {
     final state = widget.state;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(content: Text('正在进入房间…'), duration: Duration(minutes: 1)),
+    );
     final ok = await state.enterRoom(address);
-    if (!mounted || !ok) return;
+    if (!mounted) return;
+    messenger.hideCurrentSnackBar();
+    if (!ok) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(state.error ?? '房间不存在或无法进入')),
+      );
+      return;
+    }
     await Navigator.of(context).push(
       MaterialPageRoute(
         builder: (_) => RoomScreen(state: state, address: address),
@@ -62,8 +74,47 @@ class _LobbyScreenState extends State<LobbyScreen> {
   }
 
   Future<void> _enterByAddress() async {
-    final choice = await showRoomPicker(context, mode: RoomPickerMode.enter);
-    if (choice != null) await _enter(choice.address);
+    final rooms = widget.state.lobby;
+    if (rooms.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('大厅还没有已点亮的房间，请先用右上角 + 创建。')));
+      return;
+    }
+    final address = await showDialog<String>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('进入已有房间'),
+        content: SizedBox(
+          width: 420,
+          child: ListView.separated(
+            shrinkWrap: true,
+            itemCount: rooms.length,
+            separatorBuilder: (_, _) => const SizedBox(height: 8),
+            itemBuilder: (context, index) {
+              final room = rooms[index];
+              return ListTile(
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(10),
+                  side: const BorderSide(color: line),
+                ),
+                title: Text(room.label),
+                subtitle: Text('房主 ${room.host} · ${room.memberCount} 人'),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.pop(dialogContext, room.label),
+              );
+            },
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(dialogContext),
+            child: const Text('取消'),
+          ),
+        ],
+      ),
+    );
+    if (address != null) await _enter(address);
   }
 
   Future<void> _enterByPin() async {
@@ -84,11 +135,19 @@ class _LobbyScreenState extends State<LobbyScreen> {
     final choice = await showRoomPicker(context, mode: RoomPickerMode.create);
     if (choice == null || !mounted) return;
 
+    final messenger = ScaffoldMessenger.of(context);
+    messenger.hideCurrentSnackBar();
+    messenger.showSnackBar(
+      const SnackBar(
+        content: Text('正在创建并点亮房间…'),
+        duration: Duration(minutes: 1),
+      ),
+    );
     final error = await widget.state.createAndLight(choice.address);
     if (!mounted) return;
+    messenger.hideCurrentSnackBar();
     if (error != null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(error)));
+      messenger.showSnackBar(SnackBar(content: Text(error)));
       return;
     }
     await _enter(choice.address);
