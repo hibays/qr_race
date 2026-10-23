@@ -73,50 +73,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
     );
   }
 
-  Future<void> _enterByAddress() async {
-    final rooms = widget.state.lobby;
-    if (rooms.isEmpty) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('大厅还没有已点亮的房间，请先用右上角 + 创建。')));
-      return;
-    }
-    final address = await showDialog<String>(
-      context: context,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('进入已有房间'),
-        content: SizedBox(
-          width: 420,
-          child: ListView.separated(
-            shrinkWrap: true,
-            itemCount: rooms.length,
-            separatorBuilder: (_, _) => const SizedBox(height: 8),
-            itemBuilder: (context, index) {
-              final room = rooms[index];
-              return ListTile(
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10),
-                  side: const BorderSide(color: line),
-                ),
-                title: Text(room.label),
-                subtitle: Text('房主 ${room.host} · ${room.memberCount} 人'),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.pop(dialogContext, room.label),
-              );
-            },
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(dialogContext),
-            child: const Text('取消'),
-          ),
-        ],
-      ),
-    );
-    if (address != null) await _enter(address);
-  }
-
   Future<void> _enterByPin() async {
     final pin = await showPinDialog(context, title: '输入 4 位配对码');
     if (pin == null || !mounted) return;
@@ -185,16 +141,6 @@ class _LobbyScreenState extends State<LobbyScreen> {
         ),
         actions: [
           IconButton(
-            tooltip: '创建房间',
-            onPressed: _createRoom,
-            icon: const Icon(Icons.add),
-          ),
-          IconButton(
-            tooltip: 'PIN 开房/进房',
-            onPressed: _enterByPin,
-            icon: const Icon(Icons.pin_outlined),
-          ),
-          IconButton(
             tooltip: '设置',
             onPressed: () => Navigator.of(context).push(
               MaterialPageRoute(
@@ -215,12 +161,45 @@ class _LobbyScreenState extends State<LobbyScreen> {
           ),
         ],
       ),
-      floatingActionButton: FloatingActionButton.extended(
-        onPressed: _enterByAddress,
-        backgroundColor: accent,
-        foregroundColor: accentInk,
-        icon: const Icon(Icons.keyboard_alt_outlined),
-        label: const Text('快速选择房间'),
+      floatingActionButton: Material(
+        color: surfaceRaised,
+        elevation: 8,
+        shadowColor: Colors.black54,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(28),
+          side: const BorderSide(color: line),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(6),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextButton.icon(
+                onPressed: _enterByPin,
+                style: TextButton.styleFrom(
+                  foregroundColor: accent,
+                  backgroundColor: accent.withValues(alpha: 0.14),
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 14),
+                  shape: const StadiumBorder(),
+                ),
+                icon: const Icon(Icons.pin_outlined, size: 18),
+                label: const Text('配对码'),
+              ),
+              const SizedBox(width: 4),
+              FilledButton.icon(
+                onPressed: _createRoom,
+                style: FilledButton.styleFrom(
+                  minimumSize: const Size(0, 44),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  shape: const StadiumBorder(),
+                ),
+                icon: const Icon(Icons.add, size: 18),
+                label: const Text('创建房间'),
+              ),
+            ],
+          ),
+        ),
       ),
       body: ListenableBuilder(
         listenable: widget.state,
@@ -249,25 +228,272 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 child: _CenteredNote(
                   icon: Icons.meeting_room_outlined,
                   title: '大厅还没有点亮的房间',
-                  body: '房主点亮房间后会出现在这里；也可以直接输入房间地址进入。',
+                  body: '房主点亮房间后会出现在这里；也可以直接用右下角创建房间。',
                 ),
               ),
             );
           }
-          return RefreshIndicator(
-            onRefresh: state.refreshLobby,
-            child: ListView.separated(
-              physics: const AlwaysScrollableScrollPhysics(),
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 96),
-              itemCount: state.lobby.length,
-              separatorBuilder: (_, _) => const SizedBox(height: 10),
-              itemBuilder: (context, index) {
-                final room = state.lobby[index];
-                return _RoomCard(room: room, onTap: () => _enter(room.label));
-              },
-            ),
+
+          final geoRooms = <_LobbyEntry>[
+            for (final room in state.lobby)
+              if (_LobbyAddress.tryParse(room.label) case final address?)
+                _LobbyEntry(room, address),
+          ];
+          final capitals = _sortedValues(
+            geoRooms.map((entry) => entry.address.capital),
+          );
+          final districts = _sortedValues(
+            geoRooms
+                .where(
+                  (entry) =>
+                      state.lobbyFilterCapital == null ||
+                      entry.address.capital == state.lobbyFilterCapital,
+                )
+                .map((entry) => entry.address.district),
+          );
+          final levels = _sortedValues(
+            geoRooms
+                .where(
+                  (entry) =>
+                      (state.lobbyFilterCapital == null ||
+                          entry.address.capital == state.lobbyFilterCapital) &&
+                      (state.lobbyFilterDistrict == null ||
+                          entry.address.district == state.lobbyFilterDistrict),
+                )
+                .map((entry) => entry.address.level),
+          );
+          final visible = geoRooms
+              .where(
+                (entry) =>
+                    (state.lobbyFilterCapital == null ||
+                        entry.address.capital == state.lobbyFilterCapital) &&
+                    (state.lobbyFilterDistrict == null ||
+                        entry.address.district == state.lobbyFilterDistrict) &&
+                    (state.lobbyFilterLevel == null ||
+                        entry.address.level == state.lobbyFilterLevel),
+              )
+              .map((entry) => entry.room)
+              .toList(growable: false);
+          final hasFilter =
+              state.lobbyFilterCapital != null ||
+              state.lobbyFilterDistrict != null ||
+              state.lobbyFilterLevel != null;
+
+          return Column(
+            children: [
+              if (geoRooms.isNotEmpty)
+                _LobbyFilterBar(
+                  state: state,
+                  capitals: capitals,
+                  districts: districts,
+                  levels: levels,
+                  visible: visible.length,
+                  active: hasFilter,
+                ),
+              Expanded(
+                child: geoRooms.isEmpty
+                    ? const _ScrollableFill(
+                        child: _CenteredNote(
+                          icon: Icons.pin_outlined,
+                          title: '大厅还没有地理房间',
+                          body: '配对码房不混入地理房大厅；可用右下角“配对码”进入，或创建一间地理房。',
+                        ),
+                      )
+                    : RefreshIndicator(
+                        onRefresh: state.refreshLobby,
+                        child: visible.isEmpty
+                            ? _ScrollableFill(
+                                child: _CenteredNote(
+                                  icon: Icons.filter_alt_off_outlined,
+                                  title: '没有符合筛选的房间',
+                                  body: '换一组筛选条件，或清除筛选查看全部。',
+                                  action: hasFilter
+                                      ? TextButton(
+                                          onPressed: state.clearLobbyFilters,
+                                          child: const Text('清除筛选'),
+                                        )
+                                      : null,
+                                ),
+                              )
+                            : ListView.separated(
+                                physics: const AlwaysScrollableScrollPhysics(),
+                                padding: const EdgeInsets.fromLTRB(
+                                  16,
+                                  12,
+                                  16,
+                                  124,
+                                ),
+                                itemCount: visible.length,
+                                separatorBuilder: (_, _) =>
+                                    const SizedBox(height: 10),
+                                itemBuilder: (context, index) {
+                                  final room = visible[index];
+                                  return _RoomCard(
+                                    room: room,
+                                    onTap: () => _enter(room.label),
+                                  );
+                                },
+                              ),
+                      ),
+              ),
+            ],
           );
         },
+      ),
+    );
+  }
+}
+
+class _LobbyEntry {
+  const _LobbyEntry(this.room, this.address);
+
+  final LobbyRoom room;
+  final _LobbyAddress address;
+}
+
+class _LobbyAddress {
+  const _LobbyAddress({
+    required this.capital,
+    required this.district,
+    required this.level,
+  });
+
+  final String capital;
+  final String district;
+  final String level;
+
+  static _LobbyAddress? tryParse(String label) {
+    final match = RegExp(r'^(东京|西京)(.+?)区(.+?)级(.+?)房$').firstMatch(label);
+    if (match == null) return null;
+    return _LobbyAddress(
+      capital: match.group(1)!,
+      district: match.group(2)!,
+      level: match.group(3)!,
+    );
+  }
+}
+
+List<String> _sortedValues(Iterable<String> values) {
+  final result = values.toSet().toList()..sort();
+  return result;
+}
+
+class _LobbyFilterBar extends StatelessWidget {
+  const _LobbyFilterBar({
+    required this.state,
+    required this.capitals,
+    required this.districts,
+    required this.levels,
+    required this.visible,
+    required this.active,
+  });
+
+  final AppState state;
+  final List<String> capitals;
+  final List<String> districts;
+  final List<String> levels;
+  final int visible;
+  final bool active;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
+      decoration: const BoxDecoration(
+        color: surface,
+        border: Border(bottom: BorderSide(color: line)),
+      ),
+      child: Wrap(
+        spacing: 8,
+        runSpacing: 8,
+        crossAxisAlignment: WrapCrossAlignment.center,
+        children: [
+          _FilterMenu(
+            label: '地区',
+            value: state.lobbyFilterCapital,
+            options: capitals,
+            onSelected: state.setLobbyCapitalFilter,
+          ),
+          _FilterMenu(
+            label: '区',
+            value: state.lobbyFilterDistrict,
+            options: districts,
+            onSelected: state.setLobbyDistrictFilter,
+          ),
+          _FilterMenu(
+            label: '级',
+            value: state.lobbyFilterLevel,
+            options: levels,
+            onSelected: state.setLobbyLevelFilter,
+          ),
+          if (active)
+            TextButton(
+              onPressed: state.clearLobbyFilters,
+              style: TextButton.styleFrom(
+                foregroundColor: muted,
+                minimumSize: const Size(0, 34),
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+              ),
+              child: const Text('清除'),
+            ),
+          Text(
+            '$visible 间',
+            style: const TextStyle(color: muted, fontSize: 12),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _FilterMenu extends StatelessWidget {
+  const _FilterMenu({
+    required this.label,
+    required this.value,
+    required this.options,
+    required this.onSelected,
+  });
+
+  final String label;
+  final String? value;
+  final List<String> options;
+  final ValueChanged<String?> onSelected;
+
+  @override
+  Widget build(BuildContext context) {
+    final selected = value != null;
+    return PopupMenuButton<String>(
+      tooltip: '筛选$label',
+      onSelected: (choice) => onSelected(choice == '全部' ? null : choice),
+      itemBuilder: (context) => [
+        const PopupMenuItem(value: '全部', child: Text('全部')),
+        for (final option in options)
+          PopupMenuItem(value: option, child: Text(option)),
+      ],
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 7),
+        decoration: BoxDecoration(
+          color: surfaceRaised,
+          borderRadius: BorderRadius.circular(18),
+          border: Border.all(color: selected ? accent : line),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Text('$label ', style: const TextStyle(color: muted, fontSize: 11)),
+            Text(
+              value ?? '全部',
+              style: TextStyle(
+                color: selected ? accent : ink,
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
+            const SizedBox(width: 3),
+            const Icon(Icons.expand_more, size: 15, color: muted),
+          ],
+        ),
       ),
     );
   }

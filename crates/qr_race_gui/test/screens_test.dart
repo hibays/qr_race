@@ -75,6 +75,11 @@ void main() {
     expect(find.text('大厅'), findsOneWidget);
     expect(find.text('东京A区1B级103房'), findsOneWidget);
     expect(find.textContaining('房主 host-a'), findsOneWidget);
+    expect(find.text('创建房间'), findsOneWidget);
+    expect(find.text('配对码'), findsOneWidget);
+    expect(find.byTooltip('筛选地区'), findsOneWidget);
+    expect(find.byTooltip('筛选区'), findsOneWidget);
+    expect(find.byTooltip('筛选级'), findsOneWidget);
     expect(
       find.byTooltip('上传模组'),
       findsNothing,
@@ -87,6 +92,30 @@ void main() {
     expect(find.byType(RoomScreen), findsOneWidget);
     expect(find.byType(QrImage), findsNWidgets(2));
     expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('lobby filters by capital and keeps the choice in memory', (
+    tester,
+  ) async {
+    final state = AppState.demo();
+    state.lobby = [
+      ...state.lobby,
+      const LobbyRoom(label: '西京Z区A级101房', host: 'host-b', memberCount: 1),
+    ];
+    await pumpAt(tester, const Size(1280, 800), LobbyScreen(state: state));
+
+    await tester.tap(find.byTooltip('筛选地区'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('西京').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('东京A区1B级103房'), findsNothing);
+    expect(find.text('西京Z区A级101房'), findsOneWidget);
+    expect(state.lobbyFilterCapital, '西京');
+
+    await pumpAt(tester, const Size(1280, 800), LobbyScreen(state: state));
+    expect(find.text('东京A区1B级103房'), findsNothing);
+    expect(find.text('西京Z区A级101房'), findsOneWidget);
   });
 
   testWidgets('the host can promote and demote from the member panel', (
@@ -155,7 +184,7 @@ void main() {
 
     await tester.tap(find.byIcon(Icons.add));
     await tester.pumpAndSettle();
-    expect(find.text('创建房间'), findsOneWidget);
+    expect(find.text('创建并点亮'), findsOneWidget);
 
     await tester.tap(find.text('创建并点亮'));
     await tester.pumpAndSettle();

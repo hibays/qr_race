@@ -62,6 +62,37 @@ class AppState extends ChangeNotifier {
   String? error;
   String? pairingPin;
 
+  /// Lobby filters are deliberately process memory only: they survive screen
+  /// rebuilds for this session, but are not written to disk.
+  String? lobbyFilterCapital;
+  String? lobbyFilterDistrict;
+  String? lobbyFilterLevel;
+
+  void setLobbyCapitalFilter(String? value) {
+    lobbyFilterCapital = value;
+    lobbyFilterDistrict = null;
+    lobbyFilterLevel = null;
+    notifyListeners();
+  }
+
+  void setLobbyDistrictFilter(String? value) {
+    lobbyFilterDistrict = value;
+    lobbyFilterLevel = null;
+    notifyListeners();
+  }
+
+  void setLobbyLevelFilter(String? value) {
+    lobbyFilterLevel = value;
+    notifyListeners();
+  }
+
+  void clearLobbyFilters() {
+    lobbyFilterCapital = null;
+    lobbyFilterDistrict = null;
+    lobbyFilterLevel = null;
+    notifyListeners();
+  }
+
   WebSocketChannel? _events;
   StreamSubscription<dynamic>? _eventsSub;
   String? _roomAddress;
