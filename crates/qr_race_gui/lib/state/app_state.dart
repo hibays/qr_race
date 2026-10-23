@@ -441,11 +441,13 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _closeEvents() async {
+    // Snapshot both references before yielding; a concurrent _listen may
+    // install a fresh channel while cancellation is in flight.
     final subscription = _eventsSub;
-    _eventsSub = null;
-    await subscription?.cancel();
     final events = _events;
+    _eventsSub = null;
     _events = null;
+    await subscription?.cancel();
     await events?.sink.close();
   }
 

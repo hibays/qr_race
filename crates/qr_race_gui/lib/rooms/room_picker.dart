@@ -70,10 +70,11 @@ class _RoomPickerDialogState extends State<_RoomPickerDialog> {
     });
     final started = DateTime.now();
     final error = await submit(choice);
-    // Keep the broadcast mark visible long enough to read even on a fast LAN.
+    // Keep the broadcast mark visible long enough to read even on a fast LAN;
+    // failures should surface immediately.
     final elapsed = DateTime.now().difference(started);
     const minimum = Duration(milliseconds: 420);
-    if (elapsed < minimum) {
+    if (error == null && elapsed < minimum) {
       await Future<void>.delayed(minimum - elapsed);
     }
     if (!mounted) return;

@@ -92,11 +92,18 @@ async fn stream(
     // first room event.
     keepalive.tick().await;
     let mut awaiting_pong = false;
+    let mut missed_pongs = 0u8;
     loop {
         tokio::select! {
             _ = keepalive.tick() => {
                 if awaiting_pong {
-                    break;
+                    missed_pongs += 1;
+                    // Tolerate one lost control frame on a flaky link; a
+                    // genuinely dead peer is closed after ~60 seconds.
+                    if missed_pongs >= 2 {
+                        let _ = socket.send(Message::Close(None)).await;
+                        break;
+                    }
                 }
                 if socket.send(Message::Ping(Vec::new().into())).await.is_err() {
                     break;
@@ -120,6 +127,7 @@ async fn stream(
                 Some(Ok(Message::Close(_))) | None => break,
                 Some(Ok(Message::Pong(_))) => {
                     awaiting_pong = false;
+                    missed_pongs = 0;
                     continue;
                 }
                 Some(Ok(_)) => continue,
@@ -129,4 +137,3 @@ async fn stream(
     }
     state.room_socket_closed(&address, generation, socket_id);
 }
-
