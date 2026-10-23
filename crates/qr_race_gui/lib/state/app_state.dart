@@ -95,6 +95,7 @@ class AppState extends ChangeNotifier {
 
   WebSocketChannel? _events;
   StreamSubscription<dynamic>? _eventsSub;
+  int _eventCycle = 0;
   String? _roomAddress;
   String? _server;
   String? _token;
@@ -356,7 +357,12 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _listen(WebSocketChannel channel) async {
-    await _unsubscribe();
+    final cycle = ++_eventCycle;
+    await _closeEvents();
+    if (cycle != _eventCycle) {
+      await channel.sink.close();
+      return;
+    }
     _events = channel;
     _eventsSub = channel.stream.listen(
       _onRoomEvent,
@@ -430,10 +436,17 @@ class AppState extends ChangeNotifier {
   }
 
   Future<void> _unsubscribe() async {
-    await _eventsSub?.cancel();
+    _eventCycle++;
+    await _closeEvents();
+  }
+
+  Future<void> _closeEvents() async {
+    final subscription = _eventsSub;
     _eventsSub = null;
-    await _events?.sink.close();
+    await subscription?.cancel();
+    final events = _events;
     _events = null;
+    await events?.sink.close();
   }
 
   String _describe(Object error) {

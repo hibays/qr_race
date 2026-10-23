@@ -6,6 +6,7 @@
 //! bearer header.
 
 use std::sync::Arc;
+use std::time::Duration;
 
 use axum::extract::ws::{Message, WebSocket, WebSocketUpgrade};
 use axum::extract::{Query, State};
@@ -86,8 +87,22 @@ async fn stream(
     generation: u64,
     socket_id: u64,
 ) {
+    let mut keepalive = tokio::time::interval(Duration::from_secs(20));
+    // The first interval tick is immediate; do not inject a ping before the
+    // first room event.
+    keepalive.tick().await;
+    let mut awaiting_pong = false;
     loop {
         tokio::select! {
+            _ = keepalive.tick() => {
+                if awaiting_pong {
+                    break;
+                }
+                if socket.send(Message::Ping(Vec::new().into())).await.is_err() {
+                    break;
+                }
+                awaiting_pong = true;
+            }
             event = receiver.recv() => match event {
                 Ok(event) => {
                     let Ok(text) = serde_json::to_string(&EventDto::from(event)) else {
@@ -103,6 +118,10 @@ async fn stream(
             },
             incoming = socket.recv() => match incoming {
                 Some(Ok(Message::Close(_))) | None => break,
+                Some(Ok(Message::Pong(_))) => {
+                    awaiting_pong = false;
+                    continue;
+                }
                 Some(Ok(_)) => continue,
                 Some(Err(_)) => break,
             },
@@ -110,3 +129,4 @@ async fn stream(
     }
     state.room_socket_closed(&address, generation, socket_id);
 }
+
