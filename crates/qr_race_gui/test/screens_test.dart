@@ -118,6 +118,27 @@ void main() {
     expect(find.text('西京Z区A级101房'), findsOneWidget);
   });
 
+  testWidgets('Antarctic rooms are selectable as a district filter', (
+    tester,
+  ) async {
+    final state = AppState.demo();
+    state.lobby = [
+      ...state.lobby,
+      const LobbyRoom(label: '南极1234', host: 'host-b', memberCount: 1),
+    ];
+    await pumpAt(tester, const Size(1280, 800), LobbyScreen(state: state));
+
+    await tester.tap(find.byTooltip('筛选地区'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('南极').last);
+    await tester.pumpAndSettle();
+
+    expect(find.text('南极1234'), findsOneWidget);
+    expect(find.text('东京A区1B级103房'), findsNothing);
+    expect(find.byTooltip('筛选区'), findsNothing);
+    expect(find.byTooltip('筛选级'), findsNothing);
+  });
+
   testWidgets('the host can promote and demote from the member panel', (
     tester,
   ) async {

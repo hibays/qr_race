@@ -128,7 +128,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                 ],
               ),
               Text(
-                '${widget.state.session?.userId ?? ''} · ${widget.state.api?.baseUrl ?? ''}',
+                widget.state.session?.userId ?? '',
                 style: const TextStyle(fontSize: 12, color: muted),
               ),
             ],
@@ -229,35 +229,42 @@ class _LobbyScreenState extends State<LobbyScreen> {
             );
           }
 
-          final geoRooms = <_LobbyEntry>[
+          final entries = <_LobbyEntry>[
             for (final room in state.lobby)
               if (_LobbyAddress.tryParse(room.label) case final address?)
                 _LobbyEntry(room, address),
           ];
           final capitals = _sortedValues(
-            geoRooms.map((entry) => entry.address.capital),
+            entries.map((entry) => entry.address.capital),
           );
-          final districts = _sortedValues(
-            geoRooms
-                .where(
-                  (entry) =>
-                      state.lobbyFilterCapital == null ||
-                      entry.address.capital == state.lobbyFilterCapital,
-                )
-                .map((entry) => entry.address.district),
-          );
-          final levels = _sortedValues(
-            geoRooms
-                .where(
-                  (entry) =>
-                      (state.lobbyFilterCapital == null ||
-                          entry.address.capital == state.lobbyFilterCapital) &&
-                      (state.lobbyFilterDistrict == null ||
-                          entry.address.district == state.lobbyFilterDistrict),
-                )
-                .map((entry) => entry.address.level),
-          );
-          final visible = geoRooms
+          final pinOnly = state.lobbyFilterCapital == '南极';
+          final districts = pinOnly
+              ? const <String>[]
+              : _sortedValues(
+                  entries
+                      .where(
+                        (entry) =>
+                            state.lobbyFilterCapital == null ||
+                            entry.address.capital == state.lobbyFilterCapital,
+                      )
+                      .map((entry) => entry.address.district),
+                );
+          final levels = pinOnly
+              ? const <String>[]
+              : _sortedValues(
+                  entries
+                      .where(
+                        (entry) =>
+                            (state.lobbyFilterCapital == null ||
+                                entry.address.capital ==
+                                    state.lobbyFilterCapital) &&
+                            (state.lobbyFilterDistrict == null ||
+                                entry.address.district ==
+                                    state.lobbyFilterDistrict),
+                      )
+                      .map((entry) => entry.address.level),
+                );
+          final visible = entries
               .where(
                 (entry) =>
                     (state.lobbyFilterCapital == null ||
@@ -273,13 +280,10 @@ class _LobbyScreenState extends State<LobbyScreen> {
               state.lobbyFilterCapital != null ||
               state.lobbyFilterDistrict != null ||
               state.lobbyFilterLevel != null;
-          final pinRooms = state.lobby
-              .where((room) => room.label.startsWith('南极'))
-              .toList(growable: false);
 
           return Column(
             children: [
-              if (geoRooms.isNotEmpty)
+              if (entries.isNotEmpty)
                 _LobbyFilterBar(
                   state: state,
                   capitals: capitals,
@@ -287,6 +291,7 @@ class _LobbyScreenState extends State<LobbyScreen> {
                   levels: levels,
                   visible: visible.length,
                   active: hasFilter,
+                  hideHierarchy: pinOnly,
                 ),
               Expanded(
                 child: RefreshIndicator(
@@ -295,74 +300,44 @@ class _LobbyScreenState extends State<LobbyScreen> {
                     physics: const AlwaysScrollableScrollPhysics(),
                     padding: const EdgeInsets.fromLTRB(16, 12, 16, 124),
                     children: [
-                      if (pinRooms.isNotEmpty) ...[
-                        _LobbySection(
-                          title: '配对码房',
-                          count: pinRooms.length,
-                          highlight: true,
-                        ),
-                        for (final room in pinRooms)
+                      if (visible.isEmpty)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 28),
+                          child: Column(
+                            children: [
+                              const Icon(
+                                Icons.filter_alt_off_outlined,
+                                color: muted,
+                                size: 32,
+                              ),
+                              const SizedBox(height: 10),
+                              const Text(
+                                '没有符合筛选的房间',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 4),
+                              const Text(
+                                '换一组筛选条件，或清除筛选。',
+                                style: TextStyle(color: muted, fontSize: 12.5),
+                              ),
+                              if (hasFilter)
+                                TextButton(
+                                  onPressed: state.clearLobbyFilters,
+                                  child: const Text('清除筛选'),
+                                ),
+                            ],
+                          ),
+                        )
+                      else
+                        for (final room in visible)
                           Padding(
                             padding: const EdgeInsets.only(bottom: 10),
                             child: _RoomCard(
                               room: room,
-                              badge: 'PIN',
+                              badge: room.label.startsWith('南极') ? 'PIN' : null,
                               onTap: () => _enter(room.label),
                             ),
                           ),
-                        const SizedBox(height: 8),
-                      ],
-                      if (geoRooms.isNotEmpty) ...[
-                        _LobbySection(title: '地理房', count: visible.length),
-                        if (visible.isEmpty)
-                          Padding(
-                            padding: const EdgeInsets.symmetric(vertical: 28),
-                            child: Column(
-                              children: [
-                                const Icon(
-                                  Icons.filter_alt_off_outlined,
-                                  color: muted,
-                                  size: 32,
-                                ),
-                                const SizedBox(height: 10),
-                                const Text(
-                                  '没有符合筛选的地理房',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  '换一组筛选条件，或清除筛选。',
-                                  style: TextStyle(
-                                    color: muted,
-                                    fontSize: 12.5,
-                                  ),
-                                ),
-                                if (hasFilter)
-                                  TextButton(
-                                    onPressed: state.clearLobbyFilters,
-                                    child: const Text('清除筛选'),
-                                  ),
-                              ],
-                            ),
-                          )
-                        else
-                          for (final room in visible)
-                            Padding(
-                              padding: const EdgeInsets.only(bottom: 10),
-                              child: _RoomCard(
-                                room: room,
-                                onTap: () => _enter(room.label),
-                              ),
-                            ),
-                      ] else if (pinRooms.isNotEmpty)
-                        const Padding(
-                          padding: EdgeInsets.symmetric(vertical: 18),
-                          child: Text(
-                            '当前没有地理房；可用右下角创建。',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(color: muted, fontSize: 12.5),
-                          ),
-                        ),
                     ],
                   ),
                 ),
@@ -394,6 +369,13 @@ class _LobbyAddress {
   final String level;
 
   static _LobbyAddress? tryParse(String label) {
+    if (label.startsWith('南极')) {
+      final pin = label.substring(2);
+      if (pin.length == 4 && int.tryParse(pin) != null) {
+        return const _LobbyAddress(capital: '南极', district: '', level: '');
+      }
+      return null;
+    }
     final match = RegExp(r'^(东京|西京)(.+?)区(.+?)级(.+?)房$').firstMatch(label);
     if (match == null) return null;
     return _LobbyAddress(
@@ -405,7 +387,8 @@ class _LobbyAddress {
 }
 
 List<String> _sortedValues(Iterable<String> values) {
-  final result = values.toSet().toList()..sort();
+  final result = values.where((value) => value.isNotEmpty).toSet().toList()
+    ..sort();
   return result;
 }
 
@@ -417,6 +400,7 @@ class _LobbyFilterBar extends StatelessWidget {
     required this.levels,
     required this.visible,
     required this.active,
+    this.hideHierarchy = false,
   });
 
   final AppState state;
@@ -425,6 +409,7 @@ class _LobbyFilterBar extends StatelessWidget {
   final List<String> levels;
   final int visible;
   final bool active;
+  final bool hideHierarchy;
 
   @override
   Widget build(BuildContext context) {
@@ -446,18 +431,20 @@ class _LobbyFilterBar extends StatelessWidget {
             options: capitals,
             onSelected: state.setLobbyCapitalFilter,
           ),
-          _FilterMenu(
-            label: '区',
-            value: state.lobbyFilterDistrict,
-            options: districts,
-            onSelected: state.setLobbyDistrictFilter,
-          ),
-          _FilterMenu(
-            label: '级',
-            value: state.lobbyFilterLevel,
-            options: levels,
-            onSelected: state.setLobbyLevelFilter,
-          ),
+          if (!hideHierarchy) ...[
+            _FilterMenu(
+              label: '区',
+              value: state.lobbyFilterDistrict,
+              options: districts,
+              onSelected: state.setLobbyDistrictFilter,
+            ),
+            _FilterMenu(
+              label: '级',
+              value: state.lobbyFilterLevel,
+              options: levels,
+              onSelected: state.setLobbyLevelFilter,
+            ),
+          ],
           if (active)
             TextButton(
               onPressed: state.clearLobbyFilters,
@@ -525,40 +512,6 @@ class _FilterMenu extends StatelessWidget {
             const Icon(Icons.expand_more, size: 15, color: muted),
           ],
         ),
-      ),
-    );
-  }
-}
-
-class _LobbySection extends StatelessWidget {
-  const _LobbySection({
-    required this.title,
-    required this.count,
-    this.highlight = false,
-  });
-
-  final String title;
-  final int count;
-  final bool highlight;
-
-  @override
-  Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.only(bottom: 8),
-      child: Row(
-        children: [
-          Text(
-            title,
-            style: TextStyle(
-              color: highlight ? accent : muted,
-              fontSize: 12,
-              fontWeight: FontWeight.w700,
-              letterSpacing: 0.3,
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text('$count', style: const TextStyle(color: muted, fontSize: 11)),
-        ],
       ),
     );
   }
