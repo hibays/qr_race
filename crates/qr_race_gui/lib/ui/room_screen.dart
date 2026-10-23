@@ -13,6 +13,7 @@ import 'qr_image.dart';
 import 'scan_screen.dart';
 import 'echo_signal.dart';
 import 'theme.dart';
+import 'window_chrome.dart';
 
 class RoomScreen extends StatefulWidget {
   const RoomScreen({super.key, required this.state, required this.address});
@@ -72,8 +73,9 @@ class _RoomScreenState extends State<RoomScreen> {
               children: [
                 Row(
                   children: [
-                    const BrandMark(size: 28, padding: 3.5, radius: 8.5),
-                    const SizedBox(width: 7),
+                    if (!isDesktopWindow)
+                      const BrandMark(size: 28, padding: 3.5, radius: 8.5),
+                    if (!isDesktopWindow) const SizedBox(width: 7),
                     Flexible(
                       child: Text(
                         room?.label ?? widget.address,

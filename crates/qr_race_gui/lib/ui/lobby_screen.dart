@@ -12,6 +12,7 @@ import 'room_screen.dart';
 import 'settings_screen.dart';
 import 'echo_signal.dart';
 import 'theme.dart';
+import 'window_chrome.dart';
 
 class LobbyScreen extends StatefulWidget {
   const LobbyScreen({super.key, required this.state});
@@ -116,8 +117,8 @@ class _LobbyScreenState extends State<LobbyScreen> {
             children: [
               Row(
                 children: [
-                  const BrandMark(size: 30),
-                  const SizedBox(width: 8),
+                  if (!isDesktopWindow) const BrandMark(size: 30),
+                  if (!isDesktopWindow) const SizedBox(width: 8),
                   const Text(
                     '大厅',
                     style: TextStyle(fontSize: 20, fontWeight: FontWeight.w700),

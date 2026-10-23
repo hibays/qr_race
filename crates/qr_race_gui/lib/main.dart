@@ -8,10 +8,13 @@ import 'ui/lobby_screen.dart';
 import 'ui/echo_signal.dart';
 import 'ui/room_screen.dart';
 import 'ui/theme.dart';
+import 'ui/window_chrome.dart';
 
 const _demo = bool.fromEnvironment('DEMO');
 
-void main() {
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await initWindowChrome();
   runApp(const QrRaceApp());
 }
 
@@ -52,6 +55,8 @@ class _QrRaceAppState extends State<QrRaceApp> {
       debugShowCheckedModeBanner: false,
       theme: buildTheme(),
       navigatorKey: _navigatorKey,
+      builder: (context, child) =>
+          WindowChromeShell(child: child ?? const SizedBox.shrink()),
       home: _demo
           ? RoomScreen(state: _state, address: '东京A区1B级103房')
           : _StartupGate(state: _state),
